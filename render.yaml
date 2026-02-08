@@ -1,0 +1,22 @@
+databases:
+  - name: fantasy-trading-db
+    plan: free
+    databaseName: fantasy_trading
+    user: fantasy_trading
+
+services:
+  - type: web
+    name: fantasy-trading-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fantasy-trading-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FINNHUB_API_KEY
+        sync: false

@@ -1,10 +1,19 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fantasy_trading"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def fix_db_scheme(cls, v: str) -> str:
+        # Render provides postgresql://, SQLAlchemy async needs postgresql+asyncpg://
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
     # Auth
     secret_key: str = "change-me-in-production"
