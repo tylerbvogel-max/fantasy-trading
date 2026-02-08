@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Fantasy Trading",
+    "slug": "fantasy-trading",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#1B2A4A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.fantasytrading.app"
+    },
+    "android": {
+      "package": "com.fantasytrading.app"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
