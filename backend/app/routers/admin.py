@@ -30,14 +30,14 @@ async def run_seed(
     if key != SEED_SECRET:
         raise HTTPException(status_code=403, detail="Invalid seed key")
 
+    # Create tables first
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     # Check if already seeded
     count = await db.scalar(select(func.count()).select_from(StockMaster))
     if count and count > 0:
         raise HTTPException(status_code=400, detail="Database already seeded")
-
-    # Create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     # Seed stocks
     stock_list = [
