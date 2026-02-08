@@ -7,10 +7,12 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useProfile, usePortfolioHistory, usePortfolio } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { signOut } from "../api/client";
 import type { SeasonSummary } from "../api/client";
 
 const CHART_HEIGHT = 160;
@@ -101,6 +103,13 @@ export default function ProfileScreen() {
   } = usePortfolioHistory(seasonId);
 
   const { data: portfolioData } = usePortfolio(seasonId);
+
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log Out", style: "destructive", onPress: () => signOut() },
+    ]);
+  };
 
   if (profileLoading) {
     return (
@@ -302,6 +311,12 @@ export default function ProfileScreen() {
         renderItem={renderHistoryRow}
         keyExtractor={(item) => item.date}
         ListHeaderComponent={ListHeader}
+        ListFooterComponent={
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color={Colors.red} />
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+        }
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
@@ -533,5 +548,22 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: "center",
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    backgroundColor: Colors.card,
+    marginTop: Spacing.xxl,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  logoutText: {
+    fontSize: FontSize.md,
+    fontWeight: "600",
+    color: Colors.red,
   },
 });

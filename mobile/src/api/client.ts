@@ -4,9 +4,11 @@
  */
 
 import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
 
-// Update this to your deployed backend URL
-const API_BASE = "http://192.168.1.90:8000";
+// Reads from app.json → expo.extra.apiUrl. Change there for prod.
+const API_BASE: string =
+  Constants.expoConfig?.extra?.apiUrl ?? "http://192.168.1.90:8000";
 
 const TOKEN_KEY = "auth_token";
 
@@ -38,6 +40,18 @@ export async function clearStoredToken(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
 
+// Global sign-out: clears token and notifies the app to reset to auth screen
+let _onSignOut: (() => void) | null = null;
+
+export function registerSignOutHandler(handler: () => void) {
+  _onSignOut = handler;
+}
+
+export async function signOut(): Promise<void> {
+  await clearStoredToken();
+  _onSignOut?.();
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -57,6 +71,10 @@ async function request<T>(
   });
 
   if (!response.ok) {
+    // If the backend rejects our token, sign out automatically
+    if (response.status === 401 && authToken) {
+      await signOut();
+    }
     const error = await response.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(error.detail || `HTTP ${response.status}`);
   }

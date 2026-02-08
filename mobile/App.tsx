@@ -7,7 +7,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from './src/utils/theme';
-import { loadStoredToken } from './src/api/client';
+import { loadStoredToken, registerSignOutHandler } from './src/api/client';
 import AuthScreen from './src/screens/AuthScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import TradeScreen from './src/screens/TradeScreen';
@@ -58,6 +58,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    registerSignOutHandler(() => setIsAuthenticated(false));
     loadStoredToken().then((token) => {
       if (token) setIsAuthenticated(true);
       setIsLoading(false);

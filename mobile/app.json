@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "splash": {
-      "backgroundColor": "#1B2A4A"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": false,
@@ -17,6 +17,9 @@
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "apiUrl": "http://192.168.1.90:8000"
+    }
   }
 }
