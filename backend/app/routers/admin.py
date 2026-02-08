@@ -150,6 +150,22 @@ async def generate_invite_code(
     return InviteCodeResponse.model_validate(code)
 
 
+@router.post("/invite-codes/bulk")
+async def generate_bulk_invite_codes(
+    count: int = Query(10, ge=1, le=500),
+    max_uses: int = Query(1, ge=1),
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    codes = []
+    for _ in range(count):
+        code_str = f"BETA-{secrets.token_hex(3).upper()}"
+        db.add(InviteCode(code=code_str, max_uses=max_uses, created_by=user.id))
+        codes.append(code_str)
+    await db.commit()
+    return {"count": len(codes), "codes": codes}
+
+
 @router.get("/invite-codes", response_model=list[InviteCodeResponse])
 async def list_invite_codes(
     user: User = Depends(require_admin),
