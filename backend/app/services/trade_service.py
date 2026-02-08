@@ -8,6 +8,13 @@ from app.models.season import Season
 from app.services.finnhub_service import get_stock_price
 from app.schemas import TradeRequest, TradeResponse, TradeValidation
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
+MARKET_OPEN_HOUR = 9
+MARKET_OPEN_MINUTE = 30
+MARKET_CLOSE_HOUR = 16
+MARKET_CLOSE_MINUTE = 0
 
 
 class TradeError(Exception):
@@ -15,10 +22,33 @@ class TradeError(Exception):
         self.message = message
 
 
+def _check_market_hours() -> str | None:
+    """Return an error message if market is closed, None if open."""
+    now_et = datetime.now(ET)
+    # Weekend check (0=Mon, 5=Sat, 6=Sun)
+    if now_et.weekday() >= 5:
+        return "Market is closed on weekends. Trading resumes Monday at 9:30 AM ET."
+    open_time = now_et.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0)
+    close_time = now_et.replace(hour=MARKET_CLOSE_HOUR, minute=MARKET_CLOSE_MINUTE, second=0, microsecond=0)
+    if now_et < open_time:
+        return f"Market hasn't opened yet. Trading starts at 9:30 AM ET."
+    if now_et >= close_time:
+        return f"Market is closed. Trading ended at 4:00 PM ET."
+    return None
+
+
 async def validate_trade(
     db: AsyncSession, user_id: UUID, req: TradeRequest
 ) -> TradeValidation:
     """Pre-validate a trade without executing it."""
+    # Check market hours
+    market_closed = _check_market_hours()
+    if market_closed:
+        return TradeValidation(
+            is_valid=False, stock_symbol=req.stock_symbol, current_price=0,
+            estimated_total=0, message=market_closed
+        )
+
     # Find player_season
     ps = await _get_player_season(db, user_id, req.season_id)
     if not ps:
@@ -86,6 +116,11 @@ async def execute_trade(
     db: AsyncSession, user_id: UUID, req: TradeRequest
 ) -> TradeResponse:
     """Execute a trade atomically. All-or-nothing."""
+    # 0. Check market hours
+    market_closed = _check_market_hours()
+    if market_closed:
+        raise TradeError(market_closed)
+
     symbol = req.stock_symbol.upper()
 
     # 1. Validate player is in season
