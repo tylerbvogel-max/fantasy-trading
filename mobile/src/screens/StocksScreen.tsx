@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useStocks, useStockSearch } from "../hooks/useApi";
+import { useStocks, useStockSearch, useStockCount } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
 import type { StockQuote } from "../api/client";
 
@@ -29,11 +29,15 @@ export default function StocksScreen() {
     isLoading: isSearching,
   } = useStockSearch(searchQuery);
 
+  const { data: countData } = useStockCount();
+
   const isSearchMode = searchQuery.length > 0;
   const displayedStocks = isSearchMode ? (searchResults ?? []) : (allStocks ?? []);
   const isLoading = isSearchMode ? isSearching : isLoadingAll;
+  const totalCount = countData?.count ?? allStocks?.length ?? 0;
 
   const renderStock = ({ item }: { item: StockQuote }) => {
+    const hasPrice = item.price != null;
     const hasChange = item.change_pct != null;
     const isPositive = (item.change_pct ?? 0) >= 0;
 
@@ -46,18 +50,24 @@ export default function StocksScreen() {
           </Text>
         </View>
         <View style={styles.stockRight}>
-          <Text style={styles.stockPrice}>
-            {item.price != null ? `$${item.price.toFixed(2)}` : "—"}
-          </Text>
-          {hasChange && (
-            <Text
-              style={[
-                styles.stockChange,
-                { color: isPositive ? Colors.green : Colors.red },
-              ]}
-            >
-              {isPositive ? "▲" : "▼"} {Math.abs(item.change_pct!).toFixed(2)}%
-            </Text>
+          {hasPrice ? (
+            <>
+              <Text style={styles.stockPrice}>
+                ${item.price!.toFixed(2)}
+              </Text>
+              {hasChange && (
+                <Text
+                  style={[
+                    styles.stockChange,
+                    { color: isPositive ? Colors.green : Colors.red },
+                  ]}
+                >
+                  {isPositive ? "▲" : "▼"} {Math.abs(item.change_pct!).toFixed(2)}%
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.noPrice}>—</Text>
           )}
         </View>
       </View>
@@ -69,11 +79,11 @@ export default function StocksScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Stocks</Text>
-        {allStocks && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{allStocks.length} stocks</Text>
-          </View>
-        )}
+        <View style={styles.countBadge}>
+          <Text style={styles.countBadgeText}>
+            {totalCount.toLocaleString()} available
+          </Text>
+        </View>
       </View>
 
       {/* Search bar */}
@@ -128,6 +138,13 @@ export default function StocksScreen() {
                   : "No stocks available"}
               </Text>
             </View>
+          }
+          ListFooterComponent={
+            !isSearchMode && displayedStocks.length > 0 ? (
+              <Text style={styles.footerText}>
+                Showing {displayedStocks.length} of {totalCount.toLocaleString()} — use search to find any stock
+              </Text>
+            ) : null
           }
         />
       )}
@@ -235,6 +252,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2,
   },
+  noPrice: {
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+  },
   separator: {
     height: Spacing.sm,
   },
@@ -248,5 +269,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.textSecondary,
     textAlign: "center",
+  },
+  footerText: {
+    textAlign: "center",
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
 });

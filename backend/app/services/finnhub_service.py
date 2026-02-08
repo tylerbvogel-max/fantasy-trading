@@ -1,9 +1,10 @@
 import httpx
 import asyncio
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.stock import StockActive, StockMaster
+from app.models.holding import Holding
 from app.config import get_settings
 
 settings = get_settings()
@@ -84,8 +85,11 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
 
 
 async def refresh_all_prices(db: AsyncSession) -> int:
-    """Refresh prices for all stocks in stocks_active. Returns count of updated stocks."""
-    result = await db.execute(select(StockActive.symbol))
+    """Refresh prices only for stocks that players currently hold."""
+    result = await db.execute(
+        select(func.distinct(Holding.stock_symbol))
+        .where(Holding.shares_owned > 0)
+    )
     symbols = [row[0] for row in result.all()]
 
     updated = 0
@@ -117,16 +121,64 @@ async def get_stock_price(db: AsyncSession, symbol: str) -> float | None:
     return None
 
 
-async def search_stocks(db: AsyncSession, query: str, season_allowed: list[str] | None = None) -> list[StockActive]:
-    """Search stocks by symbol or name, optionally filtered to a season's allowed list."""
+async def fetch_us_symbols() -> list[dict]:
+    """Fetch all US stock symbols from Finnhub."""
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"{FINNHUB_BASE}/stock/symbol",
+                params={"exchange": "US", "token": settings.finnhub_api_key},
+                timeout=30.0,
+            )
+            if resp.status_code == 200:
+                return resp.json()
+        except httpx.RequestError:
+            pass
+    return []
+
+
+async def import_all_us_stocks(db: AsyncSession) -> int:
+    """Fetch all US symbols from Finnhub and populate stocks_master."""
+    symbols = await fetch_us_symbols()
+    if not symbols:
+        return 0
+
+    # Filter to common stocks and ETFs (skip warrants, preferred, etc.)
+    valid_types = {"Common Stock", "ETP"}
+    filtered = [s for s in symbols if s.get("type") in valid_types]
+
+    added = 0
+    for item in filtered:
+        symbol = item.get("symbol", "")
+        name = item.get("description", symbol)
+        # Skip symbols with dots/slashes (foreign listings, warrants, etc.)
+        if not symbol or "." in symbol or "/" in symbol or len(symbol) > 10:
+            continue
+
+        existing = await db.get(StockMaster, symbol)
+        if not existing:
+            db.add(StockMaster(symbol=symbol, name=name[:100], is_active=True))
+            added += 1
+
+    await db.commit()
+    return added
+
+
+async def search_stocks(db: AsyncSession, query: str, season_allowed: list[str] | None = None) -> list[StockMaster]:
+    """Search stocks by symbol or name from the master list."""
     q = query.upper()
-    stmt = select(StockActive).where(
-        (StockActive.symbol.ilike(f"%{q}%")) | (StockActive.name.ilike(f"%{q}%"))
+    stmt = select(StockMaster).where(
+        StockMaster.is_active == True,
+        (StockMaster.symbol.ilike(f"%{q}%")) | (StockMaster.name.ilike(f"%{q}%"))
     )
 
     if season_allowed:
-        stmt = stmt.where(StockActive.symbol.in_(season_allowed))
+        stmt = stmt.where(StockMaster.symbol.in_(season_allowed))
 
-    stmt = stmt.limit(20)
+    # Prioritize exact symbol matches first, then alphabetical
+    stmt = stmt.order_by(
+        StockMaster.symbol.ilike(f"{q}%").desc(),
+        StockMaster.symbol,
+    ).limit(20)
     result = await db.execute(stmt)
     return list(result.scalars().all())

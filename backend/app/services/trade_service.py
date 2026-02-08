@@ -5,6 +5,7 @@ from app.models.player_season import PlayerSeason
 from app.models.holding import Holding
 from app.models.transaction import Transaction
 from app.models.season import Season
+from app.models.stock import StockMaster
 from app.services.finnhub_service import get_stock_price
 from app.schemas import TradeRequest, TradeResponse, TradeValidation
 from datetime import datetime, timezone
@@ -72,7 +73,15 @@ async def validate_trade(
             estimated_total=0, message=f"{req.stock_symbol} is not tradeable in this season."
         )
 
-    # Get current price
+    # Check stock exists in master catalog
+    master = await db.get(StockMaster, req.stock_symbol.upper())
+    if not master or not master.is_active:
+        return TradeValidation(
+            is_valid=False, stock_symbol=req.stock_symbol, current_price=0,
+            estimated_total=0, message=f"{req.stock_symbol} is not a recognized stock."
+        )
+
+    # Get current price (fetches from Finnhub on-demand if needed)
     price = await get_stock_price(db, req.stock_symbol.upper())
     if not price:
         return TradeValidation(
@@ -137,7 +146,12 @@ async def execute_trade(
     if season.allowed_stocks and symbol not in season.allowed_stocks:
         raise TradeError(f"{symbol} is not tradeable in this season.")
 
-    # 4. Get current price (refresh if stale)
+    # 3b. Validate stock exists in master catalog
+    master = await db.get(StockMaster, symbol)
+    if not master or not master.is_active:
+        raise TradeError(f"{symbol} is not a recognized stock.")
+
+    # 4. Get current price (fetches from Finnhub on-demand if needed)
     price = await get_stock_price(db, symbol)
     if not price:
         raise TradeError(f"Could not get price for {symbol}.")

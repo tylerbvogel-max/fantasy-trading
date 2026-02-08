@@ -107,6 +107,13 @@ export function useStockSearch(query: string) {
   });
 }
 
+export function useStockCount() {
+  return useQuery<{ count: number }>({
+    queryKey: ["stockCount"],
+    queryFn: stocks.count,
+  });
+}
+
 // ── User ──
 
 export function useProfile() {

@@ -273,4 +273,6 @@ export const stocks = {
   search: (q: string) => request<StockQuote[]>(`/stocks/search?q=${q}`),
 
   get: (symbol: string) => request<StockQuote>(`/stocks/${symbol}`),
+
+  count: () => request<{ count: number }>("/stocks/count"),
 };

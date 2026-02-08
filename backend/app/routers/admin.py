@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 from app.database import get_db
 from app.services.auth_service import get_current_user, create_invite_code
-from app.services.finnhub_service import refresh_all_prices
+from app.services.finnhub_service import refresh_all_prices, import_all_us_stocks
 from app.services.portfolio_service import capture_daily_snapshot
 from app.models.user import User
 from app.models.season import Season
@@ -127,3 +127,13 @@ async def force_price_refresh(
 ):
     count = await refresh_all_prices(db)
     return {"message": f"Refreshed prices for {count} stocks."}
+
+
+@router.post("/stocks/import")
+async def import_stocks(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import all US-traded stocks from Finnhub into stocks_master."""
+    count = await import_all_us_stocks(db)
+    return {"message": f"Imported {count} new stocks into the master catalog."}
