@@ -137,3 +137,27 @@ async def import_stocks(
     """Import all US-traded stocks from Finnhub into stocks_master."""
     count = await import_all_us_stocks(db)
     return {"message": f"Imported {count} new stocks into the master catalog."}
+
+
+@router.post("/stocks/upload")
+async def upload_stocks(
+    stocks_data: list[dict],
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk upload stocks to stocks_master. Expects [{symbol, name}, ...]."""
+    from app.models.stock import StockMaster
+    existing_result = await db.execute(select(StockMaster.symbol))
+    existing_symbols = {row[0] for row in existing_result.all()}
+
+    added = 0
+    for item in stocks_data:
+        symbol = item.get("symbol", "")
+        name = item.get("name", symbol)
+        if symbol and symbol not in existing_symbols:
+            db.add(StockMaster(symbol=symbol, name=name[:100], is_active=True))
+            existing_symbols.add(symbol)
+            added += 1
+
+    await db.commit()
+    return {"imported": added, "total_in_catalog": len(existing_symbols)}
