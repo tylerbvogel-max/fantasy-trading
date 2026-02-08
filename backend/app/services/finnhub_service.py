@@ -128,7 +128,7 @@ async def fetch_us_symbols() -> list[dict]:
             resp = await client.get(
                 f"{FINNHUB_BASE}/stock/symbol",
                 params={"exchange": "US", "token": settings.finnhub_api_key},
-                timeout=30.0,
+                timeout=120.0,
             )
             if resp.status_code == 200:
                 return resp.json()
@@ -145,19 +145,23 @@ async def import_all_us_stocks(db: AsyncSession) -> int:
 
     # Filter to common stocks and ETFs (skip warrants, preferred, etc.)
     valid_types = {"Common Stock", "ETP"}
-    filtered = [s for s in symbols if s.get("type") in valid_types]
-
-    added = 0
-    for item in filtered:
+    candidates = []
+    for item in symbols:
+        if item.get("type") not in valid_types:
+            continue
         symbol = item.get("symbol", "")
-        name = item.get("description", symbol)
-        # Skip symbols with dots/slashes (foreign listings, warrants, etc.)
         if not symbol or "." in symbol or "/" in symbol or len(symbol) > 10:
             continue
+        candidates.append((symbol, item.get("description", symbol)[:100]))
 
-        existing = await db.get(StockMaster, symbol)
-        if not existing:
-            db.add(StockMaster(symbol=symbol, name=name[:100], is_active=True))
+    # Batch check: get all existing symbols in one query
+    existing_result = await db.execute(select(StockMaster.symbol))
+    existing_symbols = {row[0] for row in existing_result.all()}
+
+    added = 0
+    for symbol, name in candidates:
+        if symbol not in existing_symbols:
+            db.add(StockMaster(symbol=symbol, name=name, is_active=True))
             added += 1
 
     await db.commit()
