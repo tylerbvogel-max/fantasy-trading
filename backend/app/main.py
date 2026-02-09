@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, seasons, trade, portfolio, stocks, admin
 from app.jobs.scheduler import start_scheduler, stop_scheduler
+from app.database import engine, Base
+import app.models  # noqa: F401 — ensure all models are registered
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -10,6 +12,9 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create any new tables that don't exist yet
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     # Startup
     start_scheduler()
     yield
