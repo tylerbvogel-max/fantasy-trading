@@ -8,7 +8,7 @@ from app.models.holding import Holding
 from app.models.season import Season
 from app.models.stock import StockActive
 from app.models.user import User
-from app.models.snapshot import PortfolioSnapshot, HoldingsSnapshot
+from app.models.snapshot import PortfolioSnapshot, HoldingsSnapshot, BenchmarkSnapshot
 from app.schemas import (
     PortfolioSummary, HoldingResponse, LeaderboardEntry, PortfolioHistoryPoint
 )
@@ -224,6 +224,26 @@ async def capture_daily_snapshot(db: AsyncSession, season_id: str) -> int:
             db.add(hs)
 
         count += 1
+
+    # Capture benchmark prices (SPY, IWM) for analytics
+    for symbol in ["SPY", "IWM"]:
+        stock = await db.get(StockActive, symbol)
+        if stock and stock.price:
+            existing = await db.execute(
+                select(BenchmarkSnapshot).where(
+                    BenchmarkSnapshot.symbol == symbol,
+                    BenchmarkSnapshot.snapshot_date == today,
+                )
+            )
+            bench = existing.scalar_one_or_none()
+            if bench:
+                bench.close_price = float(stock.price)
+            else:
+                db.add(BenchmarkSnapshot(
+                    symbol=symbol,
+                    snapshot_date=today,
+                    close_price=float(stock.price),
+                ))
 
     await db.commit()
     return count

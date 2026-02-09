@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 from app.database import async_session
 from app.models.season import Season
-from app.services.finnhub_service import refresh_all_prices
+from app.services.finnhub_service import refresh_all_prices, refresh_stock_price
 from app.services.portfolio_service import capture_daily_snapshot
 import logging
 
@@ -30,6 +30,10 @@ async def job_daily_snapshot():
     """Capture daily portfolio snapshots for all active seasons."""
     async with async_session() as db:
         try:
+            # Ensure benchmark prices are fresh before snapshotting
+            for symbol in ["SPY", "IWM"]:
+                await refresh_stock_price(db, symbol)
+
             result = await db.execute(
                 select(Season).where(Season.is_active == True)
             )

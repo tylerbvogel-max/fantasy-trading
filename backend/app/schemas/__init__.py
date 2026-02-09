@@ -174,6 +174,36 @@ class StockQuote(BaseModel):
         from_attributes = True
 
 
+# ── Analytics ──
+
+class BenchmarkAnalytics(BaseModel):
+    benchmark: str
+    benchmark_name: str
+    beta: float
+    alpha: float
+    data_points: int
+    beta_interpretation: str
+    alpha_interpretation: str
+
+
+class PlayerComparison(BaseModel):
+    compare_alias: str
+    beta: float
+    alpha: float
+    data_points: int
+    beta_interpretation: str
+    alpha_interpretation: str
+
+
+class PortfolioAnalytics(BaseModel):
+    season_id: str
+    benchmarks: list[BenchmarkAnalytics] = []
+    player_comparison: PlayerComparison | None = None
+    insufficient_data: bool = False
+    min_days_required: int = 20
+    days_available: int = 0
+
+
 # ── Leaderboard ──
 
 class LeaderboardEntry(BaseModel):

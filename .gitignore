@@ -17,5 +17,8 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Secrets
+invite-codes.txt
+
 # Claude Code
 .claude/

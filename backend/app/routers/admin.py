@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from app.database import get_db
 from app.services.auth_service import get_current_user, create_invite_code
 from app.services.finnhub_service import refresh_all_prices, import_all_us_stocks
+from app.services.analytics_service import backfill_benchmark
 from app.services.portfolio_service import capture_daily_snapshot
 from app.models.user import User
 from app.models.season import Season
@@ -161,3 +162,17 @@ async def upload_stocks(
 
     await db.commit()
     return {"imported": added, "total_in_catalog": len(existing_symbols)}
+
+
+@router.post("/benchmarks/backfill")
+async def backfill_benchmarks(
+    days: int = Query(365, ge=30, le=730),
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Backfill historical benchmark prices (SPY, IWM) from Finnhub."""
+    total = 0
+    for symbol in ["SPY", "IWM"]:
+        count = await backfill_benchmark(db, symbol, days)
+        total += count
+    return {"message": f"Backfilled {total} benchmark data points."}

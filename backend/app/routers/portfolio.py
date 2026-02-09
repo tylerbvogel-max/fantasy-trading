@@ -3,8 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.auth_service import get_current_user
 from app.services.portfolio_service import get_portfolio, get_portfolio_history
+from app.services.analytics_service import get_portfolio_analytics
 from app.models.user import User
-from app.schemas import PortfolioSummary, PortfolioHistoryPoint
+from app.schemas import PortfolioSummary, PortfolioHistoryPoint, PortfolioAnalytics
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -29,3 +30,13 @@ async def portfolio_history(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_portfolio_history(db, user.id, season_id, days)
+
+
+@router.get("/analytics", response_model=PortfolioAnalytics)
+async def portfolio_analytics(
+    season_id: str = Query(...),
+    compare_to: str | None = Query(None),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_portfolio_analytics(db, user.id, season_id, compare_alias=compare_to)

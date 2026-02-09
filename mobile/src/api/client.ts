@@ -159,6 +159,8 @@ export const seasons = {
 
   leaderboard: (id: string) =>
     request<LeaderboardEntry[]>(`/seasons/${id}/leaderboard`),
+
+  players: (id: string) => request<string[]>(`/seasons/${id}/players`),
 };
 
 // ── Trading ──
@@ -250,7 +252,43 @@ export const portfolio = {
     request<{ date: string; total_value: number; percent_gain: number }[]>(
       `/portfolio/history?season_id=${seasonId}`
     ),
+
+  analytics: (seasonId: string, compareTo?: string) => {
+    const params = new URLSearchParams({ season_id: seasonId });
+    if (compareTo) params.append("compare_to", compareTo);
+    return request<PortfolioAnalytics>(`/portfolio/analytics?${params}`);
+  },
 };
+
+// ── Analytics ──
+
+export interface BenchmarkAnalytics {
+  benchmark: string;
+  benchmark_name: string;
+  beta: number;
+  alpha: number;
+  data_points: number;
+  beta_interpretation: string;
+  alpha_interpretation: string;
+}
+
+export interface PlayerComparison {
+  compare_alias: string;
+  beta: number;
+  alpha: number;
+  data_points: number;
+  beta_interpretation: string;
+  alpha_interpretation: string;
+}
+
+export interface PortfolioAnalytics {
+  season_id: string;
+  benchmarks: BenchmarkAnalytics[];
+  player_comparison: PlayerComparison | null;
+  insufficient_data: boolean;
+  min_days_required: number;
+  days_available: number;
+}
 
 // ── Stocks ──
 

@@ -3,6 +3,7 @@ import { seasons, portfolio, trading, stocks, auth } from "../api/client";
 import type {
   LeaderboardEntry,
   PortfolioSummary,
+  PortfolioAnalytics,
   TradeRequest,
   TradeResponse,
   TradeValidation,
@@ -111,6 +112,24 @@ export function useStockCount() {
   return useQuery<{ count: number }>({
     queryKey: ["stockCount"],
     queryFn: stocks.count,
+  });
+}
+
+// ── Analytics ──
+
+export function usePortfolioAnalytics(seasonId: string, compareTo?: string) {
+  return useQuery<PortfolioAnalytics>({
+    queryKey: ["portfolioAnalytics", seasonId, compareTo ?? ""],
+    queryFn: () => portfolio.analytics(seasonId, compareTo),
+    enabled: !!seasonId,
+  });
+}
+
+export function useSeasonPlayers(seasonId: string) {
+  return useQuery<string[]>({
+    queryKey: ["seasonPlayers", seasonId],
+    queryFn: () => seasons.players(seasonId),
+    enabled: !!seasonId,
   });
 }
 

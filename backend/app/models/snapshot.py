@@ -39,3 +39,15 @@ class HoldingsSnapshot(Base):
     portfolio_snapshot: Mapped["PortfolioSnapshot"] = relationship(
         back_populates="holdings_snapshots"
     )
+
+
+class BenchmarkSnapshot(Base):
+    __tablename__ = "benchmark_snapshots"
+    __table_args__ = (
+        UniqueConstraint("symbol", "snapshot_date", name="uq_benchmark_date"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    symbol: Mapped[str] = mapped_column(String(10), nullable=False)
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
+    close_price: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)

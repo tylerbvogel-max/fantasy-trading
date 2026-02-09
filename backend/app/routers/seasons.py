@@ -130,3 +130,23 @@ async def season_stocks(season_id: str, db: AsyncSession = Depends(get_db)):
 
     result = await db.execute(stmt)
     return [StockQuote.model_validate(s) for s in result.scalars().all()]
+
+
+@router.get("/{season_id}/players", response_model=list[str])
+async def season_players(
+    season_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List aliases of all players in a season (excluding the requester)."""
+    result = await db.execute(
+        select(User.alias)
+        .join(PlayerSeason, PlayerSeason.user_id == User.id)
+        .where(
+            PlayerSeason.season_id == season_id,
+            PlayerSeason.is_active == True,
+            User.id != user.id,
+        )
+        .order_by(User.alias)
+    )
+    return [row[0] for row in result.all()]

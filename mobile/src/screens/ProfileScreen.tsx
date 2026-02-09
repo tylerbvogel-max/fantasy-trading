@@ -8,12 +8,19 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useProfile, usePortfolioHistory, usePortfolio } from "../hooks/useApi";
+import {
+  useProfile,
+  usePortfolioHistory,
+  usePortfolio,
+  usePortfolioAnalytics,
+  useSeasonPlayers,
+} from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
 import { signOut } from "../api/client";
-import type { SeasonSummary } from "../api/client";
+import type { SeasonSummary, BenchmarkAnalytics } from "../api/client";
 
 const CHART_HEIGHT = 160;
 const CHART_BAR_WIDTH = 4;
@@ -88,11 +95,61 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function BetaColorDot({ beta }: { beta: number }) {
+  const color =
+    beta > 1.2 ? Colors.orange : beta < 0.8 ? Colors.primary : Colors.green;
+  return <View style={[styles.betaDot, { backgroundColor: color }]} />;
+}
+
+function BenchmarkCard({ data }: { data: BenchmarkAnalytics }) {
+  const hasSufficientData = data.data_points >= 20;
+
+  return (
+    <View style={styles.benchmarkCard}>
+      <Text style={styles.benchmarkTitle}>vs {data.benchmark_name} ({data.benchmark})</Text>
+      {hasSufficientData ? (
+        <>
+          <View style={styles.metricsRow}>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Beta</Text>
+              <View style={styles.metricValueRow}>
+                <BetaColorDot beta={data.beta} />
+                <Text style={styles.metricValue}>{data.beta.toFixed(2)}</Text>
+              </View>
+            </View>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Alpha</Text>
+              <Text
+                style={[
+                  styles.metricValue,
+                  { color: data.alpha >= 0 ? Colors.green : Colors.red },
+                ]}
+              >
+                {data.alpha >= 0 ? "+" : ""}
+                {data.alpha.toFixed(1)}%
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.interpretationText}>{data.beta_interpretation}</Text>
+          <Text style={styles.interpretationText}>{data.alpha_interpretation}</Text>
+          <Text style={styles.dataPointsText}>Based on {data.data_points} trading days</Text>
+        </>
+      ) : (
+        <Text style={styles.insufficientText}>
+          {data.data_points} of 20 trading days collected
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const activeSeasons = profile?.active_seasons ?? [];
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
+  const [analyticsExpanded, setAnalyticsExpanded] = useState(false);
+  const [comparePlayer, setComparePlayer] = useState<string | undefined>(undefined);
   const seasonId = selectedSeasonId || activeSeasons[0]?.id || "";
 
   const {
@@ -103,6 +160,11 @@ export default function ProfileScreen() {
   } = usePortfolioHistory(seasonId);
 
   const { data: portfolioData } = usePortfolio(seasonId);
+  const { data: analytics, isLoading: analyticsLoading } = usePortfolioAnalytics(
+    analyticsExpanded ? seasonId : "",
+    comparePlayer
+  );
+  const { data: seasonPlayers } = useSeasonPlayers(seasonId);
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
@@ -282,6 +344,137 @@ export default function ProfileScreen() {
                   {(totalReturn ?? 0).toFixed(2)}%
                 </Text>
               </View>
+            </View>
+          )}
+
+          {/* Analytics toggle */}
+          <TouchableOpacity
+            style={styles.analyticsToggle}
+            onPress={() => setAnalyticsExpanded(!analyticsExpanded)}
+          >
+            <View style={styles.analyticsToggleLeft}>
+              <Ionicons name="analytics" size={20} color={Colors.yellow} />
+              <Text style={styles.analyticsToggleText}>Portfolio Analytics</Text>
+            </View>
+            <Ionicons
+              name={analyticsExpanded ? "chevron-up" : "chevron-down"}
+              size={20}
+              color={Colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Analytics expanded section */}
+          {analyticsExpanded && (
+            <View style={styles.analyticsSection}>
+              {analyticsLoading ? (
+                <View style={styles.analyticsLoading}>
+                  <ActivityIndicator color={Colors.primary} />
+                  <Text style={styles.analyticsLoadingText}>Calculating...</Text>
+                </View>
+              ) : analytics?.insufficient_data && analytics.days_available < 2 ? (
+                <View style={styles.insufficientBanner}>
+                  <Ionicons name="time-outline" size={24} color={Colors.yellow} />
+                  <Text style={styles.insufficientBannerText}>
+                    Need 20+ trading days for analysis.{"\n"}
+                    You have {analytics.days_available} so far.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {analytics?.benchmarks.map((b) => (
+                    <BenchmarkCard key={b.benchmark} data={b} />
+                  ))}
+
+                  {/* Player comparison */}
+                  {seasonPlayers && seasonPlayers.length > 0 && (
+                    <View style={styles.comparisonSection}>
+                      <Text style={styles.comparisonTitle}>Compare vs Player</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.playerPills}
+                        contentContainerStyle={styles.playerPillsContent}
+                      >
+                        {seasonPlayers.map((alias) => (
+                          <TouchableOpacity
+                            key={alias}
+                            style={[
+                              styles.playerPill,
+                              comparePlayer === alias && styles.playerPillActive,
+                            ]}
+                            onPress={() =>
+                              setComparePlayer(comparePlayer === alias ? undefined : alias)
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.playerPillText,
+                                comparePlayer === alias && styles.playerPillTextActive,
+                              ]}
+                            >
+                              {alias}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+
+                      {analytics?.player_comparison && (
+                        <View style={styles.benchmarkCard}>
+                          <Text style={styles.benchmarkTitle}>
+                            vs {analytics.player_comparison.compare_alias}
+                          </Text>
+                          {analytics.player_comparison.data_points >= 20 ? (
+                            <>
+                              <View style={styles.metricsRow}>
+                                <View style={styles.metricBox}>
+                                  <Text style={styles.metricLabel}>Beta</Text>
+                                  <View style={styles.metricValueRow}>
+                                    <BetaColorDot beta={analytics.player_comparison.beta} />
+                                    <Text style={styles.metricValue}>
+                                      {analytics.player_comparison.beta.toFixed(2)}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.metricBox}>
+                                  <Text style={styles.metricLabel}>Alpha</Text>
+                                  <Text
+                                    style={[
+                                      styles.metricValue,
+                                      {
+                                        color:
+                                          analytics.player_comparison.alpha >= 0
+                                            ? Colors.green
+                                            : Colors.red,
+                                      },
+                                    ]}
+                                  >
+                                    {analytics.player_comparison.alpha >= 0 ? "+" : ""}
+                                    {analytics.player_comparison.alpha.toFixed(1)}%
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={styles.interpretationText}>
+                                {analytics.player_comparison.beta_interpretation}
+                              </Text>
+                              <Text style={styles.interpretationText}>
+                                {analytics.player_comparison.alpha_interpretation}
+                              </Text>
+                              <Text style={styles.dataPointsText}>
+                                Based on {analytics.player_comparison.data_points} trading days
+                              </Text>
+                            </>
+                          ) : (
+                            <Text style={styles.insufficientText}>
+                              {analytics.player_comparison.alpha_interpretation ||
+                                `${analytics.player_comparison.data_points} of 20 trading days collected`}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
             </View>
           )}
 
@@ -548,6 +741,151 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: "center",
+  },
+  analyticsToggle: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    marginHorizontal: Spacing.xl,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  analyticsToggleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  analyticsToggleText: {
+    fontSize: FontSize.md,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  analyticsSection: {
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  analyticsLoading: {
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xl,
+  },
+  analyticsLoadingText: {
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  insufficientBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    backgroundColor: Colors.card,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+  },
+  insufficientBannerText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  benchmarkCard: {
+    backgroundColor: Colors.card,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.md,
+  },
+  benchmarkTitle: {
+    fontSize: FontSize.md,
+    fontWeight: "700",
+    color: Colors.text,
+    marginBottom: Spacing.md,
+  },
+  metricsRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  metricBox: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    alignItems: "center",
+  },
+  metricLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+  },
+  metricValue: {
+    fontSize: FontSize.xl,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  metricValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  betaDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  interpretationText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: Spacing.xs,
+  },
+  dataPointsText: {
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    marginTop: Spacing.xs,
+  },
+  insufficientText: {
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  comparisonSection: {
+    marginTop: Spacing.sm,
+  },
+  comparisonTitle: {
+    fontSize: FontSize.md,
+    fontWeight: "700",
+    color: Colors.text,
+    marginBottom: Spacing.sm,
+  },
+  playerPills: {
+    maxHeight: 40,
+    marginBottom: Spacing.md,
+  },
+  playerPillsContent: {
+    gap: Spacing.sm,
+  },
+  playerPill: {
+    backgroundColor: Colors.card,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  playerPillActive: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  playerPillText: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    fontWeight: "500",
+  },
+  playerPillTextActive: {
+    color: Colors.text,
   },
   logoutButton: {
     flexDirection: "row",
