@@ -14,10 +14,10 @@ import type {
 
 // ── Seasons ──
 
-export function useSeasons() {
+export function useSeasons(mode?: string) {
   return useQuery<SeasonSummary[]>({
-    queryKey: ["seasons"],
-    queryFn: seasons.list,
+    queryKey: ["seasons", mode ?? "all"],
+    queryFn: () => seasons.list(mode),
   });
 }
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
@@ -16,8 +16,14 @@ router = APIRouter(prefix="/seasons", tags=["seasons"])
 
 
 @router.get("", response_model=list[SeasonSummary])
-async def list_seasons(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Season).order_by(Season.created_at.desc()))
+async def list_seasons(
+    mode: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(Season).order_by(Season.created_at.desc())
+    if mode:
+        stmt = stmt.where(Season.mode == mode)
+    result = await db.execute(stmt)
     seasons = list(result.scalars().all())
 
     summaries = []
@@ -33,6 +39,7 @@ async def list_seasons(db: AsyncSession = Depends(get_db)):
             id=s.id,
             name=s.name,
             season_type=s.season_type,
+            mode=s.mode,
             is_active=s.is_active,
             starting_cash=float(s.starting_cash),
             player_count=count,
@@ -60,6 +67,7 @@ async def get_season(season_id: str, db: AsyncSession = Depends(get_db)):
         id=season.id,
         name=season.name,
         season_type=season.season_type,
+        mode=season.mode,
         is_active=season.is_active,
         starting_cash=float(season.starting_cash),
         player_count=count,

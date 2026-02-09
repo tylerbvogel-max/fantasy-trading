@@ -21,10 +21,17 @@ import {
 import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
 import { signOut } from "../api/client";
 import type { SeasonSummary, BenchmarkAnalytics } from "../api/client";
+import { useMode, type AppMode } from "../contexts/ModeContext";
 
 const CHART_HEIGHT = 160;
 const CHART_BAR_WIDTH = 4;
 const CHART_BAR_GAP = 2;
+
+const MODE_META: Record<AppMode, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
+  classroom: { icon: "school-outline", color: Colors.primary, label: "Classroom" },
+  league: { icon: "trophy-outline", color: Colors.yellow, label: "League" },
+  arena: { icon: "flash-outline", color: Colors.accent, label: "Arena" },
+};
 
 function MiniChart({
   data,
@@ -145,12 +152,24 @@ function BenchmarkCard({ data }: { data: BenchmarkAnalytics }) {
 
 export default function ProfileScreen() {
   const { data: profile, isLoading: profileLoading } = useProfile();
+  const { mode, clearMode } = useMode();
   const activeSeasons = profile?.active_seasons ?? [];
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
   const [analyticsExpanded, setAnalyticsExpanded] = useState(false);
   const [comparePlayer, setComparePlayer] = useState<string | undefined>(undefined);
   const seasonId = selectedSeasonId || activeSeasons[0]?.id || "";
+
+  const handleSwitchMode = () => {
+    Alert.alert(
+      "Switch Mode?",
+      "You'll return to the mode selection screen. Your progress is saved.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Switch", onPress: () => clearMode() },
+      ]
+    );
+  };
 
   const {
     data: history,
@@ -261,6 +280,23 @@ export default function ProfileScreen() {
           )}
         </View>
       </View>
+
+      {/* Mode indicator */}
+      {mode && (
+        <View style={styles.modeCard}>
+          <View style={styles.modeCardLeft}>
+            <View style={[styles.modeIconCircle, { backgroundColor: MODE_META[mode].color + "20" }]}>
+              <Ionicons name={MODE_META[mode].icon} size={20} color={MODE_META[mode].color} />
+            </View>
+            <Text style={[styles.modeLabel, { color: MODE_META[mode].color }]}>
+              {MODE_META[mode].label}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={handleSwitchMode}>
+            <Text style={styles.modeSwitchText}>Switch Mode</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Season selector */}
       {activeSeasons.length > 1 && (
@@ -903,5 +939,38 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: "600",
     color: Colors.red,
+  },
+  modeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.card,
+    marginHorizontal: Spacing.xl,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  modeCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  modeIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modeLabel: {
+    fontSize: FontSize.md,
+    fontWeight: "700",
+  },
+  modeSwitchText: {
+    fontSize: FontSize.sm,
+    fontWeight: "600",
+    color: Colors.textSecondary,
   },
 });

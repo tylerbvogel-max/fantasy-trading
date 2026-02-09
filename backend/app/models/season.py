@@ -16,6 +16,7 @@ class Season(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     starting_cash: Mapped[float] = mapped_column(Numeric(12, 2), default=100000.00)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="league")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

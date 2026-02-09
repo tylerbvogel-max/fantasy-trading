@@ -46,6 +46,7 @@ class SeasonCreate(BaseModel):
     id: str = Field(..., max_length=20)
     name: str = Field(..., max_length=100)
     season_type: str = Field(default="open", max_length=30)
+    mode: str = Field(default="league", max_length=20)
     allowed_stocks: list[str] | None = None
     start_date: datetime
     starting_cash: float = 100000.00
@@ -56,6 +57,7 @@ class SeasonSummary(BaseModel):
     id: str
     name: str
     season_type: str
+    mode: str = "league"
     is_active: bool
     starting_cash: float
     player_count: int = 0

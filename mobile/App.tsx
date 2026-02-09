@@ -8,7 +8,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from './src/utils/theme';
 import { loadStoredToken, registerSignOutHandler } from './src/api/client';
+import { ModeProvider, useMode } from './src/contexts/ModeContext';
 import AuthScreen from './src/screens/AuthScreen';
+import ModeSelectScreen from './src/screens/ModeSelectScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import TradeScreen from './src/screens/TradeScreen';
 import PortfolioScreen from './src/screens/PortfolioScreen';
@@ -53,9 +55,10 @@ function MainTabs() {
   );
 }
 
-export default function App() {
+function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { mode, isLoading: modeLoading } = useMode();
 
   useEffect(() => {
     registerSignOutHandler(() => setIsAuthenticated(false));
@@ -65,7 +68,7 @@ export default function App() {
     });
   }, []);
 
-  if (isLoading) {
+  if (isLoading || modeLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
         <ActivityIndicator size="large" color={Colors.primary} />
@@ -73,17 +76,29 @@ export default function App() {
     );
   }
 
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />;
+  }
+
+  if (!mode) {
+    return <ModeSelectScreen />;
+  }
+
+  return (
+    <NavigationContainer>
+      <MainTabs />
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
-        {isAuthenticated ? (
-          <NavigationContainer>
-            <MainTabs />
-          </NavigationContainer>
-        ) : (
-          <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />
-        )}
+        <ModeProvider>
+          <StatusBar style="light" />
+          <AppContent />
+        </ModeProvider>
       </SafeAreaProvider>
     </QueryClientProvider>
   );

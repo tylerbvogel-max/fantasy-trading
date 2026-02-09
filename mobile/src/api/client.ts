@@ -131,6 +131,7 @@ export interface SeasonSummary {
   id: string;
   name: string;
   season_type: string;
+  mode: string;
   is_active: boolean;
   starting_cash: number;
   player_count: number;
@@ -147,7 +148,8 @@ export interface LeaderboardEntry {
 }
 
 export const seasons = {
-  list: () => request<SeasonSummary[]>("/seasons"),
+  list: (mode?: string) =>
+    request<SeasonSummary[]>(`/seasons${mode ? `?mode=${mode}` : ""}`),
 
   get: (id: string) => request<SeasonSummary>(`/seasons/${id}`),
 

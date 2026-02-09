@@ -12,9 +12,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLeaderboard, useSeasons, useProfile, useJoinSeason } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { useMode } from "../contexts/ModeContext";
 
 export default function LeaderboardScreen() {
-  const { data: seasonsData } = useSeasons();
+  const { mode } = useMode();
+  const { data: seasonsData } = useSeasons(mode ?? undefined);
   const { data: profile } = useProfile();
 
   // Default to first active season
