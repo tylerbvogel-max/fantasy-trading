@@ -13,9 +13,6 @@ from app.models.snapshot import PortfolioSnapshot, BenchmarkSnapshot
 from app.models.player_season import PlayerSeason
 from app.models.user import User
 from app.models.stock import StockActive
-from app.config import get_settings
-
-settings = get_settings()
 
 BENCHMARKS = {
     "SPY": "S&P 500",
@@ -299,22 +296,21 @@ async def get_portfolio_analytics(
 
 
 async def backfill_benchmark(db: AsyncSession, symbol: str, days: int = 365) -> int:
-    """Fetch historical daily candles from Finnhub and populate benchmark_snapshots."""
-    now = datetime.now(timezone.utc)
-    to_ts = int(now.timestamp())
-    from_ts = int(to_ts - days * 86400)
+    """Fetch historical daily candles from Yahoo Finance and populate benchmark_snapshots."""
+    # Yahoo Finance uses range strings: 1y, 2y, etc.
+    if days <= 365:
+        range_str = "1y"
+    elif days <= 730:
+        range_str = "2y"
+    else:
+        range_str = "5y"
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
-                f"https://finnhub.io/api/v1/stock/candle",
-                params={
-                    "symbol": symbol,
-                    "resolution": "D",
-                    "from": from_ts,
-                    "to": to_ts,
-                    "token": settings.finnhub_api_key,
-                },
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+                params={"range": range_str, "interval": "1d"},
+                headers={"User-Agent": "Mozilla/5.0"},
                 timeout=30.0,
             )
             if resp.status_code != 200:
@@ -323,11 +319,17 @@ async def backfill_benchmark(db: AsyncSession, symbol: str, days: int = 365) -> 
         except httpx.RequestError:
             return 0
 
-    if data.get("s") != "ok" or "c" not in data or "t" not in data:
+    chart = data.get("chart", {})
+    results = chart.get("result", [])
+    if not results:
         return 0
 
-    closes = data["c"]
-    timestamps = data["t"]
+    result = results[0]
+    timestamps = result.get("timestamp", [])
+    closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+
+    if not timestamps or not closes:
+        return 0
 
     # Get existing dates to avoid duplicates
     existing_result = await db.execute(
@@ -336,7 +338,9 @@ async def backfill_benchmark(db: AsyncSession, symbol: str, days: int = 365) -> 
     existing_dates = {row[0] for row in existing_result.all()}
 
     added = 0
-    for close_price, ts in zip(closes, timestamps):
+    for ts, close_price in zip(timestamps, closes):
+        if close_price is None:
+            continue
         snap_date = date.fromtimestamp(ts)
         if snap_date not in existing_dates:
             db.add(BenchmarkSnapshot(
