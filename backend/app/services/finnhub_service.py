@@ -84,12 +84,19 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
     return stock
 
 
-async def refresh_all_prices(db: AsyncSession) -> int:
-    """Refresh prices only for stocks that players currently hold."""
-    result = await db.execute(
-        select(func.distinct(Holding.stock_symbol))
-        .where(Holding.shares_owned > 0)
-    )
+async def refresh_all_prices(db: AsyncSession, all_stocks: bool = False) -> int:
+    """Refresh prices for held stocks, or all stocks in the master catalog."""
+    if all_stocks:
+        result = await db.execute(
+            select(StockMaster.symbol)
+            .where(StockMaster.is_active == True)
+            .order_by(StockMaster.symbol)
+        )
+    else:
+        result = await db.execute(
+            select(func.distinct(Holding.stock_symbol))
+            .where(Holding.shares_owned > 0)
+        )
     symbols = [row[0] for row in result.all()]
 
     updated = 0

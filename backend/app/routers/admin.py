@@ -125,10 +125,11 @@ async def end_season(
 
 @router.post("/stocks/refresh")
 async def force_price_refresh(
+    all: bool = Query(False),
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    count = await refresh_all_prices(db)
+    count = await refresh_all_prices(db, all_stocks=all)
     return {"message": f"Refreshed prices for {count} stocks."}
 
 
