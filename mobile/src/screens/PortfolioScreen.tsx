@@ -108,7 +108,7 @@ export default function PortfolioScreen() {
       {portfolioData && (
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Total Value</Text>
-          <Text style={styles.summaryValue}>
+          <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit>
             ${portfolioData.total_value.toLocaleString(undefined, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
@@ -126,7 +126,7 @@ export default function PortfolioScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryCol}>
               <Text style={styles.summaryColLabel}>Cash</Text>
-              <Text style={styles.summaryColValue}>
+              <Text style={styles.summaryColValue} numberOfLines={1} adjustsFontSizeToFit>
                 ${portfolioData.cash_balance.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
@@ -135,7 +135,7 @@ export default function PortfolioScreen() {
             </View>
             <View style={[styles.summaryCol, styles.summaryColCenter]}>
               <Text style={styles.summaryColLabel}>Holdings</Text>
-              <Text style={styles.summaryColValue}>
+              <Text style={styles.summaryColValue} numberOfLines={1} adjustsFontSizeToFit>
                 ${portfolioData.holdings_value.toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
@@ -144,7 +144,7 @@ export default function PortfolioScreen() {
             </View>
             <View style={styles.summaryCol}>
               <Text style={styles.summaryColLabel}># Holdings</Text>
-              <Text style={styles.summaryColValue}>
+              <Text style={styles.summaryColValue} numberOfLines={1}>
                 {portfolioData.holdings.length}
               </Text>
             </View>
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   summaryValue: {
-    fontSize: FontSize.hero,
+    fontSize: FontSize.xxxl,
     fontWeight: "800",
     color: Colors.text,
     marginTop: Spacing.xs,
@@ -282,6 +282,7 @@ const styles = StyleSheet.create({
   summaryCol: {
     flex: 1,
     alignItems: "center",
+    paddingHorizontal: Spacing.xs,
   },
   summaryColCenter: {
     borderLeftWidth: 1,
@@ -294,7 +295,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   summaryColValue: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontWeight: "700",
     color: Colors.text,
     marginTop: Spacing.xs,
