@@ -22,7 +22,7 @@ async def list_seasons(
 ):
     stmt = select(Season).order_by(Season.created_at.desc())
     if mode:
-        stmt = stmt.where(Season.mode == mode)
+        stmt = stmt.where(Season.game_mode == mode)
     result = await db.execute(stmt)
     seasons = list(result.scalars().all())
 
@@ -39,7 +39,7 @@ async def list_seasons(
             id=s.id,
             name=s.name,
             season_type=s.season_type,
-            mode=s.mode,
+            mode=s.game_mode,
             is_active=s.is_active,
             starting_cash=float(s.starting_cash),
             player_count=count,
@@ -67,7 +67,7 @@ async def get_season(season_id: str, db: AsyncSession = Depends(get_db)):
         id=season.id,
         name=season.name,
         season_type=season.season_type,
-        mode=season.mode,
+        mode=season.game_mode,
         is_active=season.is_active,
         starting_cash=float(season.starting_cash),
         player_count=count,
