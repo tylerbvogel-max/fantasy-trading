@@ -21,6 +21,7 @@ import {
   useTradeHistory,
 } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { trading } from "../api/client";
 import type { StockQuote, SeasonSummary, TransactionHistory } from "../api/client";
 
 export default function TradeScreen() {
@@ -34,6 +35,8 @@ export default function TradeScreen() {
   const [selectedStock, setSelectedStock] = useState<StockQuote | null>(null);
   const [tradeType, setTradeType] = useState<"BUY" | "SELL">("BUY");
   const [sharesInput, setSharesInput] = useState("");
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [fetchingPrice, setFetchingPrice] = useState(false);
 
   const { data: searchResults, isLoading: isSearching } = useStockSearch(searchQuery);
   const validateTrade = useValidateTrade();
@@ -41,7 +44,8 @@ export default function TradeScreen() {
   const { data: tradeHistory } = useTradeHistory(seasonId);
 
   const shares = parseFloat(sharesInput) || 0;
-  const estimatedTotal = selectedStock?.price ? shares * selectedStock.price : 0;
+  const displayPrice = livePrice ?? selectedStock?.price ?? null;
+  const estimatedTotal = displayPrice ? shares * displayPrice : 0;
 
   if (activeSeasons.length === 0) {
     return (
@@ -118,6 +122,7 @@ export default function TradeScreen() {
           setSelectedStock(null);
           setSharesInput("");
           setSearchQuery("");
+          setLivePrice(null);
         },
         onError: (err) => {
           Alert.alert("Trade Failed", err.message);
@@ -147,6 +152,19 @@ export default function TradeScreen() {
       onPress={() => {
         setSelectedStock(item);
         setSearchQuery("");
+        setLivePrice(null);
+        if (seasonId) {
+          setFetchingPrice(true);
+          trading.validate({
+            season_id: seasonId,
+            stock_symbol: item.symbol,
+            transaction_type: "BUY",
+            shares: 1,
+          })
+            .then((v) => setLivePrice(v.current_price))
+            .catch(() => {})
+            .finally(() => setFetchingPrice(false));
+        }
       }}
     >
       <View style={styles.searchResultInfo}>
@@ -255,9 +273,13 @@ export default function TradeScreen() {
                 <Text style={styles.selectedName}>{selectedStock.name}</Text>
               </View>
               <View style={styles.selectedRight}>
-                <Text style={styles.selectedPrice}>
-                  ${selectedStock.price?.toFixed(2) ?? "—"}
-                </Text>
+                {fetchingPrice ? (
+                  <ActivityIndicator color={Colors.primary} size="small" />
+                ) : (
+                  <Text style={styles.selectedPrice}>
+                    {displayPrice != null ? `$${displayPrice.toFixed(2)}` : "—"}
+                  </Text>
+                )}
                 <TouchableOpacity onPress={() => setSelectedStock(null)}>
                   <Ionicons name="close-circle" size={24} color={Colors.textMuted} />
                 </TouchableOpacity>
