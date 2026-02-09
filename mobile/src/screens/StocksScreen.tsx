@@ -8,6 +8,7 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useStocks, useStockSearch, useStockCount } from "../hooks/useApi";
@@ -43,12 +44,18 @@ export default function StocksScreen() {
 
     return (
       <View style={styles.stockRow}>
-        <View style={styles.stockLeft}>
+        <TouchableOpacity
+          style={styles.stockLeft}
+          onPress={() => Linking.openURL(`https://finviz.com/quote.ashx?t=${item.symbol}`)}
+        >
           <Text style={styles.stockSymbol}>{item.symbol}</Text>
-          <Text style={styles.stockName} numberOfLines={1}>
-            {item.name}
-          </Text>
-        </View>
+          <View style={styles.stockNameRow}>
+            <Text style={styles.stockName} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Ionicons name="open-outline" size={12} color={Colors.textMuted} style={{ marginLeft: 4 }} />
+          </View>
+        </TouchableOpacity>
         <View style={styles.stockRight}>
           {hasPrice ? (
             <>
@@ -234,10 +241,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.text,
   },
+  stockNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
   stockName: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
-    marginTop: 2,
+    flexShrink: 1,
   },
   stockRight: {
     alignItems: "flex-end",

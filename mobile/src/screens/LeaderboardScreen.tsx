@@ -158,7 +158,7 @@ export default function LeaderboardScreen() {
           }
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
-            !hasJoined && !isLoading ? (
+            !hasJoined && !isLoading && seasonId ? (
               <TouchableOpacity
                 style={styles.joinBanner}
                 onPress={handleJoin}
@@ -174,11 +174,19 @@ export default function LeaderboardScreen() {
             ) : null
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="trophy-outline" size={48} color={Colors.textMuted} />
-              <Text style={styles.emptyText}>No players yet</Text>
-              <Text style={styles.emptySubtext}>Be the first to join!</Text>
-            </View>
+            !seasonId ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="calendar-outline" size={48} color={Colors.textMuted} />
+                <Text style={styles.emptyText}>No seasons in this mode yet</Text>
+                <Text style={styles.emptySubtext}>Check back soon or switch modes from Profile</Text>
+              </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="trophy-outline" size={48} color={Colors.textMuted} />
+                <Text style={styles.emptyText}>No players yet</Text>
+                <Text style={styles.emptySubtext}>Be the first to join!</Text>
+              </View>
+            )
           }
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
