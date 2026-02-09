@@ -170,9 +170,17 @@ async def backfill_benchmarks(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Backfill historical benchmark prices (SPY, IWM) from Finnhub."""
+    """Backfill historical benchmark prices (SPY, IWM) from Yahoo Finance."""
+    import traceback
     total = 0
+    errors = []
     for symbol in ["SPY", "IWM"]:
-        count = await backfill_benchmark(db, symbol, days)
-        total += count
-    return {"message": f"Backfilled {total} benchmark data points."}
+        try:
+            count = await backfill_benchmark(db, symbol, days)
+            total += count
+        except Exception as e:
+            errors.append(f"{symbol}: {str(e)}\n{traceback.format_exc()}")
+    result = {"message": f"Backfilled {total} benchmark data points."}
+    if errors:
+        result["errors"] = errors
+    return result
