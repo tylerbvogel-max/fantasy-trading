@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, seasons, trade, portfolio, stocks, admin
 from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.database import engine, Base
+from sqlalchemy import text
 import app.models  # noqa: F401 — ensure all models are registered
 import logging
 
@@ -15,6 +16,10 @@ async def lifespan(app: FastAPI):
     # Create any new tables that don't exist yet
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add game_mode column if missing (no-op if already exists)
+        await conn.execute(text(
+            "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS game_mode VARCHAR(20) NOT NULL DEFAULT 'league'"
+        ))
     # Startup
     start_scheduler()
     yield
