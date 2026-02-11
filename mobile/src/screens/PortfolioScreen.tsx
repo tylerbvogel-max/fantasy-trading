@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
   },
   statValue: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.xs,
