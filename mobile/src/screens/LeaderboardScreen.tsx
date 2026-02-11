@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLeaderboard, useSeasons, useProfile, useJoinSeason } from "../hooks/useApi";
@@ -22,6 +23,7 @@ export default function LeaderboardScreen() {
   // Default to first active season
   const activeSeasons = seasonsData?.filter((s) => s.is_active) || [];
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
+  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
 
   const seasonId = selectedSeasonId || activeSeasons[0]?.id || "";
 
@@ -49,19 +51,9 @@ export default function LeaderboardScreen() {
     });
   };
 
-  const renderSeasonPill = (season: { id: string; name: string; season_type: string }) => {
-    const isSelected = season.id === seasonId;
-    return (
-      <TouchableOpacity
-        key={season.id}
-        style={[styles.seasonPill, isSelected && styles.seasonPillActive]}
-        onPress={() => setSelectedSeasonId(season.id)}
-      >
-        <Text style={[styles.seasonPillText, isSelected && styles.seasonPillTextActive]}>
-          {season.season_type === "open" ? "🌐" : "🎯"} {season.name}
-        </Text>
-      </TouchableOpacity>
-    );
+  const handleSeasonSelect = (id: string) => {
+    setSelectedSeasonId(id);
+    setSeasonDropdownOpen(false);
   };
 
   const renderLeaderboardItem = ({
@@ -125,17 +117,17 @@ export default function LeaderboardScreen() {
         )}
       </View>
 
-      {/* Season selector */}
+      {/* Season dropdown — sticky */}
       {activeSeasons.length > 1 && (
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={activeSeasons}
-          renderItem={({ item }) => renderSeasonPill(item)}
-          keyExtractor={(item) => item.id}
-          style={styles.seasonSelector}
-          contentContainerStyle={styles.seasonSelectorContent}
-        />
+        <TouchableOpacity
+          style={styles.seasonDropdown}
+          onPress={() => setSeasonDropdownOpen(true)}
+        >
+          <Text style={styles.seasonDropdownText} numberOfLines={2}>
+            {currentSeason?.name ?? "Select Season"}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
+        </TouchableOpacity>
       )}
 
       {/* Leaderboard */}
@@ -191,6 +183,47 @@ export default function LeaderboardScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
+
+      {/* Season dropdown modal */}
+      <Modal
+        visible={seasonDropdownOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSeasonDropdownOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSeasonDropdownOpen(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Season</Text>
+            {activeSeasons.map((s) => (
+              <TouchableOpacity
+                key={s.id}
+                style={[
+                  styles.modalOption,
+                  s.id === seasonId && styles.modalOptionActive,
+                ]}
+                onPress={() => handleSeasonSelect(s.id)}
+              >
+                <Text
+                  style={[
+                    styles.modalOptionText,
+                    s.id === seasonId && styles.modalOptionTextActive,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {s.name}
+                </Text>
+                {s.id === seasonId && (
+                  <Ionicons name="checkmark" size={20} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -224,33 +257,69 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontFamily: FontFamily.semiBold,
   },
-  seasonSelector: {
-    maxHeight: 44,
-    marginBottom: Spacing.md,
-  },
-  seasonSelectorContent: {
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.sm,
-  },
-  seasonPill: {
+  seasonDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.card,
+    marginHorizontal: Spacing.xl,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
+    marginBottom: Spacing.md,
   },
-  seasonPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+  seasonDropdownText: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.text,
+    flex: 1,
+    marginRight: Spacing.sm,
   },
-  seasonPillText: {
-    fontSize: FontSize.sm,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    width: "100%",
+    maxWidth: 340,
+  },
+  modalTitle: {
+    fontSize: FontSize.lg,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    textAlign: "center",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.xs,
+    minHeight: 52,
+  },
+  modalOptionActive: {
+    backgroundColor: Colors.primary + "20",
+  },
+  modalOptionText: {
+    fontSize: FontSize.md,
     color: Colors.textSecondary,
     fontFamily: FontFamily.medium,
+    flex: 1,
   },
-  seasonPillTextActive: {
-    color: Colors.text,
+  modalOptionTextActive: {
+    color: Colors.primary,
+    fontFamily: FontFamily.bold,
   },
   loadingContainer: {
     flex: 1,

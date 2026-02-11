@@ -93,10 +93,8 @@ function getHeatmapColor(gainLossPct: number): string {
 
 function Heatmap({
   holdings,
-  seasonName,
 }: {
   holdings: HoldingResponse[];
-  seasonName: string;
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -110,9 +108,6 @@ function Heatmap({
         <View style={styles.heatmapHeader}>
           <Ionicons name="grid-outline" size={18} color={Colors.orange} />
           <Text style={styles.heatmapTitle}>Heatmap</Text>
-          <View style={styles.heatmapSeasonBadge}>
-            <Text style={styles.heatmapSeasonBadgeText}>{seasonName}</Text>
-          </View>
         </View>
         <Text style={styles.heatmapEmptyText}>Make some trades to see your heatmap</Text>
       </View>
@@ -144,9 +139,6 @@ function Heatmap({
       <View style={styles.heatmapHeader}>
         <Ionicons name="grid-outline" size={18} color={Colors.orange} />
         <Text style={styles.heatmapTitle}>Heatmap</Text>
-        <View style={styles.heatmapSeasonBadge}>
-          <Text style={styles.heatmapSeasonBadgeText}>{seasonName}</Text>
-        </View>
       </View>
       <View style={styles.heatmapContainer} onLayout={handleLayout}>
         {containerWidth > 0 &&
@@ -263,7 +255,6 @@ export default function PortfolioScreen() {
 
   const gainIsPositive = (portfolioData?.percent_gain ?? 0) >= 0;
   const selectedSeason = activeSeasons.find((s) => s.id === seasonId);
-  const selectedSeasonName = selectedSeason?.name ?? "Portfolio";
 
   const startingValue = history && history.length > 0 ? history[0].total_value : null;
   const latestValue =
@@ -274,19 +265,6 @@ export default function PortfolioScreen() {
 
   const ListHeader = () => (
     <View>
-      {/* Season dropdown selector */}
-      {activeSeasons.length > 1 && (
-        <TouchableOpacity
-          style={styles.seasonDropdown}
-          onPress={() => setSeasonDropdownOpen(true)}
-        >
-          <Text style={styles.seasonDropdownText} numberOfLines={1}>
-            {selectedSeason?.name ?? "Select Season"}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
-        </TouchableOpacity>
-      )}
-
       {/* Summary card */}
       {portfolioData && (
         <View style={styles.summaryCard}>
@@ -337,7 +315,7 @@ export default function PortfolioScreen() {
 
       {/* Heatmap — always visible */}
       {portfolioData && (
-        <Heatmap holdings={portfolioData.holdings} seasonName={selectedSeasonName} />
+        <Heatmap holdings={portfolioData.holdings} />
       )}
 
       {/* Chart card */}
@@ -429,6 +407,19 @@ export default function PortfolioScreen() {
         <Text style={styles.title}>Portfolio</Text>
       </View>
 
+      {/* Season dropdown — sticky */}
+      {activeSeasons.length > 1 && (
+        <TouchableOpacity
+          style={styles.seasonDropdown}
+          onPress={() => setSeasonDropdownOpen(true)}
+        >
+          <Text style={styles.seasonDropdownText} numberOfLines={2}>
+            {selectedSeason?.name ?? "Select Season"}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
+        </TouchableOpacity>
+      )}
+
       <FlatList
         data={portfolioData?.holdings ?? []}
         renderItem={renderHolding}
@@ -518,7 +509,7 @@ export default function PortfolioScreen() {
                     styles.modalOptionText,
                     s.id === seasonId && styles.modalOptionTextActive,
                   ]}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {s.name}
                 </Text>
@@ -835,6 +826,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.md,
     marginBottom: Spacing.xs,
+    minHeight: 52,
   },
   modalOptionActive: {
     backgroundColor: Colors.primary + "20",
@@ -868,19 +860,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     color: Colors.text,
     flexShrink: 0,
-  },
-  heatmapSeasonBadge: {
-    backgroundColor: Colors.orange + "20",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.orange + "40",
-  },
-  heatmapSeasonBadgeText: {
-    fontSize: FontSize.xs,
-    fontFamily: FontFamily.bold,
-    color: Colors.orange,
   },
   heatmapContainer: {
     borderRadius: Radius.md,
