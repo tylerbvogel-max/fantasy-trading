@@ -221,43 +221,45 @@ export default function TradeScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Stock search */}
-        <View style={styles.section}>
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={18} color={Colors.textMuted} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search stocks (e.g., AAPL)"
-              placeholderTextColor={Colors.textMuted}
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Search results */}
-          {searchQuery.length > 0 && (
-            <View style={styles.searchResults}>
-              {isSearching ? (
-                <ActivityIndicator color={Colors.primary} style={styles.searchLoading} />
-              ) : searchResults && searchResults.length > 0 ? (
-                searchResults.slice(0, 8).map((stock) => (
-                  <React.Fragment key={stock.symbol}>
-                    {renderSearchResult({ item: stock })}
-                  </React.Fragment>
-                ))
-              ) : (
-                <Text style={styles.noResults}>No stocks matching "{searchQuery}"</Text>
+        {/* Stock search — hidden when a stock is selected */}
+        {!selectedStock && (
+          <View style={styles.section}>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={18} color={Colors.textMuted} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search stocks (e.g., AAPL)"
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+                </TouchableOpacity>
               )}
             </View>
-          )}
-        </View>
+
+            {/* Search results */}
+            {searchQuery.length > 0 && (
+              <View style={styles.searchResults}>
+                {isSearching ? (
+                  <ActivityIndicator color={Colors.primary} style={styles.searchLoading} />
+                ) : searchResults && searchResults.length > 0 ? (
+                  searchResults.slice(0, 8).map((stock) => (
+                    <React.Fragment key={stock.symbol}>
+                      {renderSearchResult({ item: stock })}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <Text style={styles.noResults}>No stocks matching "{searchQuery}"</Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Trade form */}
         {selectedStock && (
@@ -509,7 +511,7 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
     fontSize: FontSize.lg,
@@ -588,21 +590,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: Colors.card,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.primary,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   selectedSymbol: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
     color: Colors.primaryLight,
   },
   selectedName: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
-    marginTop: 2,
     fontFamily: FontFamily.regular,
   },
   selectedRight: {
@@ -611,7 +613,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   selectedPrice: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
     color: Colors.text,
   },
@@ -619,12 +621,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: Colors.card,
     borderRadius: Radius.md,
-    padding: 4,
-    marginBottom: Spacing.md,
+    padding: 3,
+    marginBottom: Spacing.sm,
   },
   tradeToggleButton: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     alignItems: "center",
     borderRadius: Radius.sm,
   },
@@ -635,7 +637,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.red,
   },
   tradeToggleText: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontFamily: FontFamily.bold,
     color: Colors.textMuted,
   },
@@ -646,16 +648,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
     paddingHorizontal: Spacing.xs,
   },
   buyingPowerLabel: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontFamily: FontFamily.semiBold,
     color: Colors.textMuted,
   },
   buyingPowerValue: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontFamily: FontFamily.bold,
     color: Colors.green,
   },
@@ -670,42 +672,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radius.md,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
     fontSize: FontSize.md,
     color: Colors.text,
     fontFamily: FontFamily.regular,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   estimateRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: Colors.card,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.md,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   estimateLabel: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     color: Colors.textSecondary,
     fontFamily: FontFamily.regular,
   },
   estimateValue: {
-    fontSize: FontSize.xl,
+    fontSize: FontSize.lg,
     fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   previewButton: {
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
-    padding: Spacing.lg,
+    paddingVertical: Spacing.md,
     alignItems: "center",
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   previewButtonText: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
     color: Colors.text,
   },
