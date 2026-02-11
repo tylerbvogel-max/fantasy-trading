@@ -51,6 +51,8 @@ async def get_profile(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    knowledge_score = await _compute_knowledge_score(db, user.id)
+
     # Load active seasons
     result = await db.execute(
         select(PlayerSeason)
@@ -58,6 +60,26 @@ async def get_profile(
         .where(PlayerSeason.user_id == user.id, PlayerSeason.is_active == True)
     )
     player_seasons = list(result.scalars().all())
+    joined_season_ids = {ps.season_id for ps in player_seasons}
+
+    # Auto-enroll in active classroom seasons
+    cr = await db.execute(
+        select(Season).where(Season.game_mode == "classroom", Season.is_active == True)
+    )
+    new_classroom_seasons = [s for s in cr.scalars().all() if s.id not in joined_season_ids]
+
+    for cs in new_classroom_seasons:
+        starting_cash = float(cs.starting_cash)
+        max_bonus = starting_cash * 0.25
+        bonus = min(knowledge_score * 25, max_bonus)
+        db.add(PlayerSeason(
+            user_id=user.id,
+            season_id=cs.id,
+            cash_balance=starting_cash + bonus,
+        ))
+
+    if new_classroom_seasons:
+        await db.commit()
 
     active_seasons = [
         SeasonSummary(
@@ -73,7 +95,17 @@ async def get_profile(
         for ps in player_seasons
     ]
 
-    knowledge_score = await _compute_knowledge_score(db, user.id)
+    for cs in new_classroom_seasons:
+        active_seasons.append(SeasonSummary(
+            id=cs.id,
+            name=cs.name,
+            season_type=cs.season_type,
+            mode=cs.game_mode,
+            is_active=cs.is_active,
+            starting_cash=float(cs.starting_cash),
+            start_date=cs.start_date,
+            end_date=cs.end_date,
+        ))
 
     return UserProfile(
         id=user.id,
