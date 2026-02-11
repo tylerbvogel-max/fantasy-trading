@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
@@ -13,6 +14,8 @@ from app.schemas import (
     TopicSummary, FactDetail, QuizAnswerRequest, QuizAnswerResponse,
     UserKnowledgeScore,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/education", tags=["education"])
 
@@ -31,7 +34,11 @@ async def list_topic_facts(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_topic_facts(db, user.id, topic_id)
+    try:
+        return await get_topic_facts(db, user.id, topic_id)
+    except Exception as e:
+        logger.exception(f"Error loading facts for topic {topic_id}")
+        raise
 
 
 @router.post("/quiz/answer", response_model=QuizAnswerResponse)
