@@ -20,6 +20,15 @@ type Props = NativeStackScreenProps<LearnStackParamList, "Lesson">;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
+// Ski slope difficulty scale
+const DIFFICULTY_CONFIG: Record<number, { label: string; icon: string; color: string }> = {
+  1: { label: "Green Circle", icon: "\u25CF", color: "#4CAF50" },
+  2: { label: "Blue Square", icon: "\u25A0", color: "#2196F3" },
+  3: { label: "Black Diamond", icon: "\u25C6", color: "#222222" },
+  4: { label: "Dbl Black Diamond", icon: "\u25C6\u25C6", color: "#222222" },
+  5: { label: "Tpl Black Diamond", icon: "\u25C6\u25C6\u25C6", color: "#222222" },
+};
+
 type SlideItem =
   | { type: "fact"; data: FactDetail }
   | { type: "quiz"; data: FactDetail };
@@ -137,6 +146,13 @@ function QuizCard({
         <View style={styles.quizHeader}>
           <Ionicons name="help-circle" size={20} color={Colors.yellow} />
           <Text style={styles.quizLabel}>Quiz</Text>
+          {question.difficulty > 0 && (
+            <View style={[styles.difficultyBadge, { backgroundColor: DIFFICULTY_CONFIG[question.difficulty]?.color + "20" }]}>
+              <Text style={[styles.difficultyIcon, { color: DIFFICULTY_CONFIG[question.difficulty]?.color }]}>
+                {DIFFICULTY_CONFIG[question.difficulty]?.icon}
+              </Text>
+            </View>
+          )}
           {fact.is_mastered && (
             <View style={styles.masteredBadge}>
               <Ionicons name="checkmark-circle" size={16} color={Colors.green} />
@@ -466,6 +482,15 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     color: Colors.yellow,
     flex: 1,
+  },
+  difficultyBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  difficultyIcon: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.bold,
   },
   quizQuestion: {
     fontSize: FontSize.lg,

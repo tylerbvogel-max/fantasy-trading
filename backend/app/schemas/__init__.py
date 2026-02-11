@@ -265,6 +265,7 @@ class QuizQuestionResponse(BaseModel):
     option_b: str
     option_c: str
     option_d: str
+    difficulty: int = 1
 
 
 class QuizAnswerRequest(BaseModel):
@@ -318,6 +319,7 @@ class FactCreate(BaseModel):
     option_c: str = Field(..., max_length=300)
     option_d: str = Field(..., max_length=300)
     correct_option: str = Field(..., pattern="^[A-D]$")
+    difficulty: int = Field(1, ge=1, le=5)
 
 
 class FactUpdate(BaseModel):

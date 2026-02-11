@@ -272,6 +272,7 @@ async def create_education_fact(
         option_a=req.option_a, option_b=req.option_b,
         option_c=req.option_c, option_d=req.option_d,
         correct_option=req.correct_option,
+        difficulty=req.difficulty,
     )
     db.add(question)
 
@@ -347,10 +348,11 @@ async def seed_education_data(
 
     await db.flush()
 
-    for fid, topic_id, title, explanation, order, q_text, a, b, c, d, correct in FACTS:
+    for fid, topic_id, title, explanation, order, q_text, a, b, c, d, correct, difficulty in FACTS:
         db.add(EducationFact(id=fid, topic_id=topic_id, title=title, explanation=explanation, display_order=order))
         db.add(QuizQuestion(id=f"q-{fid}", fact_id=fid, question_text=q_text,
-                            option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct))
+                            option_a=a, option_b=b, option_c=c, option_d=d,
+                            correct_option=correct, difficulty=difficulty))
 
     await db.commit()
     return {"message": f"Seeded {len(TOPICS)} topics and {len(FACTS)} facts."}

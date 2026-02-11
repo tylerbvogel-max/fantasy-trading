@@ -48,6 +48,7 @@ class QuizQuestion(Base):
     option_c: Mapped[str] = mapped_column(String(300), nullable=False)
     option_d: Mapped[str] = mapped_column(String(300), nullable=False)
     correct_option: Mapped[str] = mapped_column(String(1), nullable=False)  # A/B/C/D
+    difficulty: Mapped[int] = mapped_column(Integer, default=1)  # 1-5 ski slope scale
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

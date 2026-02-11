@@ -337,6 +337,7 @@ export interface QuizQuestionResponse {
   option_b: string;
   option_c: string;
   option_d: string;
+  difficulty: number;
 }
 
 export interface FactDetail {

@@ -120,6 +120,7 @@ async def get_topic_facts(
                 option_b=question.option_b,
                 option_c=question.option_c,
                 option_d=question.option_d,
+                difficulty=question.difficulty,
             )
 
         details.append(FactDetail(
