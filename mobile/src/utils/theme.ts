@@ -36,6 +36,7 @@ export const Spacing = {
   xl: 20,
   xxl: 24,
   xxxl: 32,
+  statusBar: 56,
 };
 
 export const FontSize = {

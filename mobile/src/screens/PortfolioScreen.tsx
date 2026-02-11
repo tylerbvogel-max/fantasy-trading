@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xxl,
+    paddingTop: Spacing.statusBar,
     paddingBottom: Spacing.md,
   },
   title: {
