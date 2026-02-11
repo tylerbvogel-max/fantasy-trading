@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   StyleSheet,
   ActivityIndicator,
   Dimensions,
@@ -141,10 +142,14 @@ function QuizCard({
   };
 
   return (
-    <View style={styles.slideContainer}>
+    <ScrollView
+      style={styles.slideContainer}
+      contentContainerStyle={styles.slideScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.quizCard}>
         <View style={styles.quizHeader}>
-          <Ionicons name="help-circle" size={20} color={Colors.yellow} />
+          <Ionicons name="help-circle" size={18} color={Colors.yellow} />
           <Text style={styles.quizLabel}>Quiz</Text>
           {question.difficulty > 0 && (
             <View style={[styles.difficultyBadge, { backgroundColor: DIFFICULTY_CONFIG[question.difficulty]?.color + "20" }]}>
@@ -191,7 +196,7 @@ function QuizCard({
           <ActivityIndicator color={Colors.primary} style={{ marginTop: Spacing.md }} />
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -464,7 +469,10 @@ const styles = StyleSheet.create({
   slideContainer: {
     width: SCREEN_WIDTH,
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.md,
+  },
+  slideScrollContent: {
+    paddingBottom: Spacing.md,
   },
   factCard: {
     backgroundColor: Colors.card,
@@ -506,8 +514,7 @@ const styles = StyleSheet.create({
   quizCard: {
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
-    padding: Spacing.xl,
-    flex: 1,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.yellow + "40",
   },
@@ -515,7 +522,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   quizLabel: {
     fontSize: FontSize.sm,
@@ -533,11 +540,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
   },
   quizQuestion: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
     color: Colors.text,
-    marginBottom: Spacing.lg,
-    lineHeight: 26,
+    marginBottom: Spacing.md,
+    lineHeight: 22,
   },
   lockedBanner: {
     flexDirection: "row",
@@ -554,12 +561,13 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
   },
   optionsContainer: {
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   optionButton: {
     flexDirection: "row",
     alignItems: "flex-start",
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.md,
     borderWidth: 1,
     gap: Spacing.sm,
@@ -591,25 +599,25 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   optionKey: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontFamily: FontFamily.bold,
     color: Colors.textSecondary,
-    width: 20,
+    width: 18,
     marginTop: 1,
   },
   optionText: {
     flex: 1,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontFamily: FontFamily.regular,
     color: Colors.text,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   optionTextLocked: {
     flex: 1,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontFamily: FontFamily.regular,
     color: Colors.textMuted,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   navRow: {
     flexDirection: "row",
