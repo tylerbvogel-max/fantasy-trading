@@ -50,6 +50,7 @@ class SeasonCreate(BaseModel):
     mode: str = Field(default="league", max_length=20)
     allowed_stocks: list[str] | None = None
     start_date: datetime
+    end_date: datetime | None = None
     starting_cash: float = 100000.00
     description: str | None = None
 
@@ -64,6 +65,7 @@ class SeasonSummary(BaseModel):
     player_count: int = 0
     start_date: datetime
     end_date: datetime | None = None
+    max_trades_per_player: int | None = None
 
     class Config:
         from_attributes = True
@@ -71,6 +73,14 @@ class SeasonSummary(BaseModel):
 
 class SeasonDetail(SeasonSummary):
     allowed_stocks: list[str] | None = None
+    description: str | None = None
+
+
+class PlayerSeasonCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=50)
+    starting_cash: float = Field(default=100000.0, ge=10000, le=1000000)
+    duration_days: int = Field(default=14, ge=1, le=31)
+    max_trades_per_player: int | None = Field(default=None, ge=1, le=1000)
     description: str | None = None
 
 

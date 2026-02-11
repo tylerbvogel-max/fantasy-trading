@@ -27,6 +27,12 @@ async def lifespan(app: FastAPI):
             await conn.execute(text(
                 "UPDATE education_topics SET name = 'Trading' WHERE id = 'trading-101' AND name = 'Trading 101'"
             ))
+            await conn.execute(text(
+                "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS max_trades_per_player INTEGER"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id)"
+            ))
         logging.info("Database migrations completed successfully")
     except Exception as e:
         logging.error(f"Startup migration error (non-fatal): {e}")

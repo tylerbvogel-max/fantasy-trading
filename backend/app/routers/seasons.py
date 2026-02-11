@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone, timedelta
 from app.database import get_db
 from app.services.auth_service import get_current_user
 from app.services.portfolio_service import get_leaderboard
@@ -10,7 +11,9 @@ from app.models.player_season import PlayerSeason
 from app.models.stock import StockActive
 from app.schemas import (
     SeasonSummary, SeasonDetail, JoinSeasonResponse, LeaderboardEntry, StockQuote,
+    PlayerSeasonCreate,
 )
+import secrets
 
 router = APIRouter(prefix="/seasons", tags=["seasons"])
 
@@ -26,8 +29,13 @@ async def list_seasons(
     result = await db.execute(stmt)
     seasons = list(result.scalars().all())
 
+    now = datetime.now(timezone.utc)
     summaries = []
     for s in seasons:
+        # Hide expired seasons (end_date in the past)
+        if s.end_date and s.end_date < now:
+            continue
+
         count_result = await db.execute(
             select(func.count()).select_from(PlayerSeason).where(
                 PlayerSeason.season_id == s.id, PlayerSeason.is_active == True
@@ -45,6 +53,7 @@ async def list_seasons(
             player_count=count,
             start_date=s.start_date,
             end_date=s.end_date,
+            max_trades_per_player=s.max_trades_per_player,
         ))
 
     return summaries
@@ -75,6 +84,57 @@ async def get_season(season_id: str, db: AsyncSession = Depends(get_db)):
         end_date=season.end_date,
         allowed_stocks=season.allowed_stocks,
         description=season.description,
+        max_trades_per_player=season.max_trades_per_player,
+    )
+
+
+@router.post("", response_model=SeasonDetail)
+async def create_season(
+    data: PlayerSeasonCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a player-made season (arena/league mode)."""
+    season_id = f"c-{secrets.token_hex(3).upper()}"
+    now = datetime.now(timezone.utc)
+
+    season = Season(
+        id=season_id,
+        name=data.name,
+        season_type="custom",
+        game_mode="league",
+        start_date=now,
+        end_date=now + timedelta(days=data.duration_days),
+        is_active=True,
+        starting_cash=data.starting_cash,
+        description=data.description,
+        max_trades_per_player=data.max_trades_per_player,
+        created_by=user.id,
+    )
+    db.add(season)
+
+    # Auto-join the creator
+    ps = PlayerSeason(
+        user_id=user.id,
+        season_id=season_id,
+        cash_balance=data.starting_cash,
+    )
+    db.add(ps)
+    await db.commit()
+
+    return SeasonDetail(
+        id=season.id,
+        name=season.name,
+        season_type=season.season_type,
+        mode=season.game_mode,
+        is_active=True,
+        starting_cash=float(season.starting_cash),
+        player_count=1,
+        start_date=season.start_date,
+        end_date=season.end_date,
+        allowed_stocks=None,
+        description=season.description,
+        max_trades_per_player=season.max_trades_per_player,
     )
 
 
@@ -89,6 +149,14 @@ async def join_season(
         raise HTTPException(status_code=404, detail="Season not found")
     if not season.is_active:
         raise HTTPException(status_code=400, detail="This season is no longer active")
+
+    now = datetime.now(timezone.utc)
+    if season.start_date > now:
+        opens = season.start_date.strftime("%b %-d, %Y")
+        raise HTTPException(
+            status_code=400,
+            detail=f"This season hasn't started yet. Opens {opens}.",
+        )
 
     # Check if already joined
     existing = await db.execute(
