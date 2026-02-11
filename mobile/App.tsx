@@ -18,6 +18,7 @@ import {
 import { Colors } from './src/utils/theme';
 import { loadStoredToken, registerSignOutHandler } from './src/api/client';
 import { ModeProvider, useMode } from './src/contexts/ModeContext';
+import { SeasonProvider } from './src/contexts/SeasonContext';
 import AuthScreen from './src/screens/AuthScreen';
 import ModeSelectScreen from './src/screens/ModeSelectScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
@@ -27,14 +28,20 @@ import StocksScreen from './src/screens/StocksScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import LearnScreen from './src/screens/LearnScreen';
 import LessonScreen from './src/screens/LessonScreen';
+import SeasonsScreen from './src/screens/SeasonsScreen';
+import SeasonDetailScreen from './src/screens/SeasonDetailScreen';
+import CreateSeasonScreen from './src/screens/CreateSeasonScreen';
 import type { LearnStackParamList } from './src/screens/LearnScreen';
+import type { SeasonsStackParamList } from './src/screens/SeasonsScreen';
 
 const queryClient = new QueryClient();
 const Tab = createBottomTabNavigator();
 const LearnStack = createNativeStackNavigator<LearnStackParamList>();
+const SeasonsStack = createNativeStackNavigator<SeasonsStackParamList>();
 
 const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
   Home: { focused: 'trophy', unfocused: 'trophy-outline' },
+  Seasons: { focused: 'calendar', unfocused: 'calendar-outline' },
   Trade: { focused: 'swap-horizontal', unfocused: 'swap-horizontal-outline' },
   Portfolio: { focused: 'briefcase', unfocused: 'briefcase-outline' },
   Learn: { focused: 'school', unfocused: 'school-outline' },
@@ -48,6 +55,16 @@ function LearnStackNavigator() {
       <LearnStack.Screen name="LearnHome" component={LearnScreen} />
       <LearnStack.Screen name="Lesson" component={LessonScreen} />
     </LearnStack.Navigator>
+  );
+}
+
+function SeasonsStackNavigator() {
+  return (
+    <SeasonsStack.Navigator screenOptions={{ headerShown: false }}>
+      <SeasonsStack.Screen name="SeasonsHome" component={SeasonsScreen} />
+      <SeasonsStack.Screen name="SeasonDetail" component={SeasonDetailScreen} />
+      <SeasonsStack.Screen name="CreateSeason" component={CreateSeasonScreen} />
+    </SeasonsStack.Navigator>
   );
 }
 
@@ -71,7 +88,11 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen name="Home" component={LeaderboardScreen} />
+      {mode === 'classroom' ? (
+        <Tab.Screen name="Home" component={LeaderboardScreen} />
+      ) : (
+        <Tab.Screen name="Seasons" component={SeasonsStackNavigator} />
+      )}
       <Tab.Screen name="Trade" component={TradeScreen} />
       <Tab.Screen name="Portfolio" component={PortfolioScreen} />
       {mode === 'classroom' && (
@@ -140,8 +161,10 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <ModeProvider>
-          <StatusBar style="light" />
-          <AppContent />
+          <SeasonProvider>
+            <StatusBar style="light" />
+            <AppContent />
+          </SeasonProvider>
         </ModeProvider>
       </SafeAreaProvider>
     </QueryClientProvider>

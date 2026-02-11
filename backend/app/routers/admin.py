@@ -81,6 +81,7 @@ async def create_season(
         game_mode=req.mode,
         allowed_stocks=req.allowed_stocks,
         start_date=req.start_date,
+        end_date=req.end_date,
         starting_cash=req.starting_cash,
         description=req.description,
     )

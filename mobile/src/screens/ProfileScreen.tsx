@@ -13,6 +13,7 @@ import { useProfile, useKnowledgeScore } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { signOut } from "../api/client";
 import { useMode, type AppMode } from "../contexts/ModeContext";
+import { useSeason } from "../contexts/SeasonContext";
 
 const MODE_META: Record<AppMode, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
   classroom: { icon: "school-outline", color: Colors.primary, label: "Classroom" },
@@ -28,8 +29,11 @@ function formatDate(dateStr: string): string {
 export default function ProfileScreen() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { mode, clearMode } = useMode();
+  const { selectedSeasonId } = useSeason();
   const { data: knowledgeScore } = useKnowledgeScore();
   const activeSeasons = profile?.active_seasons ?? [];
+  const modeSeasons = activeSeasons.filter((s) => s.mode === mode);
+  const selectedSeason = modeSeasons.find((s) => s.id === (selectedSeasonId || modeSeasons[0]?.id));
 
   const handleSwitchMode = () => {
     Alert.alert(
@@ -121,6 +125,16 @@ export default function ProfileScreen() {
         <Text style={styles.title}>Profile</Text>
       </View>
 
+      {/* Season banner */}
+      {mode !== "classroom" && selectedSeason && (
+        <View style={styles.seasonBanner}>
+          <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
+          <Text style={styles.seasonBannerText} numberOfLines={1}>
+            {selectedSeason.name}
+          </Text>
+        </View>
+      )}
+
       <ScrollView contentContainerStyle={styles.listContent}>
         <ListHeader />
 
@@ -147,6 +161,23 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xxl,
     fontFamily: FontFamily.bold,
     color: Colors.text,
+  },
+  seasonBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primary + "15",
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
+  },
+  seasonBannerText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.primaryLight,
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,

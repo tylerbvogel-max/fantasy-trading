@@ -11,12 +11,37 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useStocks, useStockSearch, useStockCount } from "../hooks/useApi";
+import { useNavigation } from "@react-navigation/native";
+import { useStocks, useStockSearch, useStockCount, useSeasonStocks, useSeasonDetail, useProfile } from "../hooks/useApi";
+import { useMode } from "../contexts/ModeContext";
+import { useSeason } from "../contexts/SeasonContext";
 import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import type { StockQuote } from "../api/client";
 
 export default function StocksScreen() {
+  const navigation = useNavigation<any>();
+  const { mode } = useMode();
+  const { selectedSeasonId } = useSeason();
+  const { data: profile } = useProfile();
   const [searchQuery, setSearchQuery] = useState("");
+
+  const activeSeasons = (profile?.active_seasons ?? []).filter((s) =>
+    mode === "classroom" ? s.mode === "classroom" : s.mode !== "classroom"
+  );
+  const selectedSeason = activeSeasons.find((s) => s.id === (selectedSeasonId || activeSeasons[0]?.id));
+
+  // Determine if season has a restricted stock list
+  const isNonClassroom = mode !== "classroom" && !!selectedSeasonId;
+  const { data: seasonDetail } = useSeasonDetail(isNonClassroom ? selectedSeasonId! : "");
+  const hasRestriction = isNonClassroom && !!seasonDetail?.allowed_stocks;
+
+  // Fetch season-specific stocks when restricted, otherwise all stocks
+  const {
+    data: seasonStocks,
+    isLoading: isLoadingSeason,
+    refetch: refetchSeason,
+    isRefetching: isRefetchingSeason,
+  } = useSeasonStocks(hasRestriction ? selectedSeasonId! : "");
 
   const {
     data: allStocks,
@@ -32,10 +57,33 @@ export default function StocksScreen() {
 
   const { data: countData } = useStockCount();
 
+  // When restricted, filter search results to only allowed symbols
+  const allowedSet = hasRestriction && seasonDetail?.allowed_stocks
+    ? new Set(seasonDetail.allowed_stocks)
+    : null;
+
   const isSearchMode = searchQuery.length > 0;
-  const displayedStocks = isSearchMode ? (searchResults ?? []) : (allStocks ?? []);
-  const isLoading = isSearchMode ? isSearching : isLoadingAll;
-  const totalCount = countData?.count ?? allStocks?.length ?? 0;
+  const baseStocks = hasRestriction ? (seasonStocks ?? []) : (allStocks ?? []);
+  const filteredSearch = allowedSet && searchResults
+    ? searchResults.filter((s) => allowedSet.has(s.symbol))
+    : searchResults;
+  const displayedStocks = isSearchMode ? (filteredSearch ?? []) : baseStocks;
+  const isLoading = hasRestriction
+    ? (isSearchMode ? isSearching : isLoadingSeason)
+    : (isSearchMode ? isSearching : isLoadingAll);
+  const refetch = hasRestriction ? refetchSeason : refetchAll;
+  const isRefetching = hasRestriction ? isRefetchingSeason : isRefetchingAll;
+  const totalCount = hasRestriction
+    ? baseStocks.length
+    : countData?.count ?? allStocks?.length ?? 0;
+
+  const handleStockPress = (stock: StockQuote) => {
+    navigation.navigate("Trade", {
+      stockSymbol: stock.symbol,
+      stockName: stock.name,
+      stockPrice: stock.price,
+    });
+  };
 
   const renderStock = ({ item }: { item: StockQuote }) => {
     const hasPrice = item.price != null;
@@ -46,17 +94,14 @@ export default function StocksScreen() {
       <View style={styles.stockRow}>
         <TouchableOpacity
           style={styles.stockLeft}
-          onPress={() => Linking.openURL(`https://finviz.com/quote.ashx?t=${item.symbol}`)}
+          onPress={() => handleStockPress(item)}
         >
           <Text style={styles.stockSymbol}>{item.symbol}</Text>
-          <View style={styles.stockNameRow}>
-            <Text style={styles.stockName} numberOfLines={1}>
-              {item.name}
-            </Text>
-            <Ionicons name="open-outline" size={12} color={Colors.textMuted} style={{ marginLeft: 4 }} />
-          </View>
+          <Text style={styles.stockName} numberOfLines={1}>
+            {item.name}
+          </Text>
         </TouchableOpacity>
-        <View style={styles.stockRight}>
+        <View style={styles.stockCenter}>
           {hasPrice ? (
             <>
               <Text style={styles.stockPrice}>
@@ -77,6 +122,12 @@ export default function StocksScreen() {
             <Text style={styles.noPrice}>—</Text>
           )}
         </View>
+        <TouchableOpacity
+          style={styles.finvizButton}
+          onPress={() => Linking.openURL(`https://finviz.com/quote.ashx?t=${item.symbol}`)}
+        >
+          <Ionicons name="open-outline" size={16} color={Colors.primary} />
+        </TouchableOpacity>
       </View>
     );
   };
@@ -92,6 +143,25 @@ export default function StocksScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Season banner */}
+      {mode !== "classroom" && selectedSeason && (
+        <View style={styles.seasonBanner}>
+          <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
+          <Text style={styles.seasonBannerText} numberOfLines={1}>
+            {selectedSeason.name}
+          </Text>
+        </View>
+      )}
+
+      {selectedSeason && new Date(selectedSeason.start_date) > new Date() && (
+        <View style={styles.inactiveBanner}>
+          <Ionicons name="alert-circle-outline" size={16} color={Colors.yellow} />
+          <Text style={styles.inactiveBannerText}>
+            Inactive season — starts {new Date(selectedSeason.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </Text>
+        </View>
+      )}
 
       {/* Search bar */}
       <View style={styles.searchWrapper}>
@@ -128,8 +198,8 @@ export default function StocksScreen() {
           refreshControl={
             !isSearchMode ? (
               <RefreshControl
-                refreshing={isRefetchingAll}
-                onRefresh={refetchAll}
+                refreshing={isRefetching}
+                onRefresh={refetch}
                 tintColor={Colors.primary}
               />
             ) : undefined
@@ -149,7 +219,9 @@ export default function StocksScreen() {
           ListFooterComponent={
             !isSearchMode && displayedStocks.length > 0 ? (
               <Text style={styles.footerText}>
-                Showing {displayedStocks.length} of {totalCount.toLocaleString()} — use search to find any stock
+                {hasRestriction
+                  ? `${displayedStocks.length} stocks in this season`
+                  : `Showing ${displayedStocks.length} of ${totalCount.toLocaleString()} — use search to find any stock`}
               </Text>
             ) : null
           }
@@ -187,6 +259,40 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
     fontFamily: FontFamily.semiBold,
+  },
+  seasonBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primary + "15",
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
+  },
+  seasonBannerText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.primaryLight,
+    flex: 1,
+  },
+  inactiveBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.yellow + "15",
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
+  },
+  inactiveBannerText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.yellow,
+    flex: 1,
   },
   searchWrapper: {
     paddingHorizontal: Spacing.xl,
@@ -241,21 +347,25 @@ const styles = StyleSheet.create({
   stockSymbol: {
     fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
-    color: Colors.text,
-  },
-  stockNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 2,
+    color: Colors.primaryLight,
   },
   stockName: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
     fontFamily: FontFamily.regular,
-    flexShrink: 1,
+    marginTop: 2,
   },
-  stockRight: {
+  stockCenter: {
     alignItems: "flex-end",
+    marginRight: Spacing.md,
+  },
+  finvizButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primary + "15",
+    justifyContent: "center",
+    alignItems: "center",
   },
   stockPrice: {
     fontSize: FontSize.md,

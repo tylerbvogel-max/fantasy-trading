@@ -1,5 +1,5 @@
 from uuid import UUID
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.player_season import PlayerSeason
 from app.models.holding import Holding
@@ -77,6 +77,21 @@ async def validate_trade(
             estimated_total=0, message=f"{req.stock_symbol} is not tradeable in this season."
         )
 
+    # Check trade count limit
+    if season.max_trades_per_player is not None:
+        count_result = await db.execute(
+            select(func.count()).select_from(Transaction).where(
+                Transaction.player_season_id == ps.id
+            )
+        )
+        trade_count = count_result.scalar() or 0
+        if trade_count >= season.max_trades_per_player:
+            return TradeValidation(
+                is_valid=False, stock_symbol=req.stock_symbol, current_price=0,
+                estimated_total=0,
+                message=f"Trade limit reached — this season allows {season.max_trades_per_player} trades per player."
+            )
+
     # Check stock exists in master catalog
     master = await db.get(StockMaster, req.stock_symbol.upper())
     if not master or not master.is_active:
@@ -150,7 +165,20 @@ async def execute_trade(
     if season.allowed_stocks and symbol not in season.allowed_stocks:
         raise TradeError(f"{symbol} is not tradeable in this season.")
 
-    # 3b. Validate stock exists in master catalog
+    # 3b. Check trade count limit
+    if season.max_trades_per_player is not None:
+        count_result = await db.execute(
+            select(func.count()).select_from(Transaction).where(
+                Transaction.player_season_id == ps.id
+            )
+        )
+        trade_count = count_result.scalar() or 0
+        if trade_count >= season.max_trades_per_player:
+            raise TradeError(
+                f"Trade limit reached — this season allows {season.max_trades_per_player} trades per player."
+            )
+
+    # 3c. Validate stock exists in master catalog
     master = await db.get(StockMaster, symbol)
     if not master or not master.is_active:
         raise TradeError(f"{symbol} is not a recognized stock.")

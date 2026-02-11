@@ -91,6 +91,7 @@ async def get_profile(
             starting_cash=float(ps.season.starting_cash),
             start_date=ps.season.start_date,
             end_date=ps.season.end_date,
+            max_trades_per_player=ps.season.max_trades_per_player,
         )
         for ps in player_seasons
     ]
@@ -105,6 +106,7 @@ async def get_profile(
             starting_cash=float(cs.starting_cash),
             start_date=cs.start_date,
             end_date=cs.end_date,
+            max_trades_per_player=cs.max_trades_per_player,
         ))
 
     return UserProfile(

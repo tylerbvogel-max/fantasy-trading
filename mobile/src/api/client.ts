@@ -138,6 +138,20 @@ export interface SeasonSummary {
   player_count: number;
   start_date: string;
   end_date: string | null;
+  max_trades_per_player: number | null;
+}
+
+export interface SeasonDetail extends SeasonSummary {
+  allowed_stocks: string[] | null;
+  description: string | null;
+}
+
+export interface CreateSeasonRequest {
+  name: string;
+  starting_cash: number;
+  duration_days: number;
+  max_trades_per_player?: number | null;
+  description?: string | null;
 }
 
 export interface LeaderboardEntry {
@@ -152,7 +166,13 @@ export const seasons = {
   list: (mode?: string) =>
     request<SeasonSummary[]>(`/seasons${mode ? `?mode=${mode}` : ""}`),
 
-  get: (id: string) => request<SeasonSummary>(`/seasons/${id}`),
+  get: (id: string) => request<SeasonDetail>(`/seasons/${id}`),
+
+  create: (data: CreateSeasonRequest) =>
+    request<SeasonDetail>("/seasons", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   join: (id: string) =>
     request<{ player_season_id: string; message: string }>(
@@ -164,6 +184,8 @@ export const seasons = {
     request<LeaderboardEntry[]>(`/seasons/${id}/leaderboard`),
 
   players: (id: string) => request<string[]>(`/seasons/${id}/players`),
+
+  stocks: (id: string) => request<StockQuote[]>(`/seasons/${id}/stocks`),
 };
 
 // ── Trading ──

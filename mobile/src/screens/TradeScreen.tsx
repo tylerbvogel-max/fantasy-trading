@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -21,18 +20,22 @@ import {
   useTrade,
   useTradeHistory,
 } from "../hooks/useApi";
+import { useRoute } from "@react-navigation/native";
 import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import { useMode } from "../contexts/ModeContext";
+import { useSeason } from "../contexts/SeasonContext";
 import { trading } from "../api/client";
-import type { StockQuote, SeasonSummary, TransactionHistory } from "../api/client";
+import type { StockQuote, TransactionHistory } from "../api/client";
 
 export default function TradeScreen() {
+  const route = useRoute<any>();
   const { data: profile } = useProfile();
   const { mode } = useMode();
-  const activeSeasons = (profile?.active_seasons ?? []).filter((s) => s.mode === mode);
+  const { selectedSeasonId } = useSeason();
+  const activeSeasons = (profile?.active_seasons ?? []).filter((s) =>
+    mode === "classroom" ? s.mode === "classroom" : s.mode !== "classroom"
+  );
 
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
-  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
   const seasonId = selectedSeasonId || activeSeasons[0]?.id || "";
   const selectedSeason = activeSeasons.find((s) => s.id === seasonId);
 
@@ -42,6 +45,48 @@ export default function TradeScreen() {
   const [sharesInput, setSharesInput] = useState("");
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [fetchingPrice, setFetchingPrice] = useState(false);
+
+  // Handle incoming stock from Stocks screen navigation
+  const lastHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    const params = route.params as
+      | { stockSymbol?: string; stockName?: string; stockPrice?: number }
+      | undefined;
+    if (params?.stockSymbol && params.stockSymbol !== lastHandledRef.current) {
+      lastHandledRef.current = params.stockSymbol;
+      const incomingStock: StockQuote = {
+        symbol: params.stockSymbol,
+        name: params.stockName ?? params.stockSymbol,
+        price: params.stockPrice ?? null,
+        change_pct: null,
+        high: null,
+        low: null,
+        volume: null,
+        market_cap: null,
+        pe_ratio: null,
+        beta: null,
+      };
+      setSelectedStock(incomingStock);
+      setSearchQuery("");
+      setSharesInput("");
+      setTradeType("BUY");
+      setLivePrice(null);
+      // Fetch live price
+      if (seasonId) {
+        setFetchingPrice(true);
+        trading
+          .validate({
+            season_id: seasonId,
+            stock_symbol: params.stockSymbol,
+            transaction_type: "BUY",
+            shares: 1,
+          })
+          .then((v) => setLivePrice(v.current_price))
+          .catch(() => {})
+          .finally(() => setFetchingPrice(false));
+      }
+    }
+  }, [route.params, seasonId]);
 
   const { data: searchResults, isLoading: isSearching } = useStockSearch(searchQuery);
   const { data: portfolioData } = usePortfolio(seasonId);
@@ -87,10 +132,13 @@ export default function TradeScreen() {
       },
       {
         onSuccess: (validation) => {
+          const tradeCount = tradeHistory?.length ?? 0;
+          const maxTrades = selectedSeason?.max_trades_per_player;
           const details = [
             `${tradeType} ${shares} shares of ${validation.stock_symbol}`,
             `Price: $${validation.current_price.toFixed(2)}`,
             `Total: $${validation.estimated_total.toFixed(2)}`,
+            ...(maxTrades != null ? [`Trades: ${tradeCount}/${maxTrades} used`] : []),
             "",
             validation.message,
           ].join("\n");
@@ -123,9 +171,12 @@ export default function TradeScreen() {
       },
       {
         onSuccess: (result) => {
+          const tradeCount = (tradeHistory?.length ?? 0) + 1;
+          const maxTrades = selectedSeason?.max_trades_per_player;
+          const tradeCountLine = maxTrades != null ? `\nTrades: ${tradeCount}/${maxTrades} used` : "";
           Alert.alert(
             "Trade Executed!",
-            `${result.transaction_type} ${result.shares} shares of ${result.stock_symbol} at $${result.price_per_share.toFixed(2)}\n\nTotal: $${result.total_amount.toFixed(2)}\nCash remaining: $${result.new_cash_balance.toFixed(2)}`
+            `${result.transaction_type} ${result.shares} shares of ${result.stock_symbol} at $${result.price_per_share.toFixed(2)}\n\nTotal: $${result.total_amount.toFixed(2)}\nCash remaining: $${result.new_cash_balance.toFixed(2)}${tradeCountLine}`
           );
           setSelectedStock(null);
           setSharesInput("");
@@ -137,11 +188,6 @@ export default function TradeScreen() {
         },
       }
     );
-  };
-
-  const handleSeasonSelect = (id: string) => {
-    setSelectedSeasonId(id);
-    setSeasonDropdownOpen(false);
   };
 
   const renderSearchResult = ({ item }: { item: StockQuote }) => (
@@ -205,17 +251,33 @@ export default function TradeScreen() {
         <Text style={styles.title}>Trade</Text>
       </View>
 
-      {/* Season dropdown — sticky */}
-      {activeSeasons.length > 1 && (
-        <TouchableOpacity
-          style={styles.seasonDropdown}
-          onPress={() => setSeasonDropdownOpen(true)}
-        >
-          <Text style={styles.seasonDropdownText} numberOfLines={2}>
-            {selectedSeason?.name ?? "Select Season"}
+      {/* Season banner */}
+      {selectedSeason && (
+        <View style={styles.seasonBanner}>
+          <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
+          <Text style={styles.seasonBannerText} numberOfLines={1}>
+            {selectedSeason.name}
           </Text>
-          <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
-        </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Trade count badge */}
+      {selectedSeason?.max_trades_per_player != null && (
+        <View style={styles.tradeCountBanner}>
+          <Ionicons name="swap-horizontal-outline" size={16} color={Colors.orange} />
+          <Text style={styles.tradeCountText}>
+            {tradeHistory?.length ?? 0} / {selectedSeason.max_trades_per_player} trades used
+          </Text>
+        </View>
+      )}
+
+      {selectedSeason && new Date(selectedSeason.start_date) > new Date() && (
+        <View style={styles.inactiveBanner}>
+          <Ionicons name="alert-circle-outline" size={16} color={Colors.yellow} />
+          <Text style={styles.inactiveBannerText}>
+            Inactive season — trading opens {new Date(selectedSeason.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </Text>
+        </View>
       )}
 
       <ScrollView
@@ -382,46 +444,6 @@ export default function TradeScreen() {
         )}
       </ScrollView>
 
-      {/* Season dropdown modal */}
-      <Modal
-        visible={seasonDropdownOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSeasonDropdownOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setSeasonDropdownOpen(false)}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Season</Text>
-            {activeSeasons.map((s) => (
-              <TouchableOpacity
-                key={s.id}
-                style={[
-                  styles.modalOption,
-                  s.id === seasonId && styles.modalOptionActive,
-                ]}
-                onPress={() => handleSeasonSelect(s.id)}
-              >
-                <Text
-                  style={[
-                    styles.modalOptionText,
-                    s.id === seasonId && styles.modalOptionTextActive,
-                  ]}
-                  numberOfLines={2}
-                >
-                  {s.name}
-                </Text>
-                {s.id === seasonId && (
-                  <Ionicons name="checkmark" size={20} color={Colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -447,69 +469,56 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     color: Colors.text,
   },
-  seasonDropdown: {
+  seasonBanner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Colors.card,
+    gap: Spacing.sm,
     marginHorizontal: Spacing.xl,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primary + "15",
     borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
     marginBottom: Spacing.md,
   },
-  seasonDropdownText: {
-    fontSize: FontSize.md,
+  seasonBannerText: {
+    fontSize: FontSize.sm,
     fontFamily: FontFamily.semiBold,
-    color: Colors.text,
+    color: Colors.primaryLight,
     flex: 1,
-    marginRight: Spacing.sm,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing.xl,
-  },
-  modalContent: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    width: "100%",
-    maxWidth: 340,
-  },
-  modalTitle: {
-    fontSize: FontSize.lg,
-    fontFamily: FontFamily.bold,
-    color: Colors.text,
-    marginBottom: Spacing.md,
-    textAlign: "center",
-  },
-  modalOption: {
+  tradeCountBanner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.orange + "15",
     borderRadius: Radius.md,
-    marginBottom: Spacing.xs,
-    minHeight: 52,
+    marginBottom: Spacing.md,
   },
-  modalOptionActive: {
-    backgroundColor: Colors.primary + "20",
-  },
-  modalOptionText: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-    fontFamily: FontFamily.medium,
+  tradeCountText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.orange,
     flex: 1,
   },
-  modalOptionTextActive: {
-    color: Colors.primary,
-    fontFamily: FontFamily.bold,
+  inactiveBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.yellow + "15",
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
+  },
+  inactiveBannerText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.yellow,
+    flex: 1,
   },
   section: {
     paddingHorizontal: Spacing.xl,

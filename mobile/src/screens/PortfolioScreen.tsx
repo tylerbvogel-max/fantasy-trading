@@ -7,14 +7,14 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
-  Modal,
   type LayoutChangeEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useProfile, usePortfolio, usePortfolioHistory } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { useMode } from "../contexts/ModeContext";
-import type { HoldingResponse, SeasonSummary } from "../api/client";
+import { useSeason } from "../contexts/SeasonContext";
+import type { HoldingResponse } from "../api/client";
 
 const CHART_HEIGHT = 160;
 const CHART_BAR_WIDTH = 4;
@@ -182,10 +182,11 @@ function Heatmap({
 export default function PortfolioScreen() {
   const { data: profile } = useProfile();
   const { mode } = useMode();
-  const activeSeasons = (profile?.active_seasons ?? []).filter((s) => s.mode === mode);
+  const { selectedSeasonId } = useSeason();
+  const activeSeasons = (profile?.active_seasons ?? []).filter((s) =>
+    mode === "classroom" ? s.mode === "classroom" : s.mode !== "classroom"
+  );
 
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
-  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
   const seasonId = selectedSeasonId || activeSeasons[0]?.id || "";
 
   const {
@@ -221,11 +222,6 @@ export default function PortfolioScreen() {
       </View>
     );
   }
-
-  const handleSeasonSelect = (id: string) => {
-    setSelectedSeasonId(id);
-    setSeasonDropdownOpen(false);
-  };
 
   const renderHolding = ({ item }: { item: HoldingResponse }) => {
     const isPositive = item.gain_loss_pct >= 0;
@@ -409,17 +405,23 @@ export default function PortfolioScreen() {
         <Text style={styles.title}>Portfolio</Text>
       </View>
 
-      {/* Season dropdown — sticky */}
-      {activeSeasons.length > 1 && (
-        <TouchableOpacity
-          style={styles.seasonDropdown}
-          onPress={() => setSeasonDropdownOpen(true)}
-        >
-          <Text style={styles.seasonDropdownText} numberOfLines={2}>
-            {selectedSeason?.name ?? "Select Season"}
+      {/* Season banner */}
+      {selectedSeason && (
+        <View style={styles.seasonBanner}>
+          <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
+          <Text style={styles.seasonBannerText} numberOfLines={1}>
+            {selectedSeason.name}
           </Text>
-          <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
-        </TouchableOpacity>
+        </View>
+      )}
+
+      {selectedSeason && new Date(selectedSeason.start_date) > new Date() && (
+        <View style={styles.inactiveBanner}>
+          <Ionicons name="alert-circle-outline" size={16} color={Colors.yellow} />
+          <Text style={styles.inactiveBannerText}>
+            Inactive season — starts {new Date(selectedSeason.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </Text>
+        </View>
       )}
 
       <FlatList
@@ -483,46 +485,6 @@ export default function PortfolioScreen() {
         }
       />
 
-      {/* Season dropdown modal */}
-      <Modal
-        visible={seasonDropdownOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSeasonDropdownOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setSeasonDropdownOpen(false)}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Season</Text>
-            {activeSeasons.map((s) => (
-              <TouchableOpacity
-                key={s.id}
-                style={[
-                  styles.modalOption,
-                  s.id === seasonId && styles.modalOptionActive,
-                ]}
-                onPress={() => handleSeasonSelect(s.id)}
-              >
-                <Text
-                  style={[
-                    styles.modalOptionText,
-                    s.id === seasonId && styles.modalOptionTextActive,
-                  ]}
-                  numberOfLines={2}
-                >
-                  {s.name}
-                </Text>
-                {s.id === seasonId && (
-                  <Ionicons name="checkmark" size={20} color={Colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -542,25 +504,39 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     color: Colors.text,
   },
-  seasonDropdown: {
+  seasonBanner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Colors.card,
+    gap: Spacing.sm,
     marginHorizontal: Spacing.xl,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primary + "15",
     borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
     marginBottom: Spacing.md,
   },
-  seasonDropdownText: {
-    fontSize: FontSize.md,
+  seasonBannerText: {
+    fontSize: FontSize.sm,
     fontFamily: FontFamily.semiBold,
-    color: Colors.text,
+    color: Colors.primaryLight,
     flex: 1,
-    marginRight: Spacing.sm,
+  },
+  inactiveBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.yellow + "15",
+    borderRadius: Radius.md,
+    marginBottom: Spacing.md,
+  },
+  inactiveBannerText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.yellow,
+    flex: 1,
   },
   summaryCard: {
     backgroundColor: Colors.card,
@@ -798,50 +774,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
     width: 70,
     textAlign: "right",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing.xl,
-  },
-  modalContent: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    width: "100%",
-    maxWidth: 340,
-  },
-  modalTitle: {
-    fontSize: FontSize.lg,
-    fontFamily: FontFamily.bold,
-    color: Colors.text,
-    marginBottom: Spacing.md,
-    textAlign: "center",
-  },
-  modalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.md,
-    marginBottom: Spacing.xs,
-    minHeight: 52,
-  },
-  modalOptionActive: {
-    backgroundColor: Colors.primary + "20",
-  },
-  modalOptionText: {
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-    fontFamily: FontFamily.medium,
-    flex: 1,
-  },
-  modalOptionTextActive: {
-    color: Colors.primary,
-    fontFamily: FontFamily.bold,
   },
   heatmapCard: {
     backgroundColor: Colors.card,

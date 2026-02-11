@@ -9,6 +9,8 @@ import type {
   TradeValidation,
   StockQuote,
   SeasonSummary,
+  SeasonDetail,
+  CreateSeasonRequest,
   UserProfile,
   TopicSummary,
   FactDetail,
@@ -23,6 +25,22 @@ export function useSeasons(mode?: string) {
   return useQuery<SeasonSummary[]>({
     queryKey: ["seasons", mode ?? "all"],
     queryFn: () => seasons.list(mode),
+  });
+}
+
+export function useSeasonDetail(seasonId: string) {
+  return useQuery<SeasonDetail>({
+    queryKey: ["seasonDetail", seasonId],
+    queryFn: () => seasons.get(seasonId),
+    enabled: !!seasonId,
+  });
+}
+
+export function useSeasonStocks(seasonId: string) {
+  return useQuery<StockQuote[]>({
+    queryKey: ["seasonStocks", seasonId],
+    queryFn: () => seasons.stocks(seasonId),
+    enabled: !!seasonId,
   });
 }
 
@@ -44,6 +62,18 @@ export function useJoinSeason() {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       queryClient.invalidateQueries({ queryKey: ["seasons"] });
       queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+    },
+  });
+}
+
+export function useCreateSeason() {
+  const queryClient = useQueryClient();
+
+  return useMutation<SeasonDetail, Error, CreateSeasonRequest>({
+    mutationFn: (data: CreateSeasonRequest) => seasons.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["seasons"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
     },
   });
 }
