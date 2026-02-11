@@ -107,7 +107,7 @@ export default function ProfileScreen() {
           <View style={styles.knowledgeScoreContent}>
             <Text style={styles.knowledgeScoreLabel}>Knowledge Score</Text>
             <Text style={styles.knowledgeScoreValue}>
-              {knowledgeScore?.total_score ?? profile?.knowledge_score ?? 0}
+              ${((knowledgeScore?.total_score ?? profile?.knowledge_score ?? 0) * 25).toLocaleString()}
             </Text>
           </View>
         </View>

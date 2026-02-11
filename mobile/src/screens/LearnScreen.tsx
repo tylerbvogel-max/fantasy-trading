@@ -158,7 +158,7 @@ export default function LearnScreen() {
       <Ionicons name="school-outline" size={24} color={Colors.yellow} />
       <View style={styles.scoreContent}>
         <Text style={styles.scoreLabel}>Knowledge Score</Text>
-        <Text style={styles.scoreValue}>{scoreData?.total_score ?? 0}</Text>
+        <Text style={styles.scoreValue}>${((scoreData?.total_score ?? 0) * 25).toLocaleString()}</Text>
       </View>
       <View style={styles.scoreStats}>
         <Text style={styles.scoreStatText}>
