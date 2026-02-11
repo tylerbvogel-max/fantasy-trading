@@ -11,7 +11,7 @@ from sqlalchemy import select
 # Each topic: (id, name, description, icon, order)
 TOPICS = [
     ("stock-basics", "Stock Market Basics", "Learn what stocks are, how exchanges work, and key market concepts.", "trending-up-outline", 1),
-    ("trading-101", "Trading 101", "Understand order types, bid-ask spreads, and how trades execute.", "swap-horizontal-outline", 2),
+    ("trading-101", "Trading", "Understand order types, bid-ask spreads, and how trades execute.", "swap-horizontal-outline", 2),
     ("portfolio-mgmt", "Portfolio Management", "Diversification, asset allocation, and portfolio strategy.", "briefcase-outline", 3),
     ("risk-reward", "Risk & Reward", "Volatility, risk tolerance, and the relationship between risk and return.", "shield-outline", 4),
     ("financial-stmts", "Financial Statements", "Income statements, balance sheets, and cash flow basics.", "document-text-outline", 5),

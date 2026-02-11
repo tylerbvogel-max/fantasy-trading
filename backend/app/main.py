@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
         await conn.execute(text(
             "ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS difficulty INTEGER NOT NULL DEFAULT 1"
         ))
+        await conn.execute(text(
+            "UPDATE education_topics SET name = 'Trading' WHERE id = 'trading-101' AND name = 'Trading 101'"
+        ))
     # Startup
     start_scheduler()
     yield
