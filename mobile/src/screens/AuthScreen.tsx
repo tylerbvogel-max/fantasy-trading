@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { auth, persistToken } from "../api/client";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
@@ -181,12 +181,13 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: FontSize.xxxl,
-    fontWeight: "800",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.md,
   },
   tagline: {
     fontSize: FontSize.md,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
   },
@@ -208,7 +209,7 @@ const styles = StyleSheet.create({
   },
   modeText: {
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.textMuted,
   },
   modeTextActive: {
@@ -219,7 +220,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.textSecondary,
     marginTop: Spacing.sm,
   },
@@ -230,6 +231,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     padding: Spacing.lg,
     fontSize: FontSize.md,
+    fontFamily: FontFamily.regular,
     color: Colors.text,
   },
   button: {
@@ -244,7 +246,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
 });

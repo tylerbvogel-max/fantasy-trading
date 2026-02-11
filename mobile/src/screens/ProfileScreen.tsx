@@ -16,7 +16,7 @@ import {
   useSeasonPlayers,
   useKnowledgeScore,
 } from "../hooks/useApi";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { signOut } from "../api/client";
 import type { SeasonSummary, BenchmarkAnalytics } from "../api/client";
 import { useMode, type AppMode } from "../contexts/ModeContext";
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   loadingContainer: {
@@ -419,11 +419,12 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: FontSize.xl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   userMeta: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     marginTop: 2,
   },
@@ -450,7 +451,7 @@ const styles = StyleSheet.create({
   seasonPillText: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
-    fontWeight: "500",
+    fontFamily: FontFamily.medium,
   },
   seasonPillTextActive: {
     color: Colors.text,
@@ -469,10 +470,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: FontSize.lg,
     color: Colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   emptySubtext: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     textAlign: "center",
   },
@@ -495,7 +497,7 @@ const styles = StyleSheet.create({
   },
   analyticsToggleText: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   analyticsSection: {
@@ -509,6 +511,7 @@ const styles = StyleSheet.create({
   },
   analyticsLoadingText: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
   },
   insufficientBanner: {
@@ -522,6 +525,7 @@ const styles = StyleSheet.create({
   insufficientBannerText: {
     flex: 1,
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     lineHeight: 20,
   },
@@ -533,7 +537,7 @@ const styles = StyleSheet.create({
   },
   benchmarkTitle: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginBottom: Spacing.md,
   },
@@ -552,12 +556,12 @@ const styles = StyleSheet.create({
   metricLabel: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     marginBottom: Spacing.xs,
   },
   metricValue: {
     fontSize: FontSize.xl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   metricValueRow: {
@@ -572,17 +576,20 @@ const styles = StyleSheet.create({
   },
   interpretationText: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     lineHeight: 20,
     marginBottom: Spacing.xs,
   },
   dataPointsText: {
     fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     marginTop: Spacing.xs,
   },
   insufficientText: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
   },
   comparisonSection: {
@@ -590,7 +597,7 @@ const styles = StyleSheet.create({
   },
   comparisonTitle: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginBottom: Spacing.sm,
   },
@@ -616,7 +623,7 @@ const styles = StyleSheet.create({
   playerPillText: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
-    fontWeight: "500",
+    fontFamily: FontFamily.medium,
   },
   playerPillTextActive: {
     color: Colors.text,
@@ -635,7 +642,7 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.red,
   },
   modeCard: {
@@ -664,11 +671,11 @@ const styles = StyleSheet.create({
   },
   modeLabel: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
   },
   modeSwitchText: {
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.textSecondary,
   },
   knowledgeScoreCard: {
@@ -689,11 +696,11 @@ const styles = StyleSheet.create({
   knowledgeScoreLabel: {
     fontSize: FontSize.sm,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   knowledgeScoreValue: {
     fontSize: FontSize.xl,
-    fontWeight: "800",
+    fontFamily: FontFamily.bold,
     color: Colors.yellow,
   },
 });

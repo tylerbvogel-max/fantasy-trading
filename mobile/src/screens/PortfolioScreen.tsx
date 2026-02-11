@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useProfile, usePortfolio, usePortfolioHistory } from "../hooks/useApi";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import type { HoldingResponse, SeasonSummary } from "../api/client";
 
 const CHART_HEIGHT = 160;
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   seasonDropdown: {
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   },
   seasonDropdownText: {
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.text,
     flex: 1,
     marginRight: Spacing.sm,
@@ -580,17 +580,17 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontSize: FontSize.sm,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   summaryValue: {
     fontSize: FontSize.xxxl,
-    fontWeight: "800",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.xs,
   },
   summaryGain: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     marginTop: Spacing.xs,
   },
   summaryRow: {
@@ -611,17 +611,17 @@ const styles = StyleSheet.create({
   summaryColLabel: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   summaryColValue: {
     fontSize: FontSize.sm,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.xs,
   },
   sectionTitle: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     paddingHorizontal: Spacing.xl,
     marginBottom: Spacing.md,
@@ -644,16 +644,18 @@ const styles = StyleSheet.create({
   },
   holdingSymbol: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   holdingName: {
     fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     marginTop: 2,
   },
   holdingShares: {
     fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     marginTop: 4,
   },
@@ -662,12 +664,12 @@ const styles = StyleSheet.create({
   },
   holdingValue: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   holdingGain: {
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     marginTop: 2,
   },
   separator: {
@@ -682,7 +684,7 @@ const styles = StyleSheet.create({
   },
   chartTitle: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginBottom: Spacing.md,
   },
@@ -697,6 +699,7 @@ const styles = StyleSheet.create({
   },
   axisLabel: {
     fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
   },
   chartBars: {
@@ -722,6 +725,7 @@ const styles = StyleSheet.create({
   },
   chartPlaceholderText: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     textAlign: "center",
   },
@@ -745,11 +749,11 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   statValue: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.xs,
   },
@@ -765,11 +769,12 @@ const styles = StyleSheet.create({
   },
   dailyTitle: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   dailyCount: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
   },
   historyRow: {
@@ -784,19 +789,20 @@ const styles = StyleSheet.create({
   },
   historyDate: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     width: 70,
   },
   historyValue: {
     flex: 1,
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     textAlign: "center",
   },
   historyGain: {
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     width: 70,
     textAlign: "right",
   },
@@ -816,7 +822,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginBottom: Spacing.md,
     textAlign: "center",
@@ -836,12 +842,12 @@ const styles = StyleSheet.create({
   modalOptionText: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
-    fontWeight: "500",
+    fontFamily: FontFamily.medium,
     flex: 1,
   },
   modalOptionTextActive: {
     color: Colors.primary,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
   },
   heatmapCard: {
     backgroundColor: Colors.card,
@@ -859,7 +865,7 @@ const styles = StyleSheet.create({
   },
   heatmapTitle: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     flexShrink: 0,
   },
@@ -873,7 +879,7 @@ const styles = StyleSheet.create({
   },
   heatmapSeasonBadgeText: {
     fontSize: FontSize.xs,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.orange,
   },
   heatmapContainer: {
@@ -893,17 +899,19 @@ const styles = StyleSheet.create({
   },
   heatmapSymbol: {
     fontSize: FontSize.sm,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: "#FFFFFF",
     textAlign: "center",
   },
   heatmapPct: {
     fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
     color: "#FFFFFF",
     textAlign: "center",
   },
   heatmapEmptyText: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     textAlign: "center",
     paddingVertical: Spacing.lg,
@@ -916,6 +924,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: FontSize.md,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
   },
   emptyContainer: {
@@ -934,10 +943,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: FontSize.lg,
     color: Colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   emptySubtext: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     textAlign: "center",
   },

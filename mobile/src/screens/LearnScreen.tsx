@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTopics, useKnowledgeScore } from "../hooks/useApi";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import type { TopicSummary } from "../api/client";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   loadingContainer: {
@@ -203,11 +203,11 @@ const styles = StyleSheet.create({
   scoreLabel: {
     fontSize: FontSize.sm,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   scoreValue: {
     fontSize: FontSize.xxl,
-    fontWeight: "800",
+    fontFamily: FontFamily.bold,
     color: Colors.yellow,
   },
   scoreStats: {
@@ -216,6 +216,7 @@ const styles = StyleSheet.create({
   scoreStatText: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
     marginTop: 2,
   },
   topicCard: {
@@ -247,12 +248,13 @@ const styles = StyleSheet.create({
   },
   topicName: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   topicDescription: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
     marginTop: 2,
     lineHeight: 16,
   },
@@ -277,7 +279,7 @@ const styles = StyleSheet.create({
   topicProgressText: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     minWidth: 30,
     textAlign: "right",
   },
@@ -293,6 +295,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: FontSize.lg,
     color: Colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
 });

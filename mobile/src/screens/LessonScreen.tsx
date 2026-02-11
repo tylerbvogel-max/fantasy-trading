@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTopicFacts, useSubmitQuizAnswer } from "../hooks/useApi";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import type { FactDetail } from "../api/client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { LearnStackParamList } from "./LearnScreen";
@@ -376,13 +376,13 @@ const styles = StyleSheet.create({
   lessonTitle: {
     flex: 1,
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   slideCounter: {
     fontSize: FontSize.sm,
     color: Colors.textMuted,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   dotsContainer: {
     flexDirection: "row",
@@ -423,12 +423,13 @@ const styles = StyleSheet.create({
   },
   factTitle: {
     fontSize: FontSize.xl,
-    fontWeight: "800",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginBottom: Spacing.lg,
   },
   factExplanation: {
     fontSize: FontSize.md,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     lineHeight: 24,
   },
@@ -444,7 +445,7 @@ const styles = StyleSheet.create({
   masteredText: {
     fontSize: FontSize.xs,
     color: Colors.green,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
   },
   quizCard: {
     backgroundColor: Colors.card,
@@ -462,13 +463,13 @@ const styles = StyleSheet.create({
   },
   quizLabel: {
     fontSize: FontSize.sm,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.yellow,
     flex: 1,
   },
   quizQuestion: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginBottom: Spacing.lg,
     lineHeight: 26,
@@ -485,7 +486,7 @@ const styles = StyleSheet.create({
   lockedText: {
     fontSize: FontSize.sm,
     color: Colors.orange,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   optionsContainer: {
     gap: Spacing.sm,
@@ -526,7 +527,7 @@ const styles = StyleSheet.create({
   },
   optionKey: {
     fontSize: FontSize.sm,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.textSecondary,
     width: 20,
     marginTop: 1,
@@ -534,12 +535,14 @@ const styles = StyleSheet.create({
   optionText: {
     flex: 1,
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.text,
     lineHeight: 18,
   },
   optionTextLocked: {
     flex: 1,
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textMuted,
     lineHeight: 18,
   },

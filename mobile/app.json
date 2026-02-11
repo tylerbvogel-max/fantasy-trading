@@ -16,7 +16,8 @@
       "package": "com.fantasytrading.app"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ],
     "extra": {
       "apiUrl": "https://fantasy-trading-api.onrender.com",

@@ -39,6 +39,14 @@ export const Spacing = {
   statusBar: 56,
 };
 
+export const FontFamily = {
+  light: "SpaceGrotesk_300Light",
+  regular: "SpaceGrotesk_400Regular",
+  medium: "SpaceGrotesk_500Medium",
+  semiBold: "SpaceGrotesk_600SemiBold",
+  bold: "SpaceGrotesk_700Bold",
+};
+
 export const FontSize = {
   xs: 11,
   sm: 13,

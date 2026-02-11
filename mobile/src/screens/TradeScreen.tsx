@@ -20,7 +20,7 @@ import {
   useTrade,
   useTradeHistory,
 } from "../hooks/useApi";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import { trading } from "../api/client";
 import type { StockQuote, SeasonSummary, TransactionHistory } from "../api/client";
 
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   seasonSelector: {
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   seasonPillText: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
-    fontWeight: "500",
+    fontFamily: FontFamily.medium,
   },
   seasonPillTextActive: {
     color: Colors.text,
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginBottom: Spacing.md,
   },
@@ -451,6 +451,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     fontSize: FontSize.md,
     color: Colors.text,
+    fontFamily: FontFamily.regular,
   },
   searchResults: {
     backgroundColor: Colors.card,
@@ -468,6 +469,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: "center",
+    fontFamily: FontFamily.regular,
   },
   searchResultRow: {
     flexDirection: "row",
@@ -484,17 +486,18 @@ const styles = StyleSheet.create({
   },
   searchResultSymbol: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   searchResultName: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
     marginTop: 2,
+    fontFamily: FontFamily.regular,
   },
   searchResultPrice: {
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.text,
   },
   selectedStockBar: {
@@ -510,13 +513,14 @@ const styles = StyleSheet.create({
   },
   selectedSymbol: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.primaryLight,
   },
   selectedName: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
     marginTop: 2,
+    fontFamily: FontFamily.regular,
   },
   selectedRight: {
     flexDirection: "row",
@@ -525,7 +529,7 @@ const styles = StyleSheet.create({
   },
   selectedPrice: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   tradeToggle: {
@@ -549,7 +553,7 @@ const styles = StyleSheet.create({
   },
   tradeToggleText: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.textMuted,
   },
   tradeToggleTextActive: {
@@ -557,7 +561,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.textSecondary,
     marginBottom: Spacing.xs,
   },
@@ -569,6 +573,7 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     fontSize: FontSize.md,
     color: Colors.text,
+    fontFamily: FontFamily.regular,
     marginBottom: Spacing.md,
   },
   estimateRow: {
@@ -583,10 +588,11 @@ const styles = StyleSheet.create({
   estimateLabel: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
+    fontFamily: FontFamily.regular,
   },
   estimateValue: {
     fontSize: FontSize.xl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   previewButton: {
@@ -600,7 +606,7 @@ const styles = StyleSheet.create({
   },
   previewButtonText: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   historyRow: {
@@ -620,7 +626,7 @@ const styles = StyleSheet.create({
   },
   typeBadgeText: {
     fontSize: FontSize.xs,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   historyInfo: {
@@ -629,17 +635,18 @@ const styles = StyleSheet.create({
   },
   historySymbol: {
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.text,
   },
   historyDetail: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
     marginTop: 2,
+    fontFamily: FontFamily.regular,
   },
   historyTotal: {
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.text,
   },
   emptyContainer: {
@@ -652,11 +659,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: FontSize.lg,
     color: Colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   emptySubtext: {
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: "center",
+    fontFamily: FontFamily.regular,
   },
 });

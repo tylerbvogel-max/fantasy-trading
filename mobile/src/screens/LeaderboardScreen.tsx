@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLeaderboard, useSeasons, useProfile, useJoinSeason } from "../hooks/useApi";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import { useMode } from "../contexts/ModeContext";
 
 export default function LeaderboardScreen() {
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   seasonBadge: {
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   seasonBadgeText: {
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   seasonSelector: {
     maxHeight: 44,
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   seasonPillText: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
-    fontWeight: "500",
+    fontFamily: FontFamily.medium,
   },
   seasonPillTextActive: {
     color: Colors.text,
@@ -261,6 +261,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
+    fontFamily: FontFamily.regular,
   },
   listContent: {
     paddingHorizontal: Spacing.lg,
@@ -285,10 +286,11 @@ const styles = StyleSheet.create({
   },
   rankEmoji: {
     fontSize: 22,
+    fontFamily: FontFamily.regular,
   },
   rankText: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.textMuted,
   },
   playerInfo: {
@@ -297,7 +299,7 @@ const styles = StyleSheet.create({
   },
   alias: {
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     color: Colors.text,
   },
   aliasHighlight: {
@@ -307,18 +309,19 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textMuted,
     marginTop: 2,
+    fontFamily: FontFamily.regular,
   },
   valueContainer: {
     alignItems: "flex-end",
   },
   totalValue: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   percentGain: {
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     marginTop: 2,
   },
   separator: {
@@ -338,7 +341,7 @@ const styles = StyleSheet.create({
   },
   joinBannerText: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   emptyContainer: {
@@ -351,10 +354,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: FontSize.lg,
     color: Colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   emptySubtext: {
     fontSize: FontSize.sm,
     color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
   },
 });

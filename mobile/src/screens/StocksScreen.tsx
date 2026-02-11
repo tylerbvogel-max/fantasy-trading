@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useStocks, useStockSearch, useStockCount } from "../hooks/useApi";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import type { StockQuote } from "../api/client";
 
 export default function StocksScreen() {
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   countBadge: {
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   countBadgeText: {
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
   },
   searchWrapper: {
     paddingHorizontal: Spacing.xl,
@@ -209,6 +209,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     fontSize: FontSize.md,
     color: Colors.text,
+    fontFamily: FontFamily.regular,
   },
   loadingContainer: {
     flex: 1,
@@ -219,6 +220,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
+    fontFamily: FontFamily.regular,
   },
   listContent: {
     paddingHorizontal: Spacing.lg,
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
   },
   stockSymbol: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   stockNameRow: {
@@ -249,6 +251,7 @@ const styles = StyleSheet.create({
   stockName: {
     fontSize: FontSize.xs,
     color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
     flexShrink: 1,
   },
   stockRight: {
@@ -256,17 +259,18 @@ const styles = StyleSheet.create({
   },
   stockPrice: {
     fontSize: FontSize.md,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
   },
   stockChange: {
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
     marginTop: 2,
   },
   noPrice: {
     fontSize: FontSize.md,
     color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
   },
   separator: {
     height: Spacing.sm,
@@ -280,12 +284,14 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: FontSize.md,
     color: Colors.textSecondary,
+    fontFamily: FontFamily.regular,
     textAlign: "center",
   },
   footerText: {
     textAlign: "center",
     color: Colors.textMuted,
     fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
   },

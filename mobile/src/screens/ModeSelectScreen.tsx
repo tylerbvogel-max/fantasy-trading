@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
+import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { useMode, type AppMode } from "../contexts/ModeContext";
 
 const MODES: {
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   },
   header: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     textAlign: "center",
     marginBottom: Spacing.xxxl,
@@ -105,11 +105,12 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: FontSize.lg,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     marginBottom: Spacing.xs,
   },
   cardDesc: {
     fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     lineHeight: 18,
   },

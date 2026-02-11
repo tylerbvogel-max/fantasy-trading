@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, FontSize, Spacing } from "../utils/theme";
+import { Colors, FontSize, Spacing, FontFamily } from "../utils/theme";
 
 interface PlaceholderProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -70,12 +70,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FontSize.xxl,
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.lg,
   },
   subtitle: {
     fontSize: FontSize.md,
+    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
     textAlign: "center",
   },
