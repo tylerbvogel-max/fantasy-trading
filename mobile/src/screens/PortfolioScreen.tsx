@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
   },
   summaryValue: {
-    fontSize: FontSize.xxxl,
+    fontSize: FontSize.xxl,
     fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.xs,
