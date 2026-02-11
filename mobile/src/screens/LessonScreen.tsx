@@ -223,10 +223,12 @@ export default function LessonScreen({ route, navigation }: Props) {
               },
             }));
 
+            const dollarBonus = response.points_earned * 25;
+
             if (response.is_correct) {
               Alert.alert(
                 "Correct!",
-                `+${response.points_earned} points\n\n${response.explanation}`,
+                `+$${dollarBonus.toLocaleString()} learning earnings\n\n${response.explanation}`,
                 [{ text: "Nice!" }]
               );
             } else {

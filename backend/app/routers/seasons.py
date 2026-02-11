@@ -100,20 +100,34 @@ async def join_season(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="You have already joined this season")
 
+    starting_cash = float(season.starting_cash)
+    bonus = 0.0
+
+    # Classroom mode: knowledge score grants bonus starting cash ($25/pt, capped at 25%)
+    if season.game_mode == "classroom":
+        from app.services.education_service import _compute_knowledge_score
+        knowledge_score = await _compute_knowledge_score(db, user.id)
+        max_bonus = starting_cash * 0.25
+        bonus = min(knowledge_score * 25, max_bonus)
+
     ps = PlayerSeason(
         user_id=user.id,
         season_id=season_id,
-        cash_balance=float(season.starting_cash),
+        cash_balance=starting_cash + bonus,
     )
     db.add(ps)
     await db.commit()
     await db.refresh(ps)
 
+    message = f"Joined {season.name}! Starting cash: ${starting_cash + bonus:,.2f}"
+    if bonus > 0:
+        message += f" (includes ${bonus:,.2f} learning bonus!)"
+
     return JoinSeasonResponse(
         player_season_id=ps.id,
         season_id=season_id,
         cash_balance=float(ps.cash_balance),
-        message=f"Joined {season.name}! Starting cash: ${float(season.starting_cash):,.2f}",
+        message=message,
     )
 
 
