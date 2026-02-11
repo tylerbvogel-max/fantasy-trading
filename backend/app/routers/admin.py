@@ -328,31 +328,3 @@ async def delete_education_fact(
     fact.is_active = False
     await db.commit()
     return {"fact_id": fact.id, "deactivated": True}
-
-
-@router.post("/education/seed")
-async def seed_education_data(
-    user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Seed education topics, facts, and quiz questions."""
-    from app.seed_education import TOPICS, FACTS
-
-    # Check if already seeded
-    existing = await db.execute(select(EducationTopic).limit(1))
-    if existing.scalar_one_or_none():
-        return {"message": "Education data already seeded."}
-
-    for tid, name, desc, icon, order in TOPICS:
-        db.add(EducationTopic(id=tid, name=name, description=desc, icon=icon, display_order=order))
-
-    await db.flush()
-
-    for fid, topic_id, title, explanation, order, q_text, a, b, c, d, correct, difficulty in FACTS:
-        db.add(EducationFact(id=fid, topic_id=topic_id, title=title, explanation=explanation, display_order=order))
-        db.add(QuizQuestion(id=f"q-{fid}", fact_id=fid, question_text=q_text,
-                            option_a=a, option_b=b, option_c=c, option_d=d,
-                            correct_option=correct, difficulty=difficulty))
-
-    await db.commit()
-    return {"message": f"Seeded {len(TOPICS)} topics and {len(FACTS)} facts."}
