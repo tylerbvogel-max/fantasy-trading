@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import type { LearnStackParamList } from "./LearnScreen";
 type Props = NativeStackScreenProps<LearnStackParamList, "Lesson">;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const CHUNK_SIZE = 3;
 
 // Ski slope difficulty scale
 const DIFFICULTY_CONFIG: Record<number, { label: string; icon: string; color: string }> = {
@@ -38,19 +39,14 @@ type SlideItem =
 function buildSlides(facts: FactDetail[], topicName: string, topicDescription: string): SlideItem[] {
   const slides: SlideItem[] = [];
   slides.push({ type: "intro", title: topicName, description: topicDescription });
-  facts.forEach((fact, i) => {
+  for (const fact of facts) {
     slides.push({ type: "fact", data: fact });
-    // Add quiz after every 3rd fact, or after the last fact
-    if ((i + 1) % 3 === 0 || i === facts.length - 1) {
-      // Add quiz cards for the last batch of facts (up to 3)
-      const batchStart = Math.floor(i / 3) * 3;
-      for (let j = batchStart; j <= i; j++) {
-        if (facts[j].question) {
-          slides.push({ type: "quiz", data: facts[j] });
-        }
-      }
+  }
+  for (const fact of facts) {
+    if (fact.question) {
+      slides.push({ type: "quiz", data: fact });
     }
-  });
+  }
   return slides;
 }
 
@@ -122,10 +118,8 @@ function QuizCard({
     onAnswer(question.id, optionKey);
   };
 
-  // Update result from parent through re-renders
   const getOptionStyle = (key: string) => {
     if (fact.is_mastered) {
-      // Show correct answer in green for mastered questions
       const isMasteredCorrect = result?.correctOption === key;
       return isMasteredCorrect ? styles.optionCorrect : styles.optionMastered;
     }
@@ -218,17 +212,84 @@ function QuizCard({
   );
 }
 
+function CompletionScreen({
+  correctCount,
+  totalCount,
+  onContinue,
+}: {
+  correctCount: number;
+  totalCount: number;
+  onContinue: () => void;
+}) {
+  let icon: keyof typeof Ionicons.glyphMap;
+  let color: string;
+  let title: string;
+  let subtitle: string;
+
+  if (correctCount === totalCount) {
+    icon = "trophy";
+    color = Colors.yellow;
+    title = "Congratulations!";
+    subtitle = "Perfect score!";
+  } else if (correctCount > totalCount / 2) {
+    icon = "thumbs-up";
+    color = Colors.primary;
+    title = "Good job!";
+    subtitle = "Keep learning!";
+  } else {
+    icon = "refresh";
+    color = Colors.orange;
+    title = "Try again soon!";
+    subtitle = "Review the material and retry.";
+  }
+
+  return (
+    <View style={styles.completionOverlay}>
+      <View style={styles.completionCard}>
+        <Ionicons name={icon} size={64} color={color} />
+        <Text style={styles.completionTitle}>{title}</Text>
+        <Text style={styles.completionScore}>
+          {correctCount}/{totalCount} correct
+        </Text>
+        <Text style={styles.completionSubtitle}>{subtitle}</Text>
+        <TouchableOpacity style={styles.completionButton} onPress={onContinue} activeOpacity={0.7}>
+          <Text style={styles.completionButtonText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function LessonScreen({ route, navigation }: Props) {
-  const { topicId, topicName, topicDescription } = route.params;
-  const { data: facts, isLoading, isError, refetch } = useTopicFacts(topicId);
+  const { topicId, topicName, topicDescription, chunkIndex } = route.params;
+  const { data: allFacts, isLoading, isError, refetch } = useTopicFacts(topicId);
   const submitAnswer = useSubmitQuizAnswer();
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answerResults, setAnswerResults] = useState<
     Record<string, { isCorrect: boolean; correctOption: string; explanation: string; pointsEarned: number }>
   >({});
+  const [sessionAnswers, setSessionAnswers] = useState<Record<string, boolean>>({});
+  const [showCompletion, setShowCompletion] = useState(false);
+
+  // Slice facts to just this chunk
+  const facts = useMemo(
+    () => allFacts ? allFacts.slice(chunkIndex * CHUNK_SIZE, (chunkIndex + 1) * CHUNK_SIZE) : undefined,
+    [allFacts, chunkIndex]
+  );
 
   const slides = facts ? buildSlides(facts, topicName, topicDescription) : [];
+
+  // Check for chunk completion after each answer + refetch
+  useEffect(() => {
+    if (!facts || Object.keys(sessionAnswers).length === 0 || showCompletion) return;
+    const stillAnswerable = facts.filter(
+      (f) => f.question && !f.is_mastered && !f.is_locked && !sessionAnswers[f.question!.id]
+    );
+    if (stillAnswerable.length === 0) {
+      setTimeout(() => setShowCompletion(true), 800);
+    }
+  }, [facts, sessionAnswers, showCompletion]);
 
   const handleAnswer = useCallback(
     (questionId: string, option: string) => {
@@ -244,6 +305,11 @@ export default function LessonScreen({ route, navigation }: Props) {
                 explanation: response.explanation,
                 pointsEarned: response.points_earned,
               },
+            }));
+
+            setSessionAnswers((prev) => ({
+              ...prev,
+              [questionId]: response.is_correct,
             }));
 
             const dollarBonus = response.points_earned * 25;
@@ -262,7 +328,6 @@ export default function LessonScreen({ route, navigation }: Props) {
               );
             }
 
-            // Refetch to update mastered/locked state
             refetch();
           },
           onError: (error) => {
@@ -333,6 +398,9 @@ export default function LessonScreen({ route, navigation }: Props) {
       />
     );
   };
+
+  const correctCount = Object.values(sessionAnswers).filter(Boolean).length;
+  const totalAnswered = Object.keys(sessionAnswers).length;
 
   return (
     <View style={styles.container}>
@@ -413,6 +481,15 @@ export default function LessonScreen({ route, navigation }: Props) {
           />
         </TouchableOpacity>
       </View>
+
+      {/* Completion overlay */}
+      {showCompletion && totalAnswered > 0 && (
+        <CompletionScreen
+          correctCount={correctCount}
+          totalCount={totalAnswered}
+          onContinue={() => navigation.goBack()}
+        />
+      )}
     </View>
   );
 }
@@ -696,5 +773,50 @@ const styles = StyleSheet.create({
   },
   navButtonDisabled: {
     opacity: 0.3,
+  },
+  completionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+  },
+  completionCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.xxl,
+    alignItems: "center",
+    gap: Spacing.md,
+    width: "100%",
+    maxWidth: 320,
+  },
+  completionTitle: {
+    fontSize: FontSize.xxl,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
+    textAlign: "center",
+  },
+  completionScore: {
+    fontSize: FontSize.lg,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.textSecondary,
+  },
+  completionSubtitle: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.regular,
+    color: Colors.textMuted,
+    textAlign: "center",
+  },
+  completionButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
+    marginTop: Spacing.md,
+  },
+  completionButtonText: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
   },
 });

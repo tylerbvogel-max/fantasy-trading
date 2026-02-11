@@ -18,8 +18,16 @@ import { useNavigation } from "@react-navigation/native";
 
 export type LearnStackParamList = {
   LearnHome: undefined;
-  Lesson: { topicId: string; topicName: string; topicDescription: string };
+  Lesson: {
+    topicId: string;
+    topicName: string;
+    topicDescription: string;
+    chunkIndex: number;
+    totalChunks: number;
+  };
 };
+
+const CHUNK_SIZE = 3;
 
 const TOPIC_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   "trending-up-outline": "trending-up-outline",
@@ -42,14 +50,50 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const TILE_GAP = Spacing.sm;
 const TILE_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - TILE_GAP) / 2;
 
-function TopicTile({
-  topic,
+interface ChunkTile {
+  key: string;
+  topic: TopicSummary;
+  chunkIndex: number;
+  totalChunks: number;
+  label: string;
+}
+
+function buildChunkTiles(topics: TopicSummary[]): ChunkTile[] {
+  const tiles: ChunkTile[] = [];
+  for (const topic of topics) {
+    const totalChunks = Math.max(1, Math.ceil(topic.fact_count / CHUNK_SIZE));
+    for (let i = 0; i < totalChunks; i++) {
+      tiles.push({
+        key: `${topic.id}-${i}`,
+        topic,
+        chunkIndex: i,
+        totalChunks,
+        label: totalChunks > 1 ? `${topic.name} ${i + 1}` : topic.name,
+      });
+    }
+  }
+  return tiles;
+}
+
+function ChunkTileCard({
+  tile,
   onPress,
 }: {
-  topic: TopicSummary;
+  tile: ChunkTile;
   onPress: () => void;
 }) {
-  const isComplete = topic.completed_count >= topic.fact_count && topic.fact_count > 0;
+  const { topic, chunkIndex } = tile;
+  // Estimate chunk mastery from aggregate progress
+  const factsInChunk = Math.min(
+    CHUNK_SIZE,
+    topic.fact_count - chunkIndex * CHUNK_SIZE
+  );
+  const chunkStart = chunkIndex * CHUNK_SIZE;
+  // We can't know exact per-chunk mastery from aggregate, so estimate
+  const completedUpToChunkEnd = Math.min(topic.completed_count, chunkStart + factsInChunk);
+  const chunkCompleted = Math.max(0, completedUpToChunkEnd - chunkStart);
+  const isComplete = chunkCompleted >= factsInChunk && factsInChunk > 0;
+  const progressPct = factsInChunk > 0 ? (chunkCompleted / factsInChunk) * 100 : 0;
 
   return (
     <TouchableOpacity style={styles.topicTile} onPress={onPress} activeOpacity={0.7}>
@@ -65,18 +109,18 @@ function TopicTile({
           <Text style={styles.tileDifficultyIcon}>{"\u25CF"}</Text>
         </View>
       </View>
-      <Text style={styles.tileName} numberOfLines={2}>{topic.name}</Text>
+      <Text style={styles.tileName} numberOfLines={2}>{tile.label}</Text>
       <View style={styles.tileProgressRow}>
         <View style={styles.progressBarBg}>
           <View
             style={[
               styles.progressBarFill,
-              { width: `${Math.min(topic.progress_pct, 100)}%` },
+              { width: `${Math.min(progressPct, 100)}%` },
             ]}
           />
         </View>
         <Text style={styles.tileProgressText}>
-          {topic.completed_count}/{topic.fact_count}
+          {chunkCompleted}/{factsInChunk}
         </Text>
       </View>
     </TouchableOpacity>
@@ -101,11 +145,12 @@ export default function LearnScreen() {
     );
   }
 
+  const tiles = buildChunkTiles(topics ?? []);
+
   // Build pairs for 2-column grid
-  const topicList = topics ?? [];
-  const rows: TopicSummary[][] = [];
-  for (let i = 0; i < topicList.length; i += 2) {
-    rows.push(topicList.slice(i, i + 2));
+  const rows: ChunkTile[][] = [];
+  for (let i = 0; i < tiles.length; i += 2) {
+    rows.push(tiles.slice(i, i + 2));
   }
 
   const ListHeader = () => (
@@ -137,15 +182,17 @@ export default function LearnScreen() {
         keyExtractor={(_, i) => `row-${i}`}
         renderItem={({ item: row }) => (
           <View style={styles.tileRow}>
-            {row.map((topic) => (
-              <TopicTile
-                key={topic.id}
-                topic={topic}
+            {row.map((tile) => (
+              <ChunkTileCard
+                key={tile.key}
+                tile={tile}
                 onPress={() =>
                   navigation.navigate("Lesson", {
-                    topicId: topic.id,
-                    topicName: topic.name,
-                    topicDescription: topic.description,
+                    topicId: tile.topic.id,
+                    topicName: tile.label,
+                    topicDescription: tile.topic.description,
+                    chunkIndex: tile.chunkIndex,
+                    totalChunks: tile.totalChunks,
                   })
                 }
               />
