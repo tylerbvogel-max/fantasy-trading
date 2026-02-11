@@ -64,6 +64,7 @@ async def get_profile(
             id=ps.season.id,
             name=ps.season.name,
             season_type=ps.season.season_type,
+            mode=ps.season.game_mode,
             is_active=ps.season.is_active,
             starting_cash=float(ps.season.starting_cash),
             start_date=ps.season.start_date,
