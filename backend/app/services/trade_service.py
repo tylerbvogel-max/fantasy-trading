@@ -45,9 +45,13 @@ async def validate_trade(
     # Check market hours
     market_closed = _check_market_hours()
     if market_closed:
+        # Still fetch last known / closing price so the UI can display it
+        cached_price = await get_stock_price(db, req.stock_symbol) or 0
         return TradeValidation(
-            is_valid=False, stock_symbol=req.stock_symbol, current_price=0,
-            estimated_total=0, message=market_closed
+            is_valid=False, stock_symbol=req.stock_symbol,
+            current_price=cached_price,
+            estimated_total=cached_price * req.shares,
+            message=market_closed
         )
 
     # Find player_season
