@@ -14,18 +14,22 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create any new tables that don't exist yet
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Add columns that were added after initial table creation
-        await conn.execute(text(
-            "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS game_mode VARCHAR(20) NOT NULL DEFAULT 'league'"
-        ))
-        await conn.execute(text(
-            "ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS difficulty INTEGER NOT NULL DEFAULT 1"
-        ))
-        await conn.execute(text(
-            "UPDATE education_topics SET name = 'Trading' WHERE id = 'trading-101' AND name = 'Trading 101'"
-        ))
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            # Add columns that were added after initial table creation
+            await conn.execute(text(
+                "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS game_mode VARCHAR(20) NOT NULL DEFAULT 'league'"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS difficulty INTEGER NOT NULL DEFAULT 1"
+            ))
+            await conn.execute(text(
+                "UPDATE education_topics SET name = 'Trading' WHERE id = 'trading-101' AND name = 'Trading 101'"
+            ))
+        logging.info("Database migrations completed successfully")
+    except Exception as e:
+        logging.error(f"Startup migration error (non-fatal): {e}")
     # Startup
     start_scheduler()
     yield
