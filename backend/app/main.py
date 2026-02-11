@@ -63,7 +63,7 @@ app.include_router(education.router)
 async def root():
     return {
         "app": "Fantasy Stock Trading",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "docs": "/docs",
     }
 
