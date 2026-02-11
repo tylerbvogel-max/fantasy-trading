@@ -15,6 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import {
   useProfile,
+  usePortfolio,
   useStockSearch,
   useValidateTrade,
   useTrade,
@@ -41,9 +42,12 @@ export default function TradeScreen() {
   const [fetchingPrice, setFetchingPrice] = useState(false);
 
   const { data: searchResults, isLoading: isSearching } = useStockSearch(searchQuery);
+  const { data: portfolioData } = usePortfolio(seasonId);
   const validateTrade = useValidateTrade();
   const executeTrade = useTrade();
   const { data: tradeHistory } = useTradeHistory(seasonId);
+
+  const buyingPower = portfolioData?.cash_balance ?? null;
 
   const shares = parseFloat(sharesInput) || 0;
   const displayPrice = livePrice ?? selectedStock?.price ?? null;
@@ -314,6 +318,16 @@ export default function TradeScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Buying power */}
+            {buyingPower !== null && (
+              <View style={styles.buyingPowerRow}>
+                <Text style={styles.buyingPowerLabel}>Buying Power</Text>
+                <Text style={styles.buyingPowerValue}>
+                  ${buyingPower.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
+              </View>
+            )}
+
             {/* Shares input */}
             <Text style={styles.label}>Shares</Text>
             <TextInput
@@ -417,7 +431,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: Spacing.xxxl,
+    paddingBottom: 200,
   },
   header: {
     paddingHorizontal: Spacing.xl,
@@ -627,6 +641,23 @@ const styles = StyleSheet.create({
   },
   tradeToggleTextActive: {
     color: Colors.text,
+  },
+  buyingPowerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.xs,
+  },
+  buyingPowerLabel: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.textMuted,
+  },
+  buyingPowerValue: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.bold,
+    color: Colors.green,
   },
   label: {
     fontSize: FontSize.sm,
