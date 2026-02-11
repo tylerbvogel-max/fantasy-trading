@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useProfile, usePortfolio, usePortfolioHistory } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
+import { useMode } from "../contexts/ModeContext";
 import type { HoldingResponse, SeasonSummary } from "../api/client";
 
 const CHART_HEIGHT = 160;
@@ -180,7 +181,8 @@ function Heatmap({
 
 export default function PortfolioScreen() {
   const { data: profile } = useProfile();
-  const activeSeasons = profile?.active_seasons ?? [];
+  const { mode } = useMode();
+  const activeSeasons = (profile?.active_seasons ?? []).filter((s) => s.mode === mode);
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
   const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);

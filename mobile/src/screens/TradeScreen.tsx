@@ -22,12 +22,14 @@ import {
   useTradeHistory,
 } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
+import { useMode } from "../contexts/ModeContext";
 import { trading } from "../api/client";
 import type { StockQuote, SeasonSummary, TransactionHistory } from "../api/client";
 
 export default function TradeScreen() {
   const { data: profile } = useProfile();
-  const activeSeasons = profile?.active_seasons ?? [];
+  const { mode } = useMode();
+  const activeSeasons = (profile?.active_seasons ?? []).filter((s) => s.mode === mode);
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
   const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
