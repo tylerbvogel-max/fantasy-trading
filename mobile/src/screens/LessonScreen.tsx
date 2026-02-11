@@ -31,11 +31,13 @@ const DIFFICULTY_CONFIG: Record<number, { label: string; icon: string; color: st
 };
 
 type SlideItem =
+  | { type: "intro"; title: string; description: string }
   | { type: "fact"; data: FactDetail }
   | { type: "quiz"; data: FactDetail };
 
-function buildSlides(facts: FactDetail[]): SlideItem[] {
+function buildSlides(facts: FactDetail[], topicName: string, topicDescription: string): SlideItem[] {
   const slides: SlideItem[] = [];
+  slides.push({ type: "intro", title: topicName, description: topicDescription });
   facts.forEach((fact, i) => {
     slides.push({ type: "fact", data: fact });
     // Add quiz after every 3rd fact, or after the last fact
@@ -50,6 +52,22 @@ function buildSlides(facts: FactDetail[]): SlideItem[] {
     }
   });
   return slides;
+}
+
+function IntroCard({ title, description }: { title: string; description: string }) {
+  return (
+    <View style={styles.slideContainer}>
+      <View style={styles.introCard}>
+        <Ionicons name="book-outline" size={32} color={Colors.primary} />
+        <Text style={styles.introTitle}>{title}</Text>
+        <Text style={styles.introDescription}>{description}</Text>
+        <View style={styles.introHint}>
+          <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+          <Text style={styles.introHintText}>Swipe to begin</Text>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 function FactCard({ fact }: { fact: FactDetail }) {
@@ -201,7 +219,7 @@ function QuizCard({
 }
 
 export default function LessonScreen({ route, navigation }: Props) {
-  const { topicId, topicName } = route.params;
+  const { topicId, topicName, topicDescription } = route.params;
   const { data: facts, isLoading, isError, refetch } = useTopicFacts(topicId);
   const submitAnswer = useSubmitQuizAnswer();
   const flatListRef = useRef<FlatList>(null);
@@ -210,7 +228,7 @@ export default function LessonScreen({ route, navigation }: Props) {
     Record<string, { isCorrect: boolean; correctOption: string; explanation: string; pointsEarned: number }>
   >({});
 
-  const slides = facts ? buildSlides(facts) : [];
+  const slides = facts ? buildSlides(facts, topicName, topicDescription) : [];
 
   const handleAnswer = useCallback(
     (questionId: string, option: string) => {
@@ -301,6 +319,9 @@ export default function LessonScreen({ route, navigation }: Props) {
   }
 
   const renderSlide = ({ item }: { item: SlideItem }) => {
+    if (item.type === "intro") {
+      return <IntroCard title={item.title} description={item.description} />;
+    }
     if (item.type === "fact") {
       return <FactCard fact={item.data} />;
     }
@@ -336,6 +357,7 @@ export default function LessonScreen({ route, navigation }: Props) {
             style={[
               styles.dot,
               i === currentIndex && styles.dotActive,
+              slide.type === "intro" && styles.dotIntro,
               slide.type === "quiz" && styles.dotQuiz,
             ]}
           />
@@ -463,6 +485,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     width: 20,
   },
+  dotIntro: {
+    backgroundColor: Colors.primary + "60",
+  },
   dotQuiz: {
     backgroundColor: Colors.yellow + "60",
   },
@@ -473,6 +498,39 @@ const styles = StyleSheet.create({
   },
   slideScrollContent: {
     paddingBottom: Spacing.md,
+  },
+  introCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.xl,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.lg,
+  },
+  introTitle: {
+    fontSize: FontSize.xl,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
+    textAlign: "center",
+  },
+  introDescription: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.regular,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  introHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+  },
+  introHintText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
+    color: Colors.textMuted,
   },
   factCard: {
     backgroundColor: Colors.card,

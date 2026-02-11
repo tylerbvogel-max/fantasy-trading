@@ -7,6 +7,7 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTopics, useKnowledgeScore } from "../hooks/useApi";
@@ -17,7 +18,7 @@ import { useNavigation } from "@react-navigation/native";
 
 export type LearnStackParamList = {
   LearnHome: undefined;
-  Lesson: { topicId: string; topicName: string };
+  Lesson: { topicId: string; topicName: string; topicDescription: string };
 };
 
 const TOPIC_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -28,7 +29,7 @@ const TOPIC_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   "document-text-outline": "document-text-outline",
   "calculator-outline": "calculator-outline",
   "layers-outline": "layers-outline",
-  "brain-outline": "bulb-outline", // brain-outline may not exist in all Ionicon sets
+  "brain-outline": "bulb-outline",
   "stats-chart-outline": "stats-chart-outline",
   "book-outline": "book-outline",
 };
@@ -37,20 +38,11 @@ function getIcon(iconName: string): keyof typeof Ionicons.glyphMap {
   return TOPIC_ICONS[iconName] || "book-outline";
 }
 
-function ProgressBar({ progress }: { progress: number }) {
-  return (
-    <View style={styles.progressBarBg}>
-      <View
-        style={[
-          styles.progressBarFill,
-          { width: `${Math.min(progress, 100)}%` },
-        ]}
-      />
-    </View>
-  );
-}
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const TILE_GAP = Spacing.sm;
+const TILE_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - TILE_GAP) / 2;
 
-function TopicCard({
+function TopicTile({
   topic,
   onPress,
 }: {
@@ -60,29 +52,33 @@ function TopicCard({
   const isComplete = topic.completed_count >= topic.fact_count && topic.fact_count > 0;
 
   return (
-    <TouchableOpacity style={styles.topicCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.topicCardLeft}>
-        <View style={[styles.topicIconCircle, isComplete && styles.topicIconCircleComplete]}>
+    <TouchableOpacity style={styles.topicTile} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.tileTop}>
+        <View style={[styles.tileIconCircle, isComplete && styles.tileIconCircleComplete]}>
           <Ionicons
             name={isComplete ? "checkmark" : getIcon(topic.icon)}
-            size={22}
+            size={20}
             color={isComplete ? Colors.green : Colors.primary}
           />
         </View>
-        <View style={styles.topicCardContent}>
-          <Text style={styles.topicName}>{topic.name}</Text>
-          <Text style={styles.topicDescription} numberOfLines={2}>
-            {topic.description}
-          </Text>
-          <View style={styles.topicProgressRow}>
-            <ProgressBar progress={topic.progress_pct} />
-            <Text style={styles.topicProgressText}>
-              {topic.completed_count}/{topic.fact_count}
-            </Text>
-          </View>
+        <View style={styles.tileDifficultyBadge}>
+          <Text style={styles.tileDifficultyIcon}>{"\u25CF"}</Text>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+      <Text style={styles.tileName} numberOfLines={2}>{topic.name}</Text>
+      <View style={styles.tileProgressRow}>
+        <View style={styles.progressBarBg}>
+          <View
+            style={[
+              styles.progressBarFill,
+              { width: `${Math.min(topic.progress_pct, 100)}%` },
+            ]}
+          />
+        </View>
+        <Text style={styles.tileProgressText}>
+          {topic.completed_count}/{topic.fact_count}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -103,6 +99,13 @@ export default function LearnScreen() {
         </View>
       </View>
     );
+  }
+
+  // Build pairs for 2-column grid
+  const topicList = topics ?? [];
+  const rows: TopicSummary[][] = [];
+  for (let i = 0; i < topicList.length; i += 2) {
+    rows.push(topicList.slice(i, i + 2));
   }
 
   const ListHeader = () => (
@@ -130,22 +133,28 @@ export default function LearnScreen() {
       </View>
 
       <FlatList
-        data={topics ?? []}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TopicCard
-            topic={item}
-            onPress={() =>
-              navigation.navigate("Lesson", {
-                topicId: item.id,
-                topicName: item.name,
-              })
-            }
-          />
+        data={rows}
+        keyExtractor={(_, i) => `row-${i}`}
+        renderItem={({ item: row }) => (
+          <View style={styles.tileRow}>
+            {row.map((topic) => (
+              <TopicTile
+                key={topic.id}
+                topic={topic}
+                onPress={() =>
+                  navigation.navigate("Lesson", {
+                    topicId: topic.id,
+                    topicName: topic.name,
+                    topicDescription: topic.description,
+                  })
+                }
+              />
+            ))}
+            {row.length === 1 && <View style={styles.tilePlaceholder} />}
+          </View>
         )}
         ListHeaderComponent={ListHeader}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
@@ -219,72 +228,78 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     marginTop: 2,
   },
-  topicCard: {
+  tileRow: {
     flexDirection: "row",
-    alignItems: "center",
+    gap: TILE_GAP,
+    marginBottom: TILE_GAP,
+  },
+  topicTile: {
+    width: TILE_WIDTH,
     backgroundColor: Colors.card,
-    padding: Spacing.lg,
     borderRadius: Radius.lg,
+    padding: Spacing.md,
+    justifyContent: "space-between",
+    minHeight: 120,
   },
-  topicCardLeft: {
-    flex: 1,
+  tilePlaceholder: {
+    width: TILE_WIDTH,
+  },
+  tileTop: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: Spacing.md,
+    marginBottom: Spacing.sm,
   },
-  topicIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  tileIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.primary + "20",
     justifyContent: "center",
     alignItems: "center",
   },
-  topicIconCircleComplete: {
+  tileIconCircleComplete: {
     backgroundColor: Colors.green + "20",
   },
-  topicCardContent: {
-    flex: 1,
+  tileDifficultyBadge: {
+    backgroundColor: "#4CAF50" + "20",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
   },
-  topicName: {
-    fontSize: FontSize.md,
+  tileDifficultyIcon: {
+    fontSize: FontSize.xs,
+    color: "#4CAF50",
+  },
+  tileName: {
+    fontSize: FontSize.sm,
     fontFamily: FontFamily.bold,
     color: Colors.text,
+    marginBottom: Spacing.sm,
   },
-  topicDescription: {
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    fontFamily: FontFamily.regular,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  topicProgressRow: {
+  tileProgressRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
+    gap: Spacing.xs,
   },
   progressBarBg: {
     flex: 1,
-    height: 6,
+    height: 4,
     backgroundColor: Colors.surface,
-    borderRadius: 3,
+    borderRadius: 2,
     overflow: "hidden",
   },
   progressBarFill: {
     height: "100%",
     backgroundColor: Colors.primary,
-    borderRadius: 3,
+    borderRadius: 2,
   },
-  topicProgressText: {
-    fontSize: FontSize.xs,
+  tileProgressText: {
+    fontSize: 10,
     color: Colors.textMuted,
     fontFamily: FontFamily.semiBold,
-    minWidth: 30,
+    minWidth: 24,
     textAlign: "right",
-  },
-  separator: {
-    height: Spacing.sm,
   },
   emptyContainer: {
     justifyContent: "center",
