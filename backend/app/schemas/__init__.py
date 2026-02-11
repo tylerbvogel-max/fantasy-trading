@@ -35,6 +35,7 @@ class UserProfile(BaseModel):
     is_admin: bool
     created_at: datetime
     active_seasons: list["SeasonSummary"] = []
+    knowledge_score: int = 0
 
     class Config:
         from_attributes = True
@@ -233,3 +234,100 @@ class InviteCodeResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ── Education ──
+
+class TopicSummary(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str
+    fact_count: int = 0
+    completed_count: int = 0
+    progress_pct: float = 0.0
+
+
+class FactDetail(BaseModel):
+    id: str
+    title: str
+    explanation: str
+    question: "QuizQuestionResponse | None" = None
+    is_mastered: bool = False
+    is_locked: bool = False
+    retry_available_at: datetime | None = None
+
+
+class QuizQuestionResponse(BaseModel):
+    id: str
+    question_text: str
+    option_a: str
+    option_b: str
+    option_c: str
+    option_d: str
+
+
+class QuizAnswerRequest(BaseModel):
+    question_id: str
+    selected_option: str = Field(..., pattern="^[A-D]$")
+
+
+class QuizAnswerResponse(BaseModel):
+    is_correct: bool
+    correct_option: str
+    explanation: str
+    points_earned: int
+    retry_available_at: datetime | None = None
+    knowledge_score: int
+
+
+class UserKnowledgeScore(BaseModel):
+    total_score: int
+    questions_answered: int
+    questions_correct: int
+    topics_mastered: int
+
+
+# ── Education Admin ──
+
+class TopicCreate(BaseModel):
+    id: str = Field(..., max_length=50)
+    name: str = Field(..., max_length=100)
+    description: str = Field(..., max_length=500)
+    icon: str = Field(default="book-outline", max_length=50)
+    display_order: int = 0
+
+
+class TopicUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    icon: str | None = None
+    display_order: int | None = None
+    is_active: bool | None = None
+
+
+class FactCreate(BaseModel):
+    id: str = Field(..., max_length=50)
+    topic_id: str = Field(..., max_length=50)
+    title: str = Field(..., max_length=200)
+    explanation: str
+    display_order: int = 0
+    question_text: str
+    option_a: str = Field(..., max_length=300)
+    option_b: str = Field(..., max_length=300)
+    option_c: str = Field(..., max_length=300)
+    option_d: str = Field(..., max_length=300)
+    correct_option: str = Field(..., pattern="^[A-D]$")
+
+
+class FactUpdate(BaseModel):
+    title: str | None = None
+    explanation: str | None = None
+    display_order: int | None = None
+    is_active: bool | None = None
+    question_text: str | None = None
+    option_a: str | None = None
+    option_b: str | None = None
+    option_c: str | None = None
+    option_d: str | None = None
+    correct_option: str | None = Field(default=None, pattern="^[A-D]$")

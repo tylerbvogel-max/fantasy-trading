@@ -19,7 +19,17 @@
       "expo-router"
     ],
     "extra": {
-      "apiUrl": "https://fantasy-trading-api.onrender.com"
+      "apiUrl": "https://fantasy-trading-api.onrender.com",
+      "router": {},
+      "eas": {
+        "projectId": "e9a3e42d-e832-4b41-b771-389e8ec9b2de"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e9a3e42d-e832-4b41-b771-389e8ec9b2de"
     }
   }
 }

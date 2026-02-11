@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.auth_service import register_user, authenticate_user, get_current_user
+from app.services.education_service import _compute_knowledge_score
 from app.models.user import User
 from app.models.player_season import PlayerSeason
 from app.models.season import Season
@@ -71,10 +72,13 @@ async def get_profile(
         for ps in player_seasons
     ]
 
+    knowledge_score = await _compute_knowledge_score(db, user.id)
+
     return UserProfile(
         id=user.id,
         alias=user.alias,
         is_admin=user.is_admin,
         created_at=user.created_at,
         active_seasons=active_seasons,
+        knowledge_score=knowledge_score,
     )

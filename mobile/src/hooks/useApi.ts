@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { seasons, portfolio, trading, stocks, auth } from "../api/client";
+import { seasons, portfolio, trading, stocks, auth, education } from "../api/client";
 import type {
   LeaderboardEntry,
   PortfolioSummary,
@@ -10,6 +10,11 @@ import type {
   StockQuote,
   SeasonSummary,
   UserProfile,
+  TopicSummary,
+  FactDetail,
+  QuizAnswerRequest,
+  QuizAnswerResponse,
+  UserKnowledgeScore,
 } from "../api/client";
 
 // ── Seasons ──
@@ -139,5 +144,43 @@ export function useProfile() {
   return useQuery<UserProfile>({
     queryKey: ["profile"],
     queryFn: auth.me,
+  });
+}
+
+// ── Education ──
+
+export function useTopics() {
+  return useQuery<TopicSummary[]>({
+    queryKey: ["educationTopics"],
+    queryFn: education.topics,
+  });
+}
+
+export function useTopicFacts(topicId: string) {
+  return useQuery<FactDetail[]>({
+    queryKey: ["educationFacts", topicId],
+    queryFn: () => education.facts(topicId),
+    enabled: !!topicId,
+  });
+}
+
+export function useSubmitQuizAnswer() {
+  const queryClient = useQueryClient();
+
+  return useMutation<QuizAnswerResponse, Error, QuizAnswerRequest>({
+    mutationFn: education.submitAnswer,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["educationTopics"] });
+      queryClient.invalidateQueries({ queryKey: ["educationFacts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledgeScore"] });
+    },
+  });
+}
+
+export function useKnowledgeScore() {
+  return useQuery<UserKnowledgeScore>({
+    queryKey: ["knowledgeScore"],
+    queryFn: education.score,
   });
 }

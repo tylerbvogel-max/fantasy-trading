@@ -13,7 +13,9 @@ from app.models.season import Season
 from app.models.invite_code import InviteCode
 from app.schemas import (
     InviteCodeCreate, InviteCodeResponse, SeasonCreate, SeasonDetail,
+    TopicCreate, TopicUpdate, FactCreate, FactUpdate,
 )
+from app.models.education import EducationTopic, EducationFact, QuizQuestion
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -187,3 +189,141 @@ async def backfill_benchmarks(
     if errors:
         result["errors"] = errors
     return result
+
+
+# ── Education Admin ──
+
+@router.post("/education/topics")
+async def create_education_topic(
+    req: TopicCreate,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    existing = await db.get(EducationTopic, req.id)
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Topic {req.id} already exists")
+
+    topic = EducationTopic(
+        id=req.id, name=req.name, description=req.description,
+        icon=req.icon, display_order=req.display_order,
+    )
+    db.add(topic)
+    await db.commit()
+    return {"id": topic.id, "name": topic.name}
+
+
+@router.put("/education/topics/{topic_id}")
+async def update_education_topic(
+    topic_id: str,
+    req: TopicUpdate,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    topic = await db.get(EducationTopic, topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    for field, value in req.model_dump(exclude_unset=True).items():
+        setattr(topic, field, value)
+
+    await db.commit()
+    return {"id": topic.id, "name": topic.name, "updated": True}
+
+
+@router.delete("/education/topics/{topic_id}")
+async def delete_education_topic(
+    topic_id: str,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    topic = await db.get(EducationTopic, topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    topic.is_active = False
+    await db.commit()
+    return {"id": topic.id, "deactivated": True}
+
+
+@router.post("/education/facts")
+async def create_education_fact(
+    req: FactCreate,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify topic exists
+    topic = await db.get(EducationTopic, req.topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    existing = await db.get(EducationFact, req.id)
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Fact {req.id} already exists")
+
+    fact = EducationFact(
+        id=req.id, topic_id=req.topic_id, title=req.title,
+        explanation=req.explanation, display_order=req.display_order,
+    )
+    db.add(fact)
+
+    question = QuizQuestion(
+        id=f"q-{req.id}", fact_id=req.id,
+        question_text=req.question_text,
+        option_a=req.option_a, option_b=req.option_b,
+        option_c=req.option_c, option_d=req.option_d,
+        correct_option=req.correct_option,
+    )
+    db.add(question)
+
+    await db.commit()
+    return {"fact_id": fact.id, "question_id": question.id}
+
+
+@router.put("/education/facts/{fact_id}")
+async def update_education_fact(
+    fact_id: str,
+    req: FactUpdate,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    fact = await db.get(EducationFact, fact_id)
+    if not fact:
+        raise HTTPException(status_code=404, detail="Fact not found")
+
+    fact_fields = {"title", "explanation", "display_order", "is_active"}
+    question_fields = {"question_text", "option_a", "option_b", "option_c", "option_d", "correct_option"}
+
+    updates = req.model_dump(exclude_unset=True)
+
+    for field, value in updates.items():
+        if field in fact_fields:
+            setattr(fact, field, value)
+
+    # Update question if any question fields provided
+    q_updates = {k: v for k, v in updates.items() if k in question_fields}
+    if q_updates:
+        q_result = await db.execute(
+            select(QuizQuestion).where(QuizQuestion.fact_id == fact_id)
+        )
+        question = q_result.scalar_one_or_none()
+        if question:
+            for field, value in q_updates.items():
+                setattr(question, field, value)
+
+    await db.commit()
+    return {"fact_id": fact.id, "updated": True}
+
+
+@router.delete("/education/facts/{fact_id}")
+async def delete_education_fact(
+    fact_id: str,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    fact = await db.get(EducationFact, fact_id)
+    if not fact:
+        raise HTTPException(status_code=404, detail="Fact not found")
+
+    fact.is_active = False
+    await db.commit()
+    return {"fact_id": fact.id, "deactivated": True}

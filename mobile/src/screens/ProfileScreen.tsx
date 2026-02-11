@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
   StyleSheet,
   ActivityIndicator,
   Alert,
@@ -13,89 +12,20 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import {
   useProfile,
-  usePortfolioHistory,
-  usePortfolio,
   usePortfolioAnalytics,
   useSeasonPlayers,
+  useKnowledgeScore,
 } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius } from "../utils/theme";
 import { signOut } from "../api/client";
 import type { SeasonSummary, BenchmarkAnalytics } from "../api/client";
 import { useMode, type AppMode } from "../contexts/ModeContext";
 
-const CHART_HEIGHT = 160;
-const CHART_BAR_WIDTH = 4;
-const CHART_BAR_GAP = 2;
-
 const MODE_META: Record<AppMode, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
   classroom: { icon: "school-outline", color: Colors.primary, label: "Classroom" },
   league: { icon: "trophy-outline", color: Colors.yellow, label: "League" },
   arena: { icon: "flash-outline", color: Colors.accent, label: "Arena" },
 };
-
-function MiniChart({
-  data,
-}: {
-  data: { date: string; total_value: number; percent_gain: number }[];
-}) {
-  if (data.length === 0) return null;
-
-  const values = data.map((d) => d.total_value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  // Determine overall trend for color
-  const startValue = values[0];
-  const endValue = values[values.length - 1];
-  const barColor = endValue >= startValue ? Colors.green : Colors.red;
-
-  const firstDate = data[0].date;
-  const lastDate = data[data.length - 1].date;
-
-  return (
-    <View>
-      <View style={styles.chartContainer}>
-        {/* Y-axis labels */}
-        <View style={styles.yAxis}>
-          <Text style={styles.axisLabel}>
-            ${max >= 1000 ? `${(max / 1000).toFixed(1)}k` : max.toFixed(0)}
-          </Text>
-          <Text style={styles.axisLabel}>
-            ${min >= 1000 ? `${(min / 1000).toFixed(1)}k` : min.toFixed(0)}
-          </Text>
-        </View>
-
-        {/* Bars */}
-        <View style={styles.chartBars}>
-          {data.map((point, i) => {
-            const height =
-              ((point.total_value - min) / range) * (CHART_HEIGHT - 20) + 4;
-            return (
-              <View
-                key={point.date}
-                style={[
-                  styles.chartBar,
-                  {
-                    height,
-                    backgroundColor: barColor,
-                    opacity: 0.4 + (i / data.length) * 0.6,
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
-      </View>
-
-      {/* X-axis labels */}
-      <View style={styles.xAxis}>
-        <Text style={styles.axisLabel}>{formatDate(firstDate)}</Text>
-        <Text style={styles.axisLabel}>{formatDate(lastDate)}</Text>
-      </View>
-    </View>
-  );
-}
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -153,6 +83,7 @@ function BenchmarkCard({ data }: { data: BenchmarkAnalytics }) {
 export default function ProfileScreen() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { mode, clearMode } = useMode();
+  const { data: knowledgeScore } = useKnowledgeScore();
   const activeSeasons = profile?.active_seasons ?? [];
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
@@ -171,14 +102,6 @@ export default function ProfileScreen() {
     );
   };
 
-  const {
-    data: history,
-    isLoading: historyLoading,
-    refetch,
-    isRefetching,
-  } = usePortfolioHistory(seasonId);
-
-  const { data: portfolioData } = usePortfolio(seasonId);
   const { data: analytics, isLoading: analyticsLoading } = usePortfolioAnalytics(
     analyticsExpanded ? seasonId : "",
     comparePlayer
@@ -225,41 +148,6 @@ export default function ProfileScreen() {
     );
   };
 
-  const renderHistoryRow = ({
-    item,
-  }: {
-    item: { date: string; total_value: number; percent_gain: number };
-  }) => {
-    const isPositive = item.percent_gain >= 0;
-    return (
-      <View style={styles.historyRow}>
-        <Text style={styles.historyDate}>{formatDate(item.date)}</Text>
-        <Text style={styles.historyValue}>
-          ${item.total_value.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </Text>
-        <Text
-          style={[
-            styles.historyGain,
-            { color: isPositive ? Colors.green : Colors.red },
-          ]}
-        >
-          {isPositive ? "+" : ""}
-          {item.percent_gain.toFixed(2)}%
-        </Text>
-      </View>
-    );
-  };
-
-  // Compute stats from history data
-  const startingValue = history && history.length > 0 ? history[0].total_value : null;
-  const latestValue =
-    history && history.length > 0 ? history[history.length - 1].total_value : null;
-  const totalReturn =
-    history && history.length > 0 ? history[history.length - 1].percent_gain : null;
-
   const ListHeader = () => (
     <View>
       {/* User info card */}
@@ -298,6 +186,19 @@ export default function ProfileScreen() {
         </View>
       )}
 
+      {/* Knowledge Score (classroom mode only) */}
+      {mode === "classroom" && (
+        <View style={styles.knowledgeScoreCard}>
+          <Ionicons name="school-outline" size={24} color={Colors.yellow} />
+          <View style={styles.knowledgeScoreContent}>
+            <Text style={styles.knowledgeScoreLabel}>Knowledge Score</Text>
+            <Text style={styles.knowledgeScoreValue}>
+              {knowledgeScore?.total_score ?? profile?.knowledge_score ?? 0}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Season selector */}
       {activeSeasons.length > 1 && (
         <FlatList
@@ -321,68 +222,6 @@ export default function ProfileScreen() {
         </View>
       ) : (
         <>
-          {/* Chart card */}
-          <View style={styles.chartCard}>
-            <Text style={styles.sectionTitle}>Portfolio History</Text>
-            {historyLoading ? (
-              <View style={styles.chartPlaceholder}>
-                <ActivityIndicator color={Colors.primary} />
-              </View>
-            ) : history && history.length > 1 ? (
-              <MiniChart data={history} />
-            ) : (
-              <View style={styles.chartPlaceholder}>
-                <Ionicons
-                  name="analytics-outline"
-                  size={32}
-                  color={Colors.textMuted}
-                />
-                <Text style={styles.chartPlaceholderText}>
-                  History builds as daily snapshots are captured
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Stats row */}
-          {startingValue != null && (
-            <View style={styles.statsRow}>
-              <View style={styles.statCol}>
-                <Text style={styles.statLabel}>Starting</Text>
-                <Text style={styles.statValue}>
-                  ${startingValue.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </Text>
-              </View>
-              <View style={[styles.statCol, styles.statColCenter]}>
-                <Text style={styles.statLabel}>Current</Text>
-                <Text style={styles.statValue}>
-                  ${(portfolioData?.total_value ?? latestValue ?? 0).toLocaleString(
-                    undefined,
-                    { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-                  )}
-                </Text>
-              </View>
-              <View style={styles.statCol}>
-                <Text style={styles.statLabel}>Return</Text>
-                <Text
-                  style={[
-                    styles.statValue,
-                    {
-                      color:
-                        (totalReturn ?? 0) >= 0 ? Colors.green : Colors.red,
-                    },
-                  ]}
-                >
-                  {(totalReturn ?? 0) >= 0 ? "+" : ""}
-                  {(totalReturn ?? 0).toFixed(2)}%
-                </Text>
-              </View>
-            </View>
-          )}
-
           {/* Analytics toggle */}
           <TouchableOpacity
             style={styles.analyticsToggle}
@@ -514,20 +353,10 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {/* Daily values header */}
-          {history && history.length > 0 && (
-            <View style={styles.dailyHeader}>
-              <Text style={styles.sectionTitle}>Daily Values</Text>
-              <Text style={styles.dailyCount}>{history.length} days</Text>
-            </View>
-          )}
         </>
       )}
     </View>
   );
-
-  // Show history in reverse chronological order
-  const reversedHistory = history ? [...history].reverse() : [];
 
   return (
     <View style={styles.container}>
@@ -535,27 +364,14 @@ export default function ProfileScreen() {
         <Text style={styles.title}>Profile</Text>
       </View>
 
-      <FlatList
-        data={activeSeasons.length > 0 ? reversedHistory : []}
-        renderItem={renderHistoryRow}
-        keyExtractor={(item) => item.date}
-        ListHeaderComponent={ListHeader}
-        ListFooterComponent={
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color={Colors.red} />
-            <Text style={styles.logoutText}>Log Out</Text>
-          </TouchableOpacity>
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
-            tintColor={Colors.primary}
-          />
-        }
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      <ScrollView contentContainerStyle={styles.listContent}>
+        <ListHeader />
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color={Colors.red} />
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
@@ -639,127 +455,9 @@ const styles = StyleSheet.create({
   seasonPillTextActive: {
     color: Colors.text,
   },
-  chartCard: {
-    backgroundColor: Colors.card,
-    marginHorizontal: Spacing.xl,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: "700",
-    color: Colors.text,
-    marginBottom: Spacing.md,
-  },
-  chartContainer: {
-    flexDirection: "row",
-    height: CHART_HEIGHT,
-  },
-  yAxis: {
-    justifyContent: "space-between",
-    marginRight: Spacing.sm,
-    paddingVertical: 2,
-  },
-  axisLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-  },
-  chartBars: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: CHART_BAR_GAP,
-  },
-  chartBar: {
-    width: CHART_BAR_WIDTH,
-    borderRadius: 2,
-  },
-  xAxis: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: Spacing.xs,
-  },
-  chartPlaceholder: {
-    height: CHART_HEIGHT,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  chartPlaceholderText: {
-    fontSize: FontSize.sm,
-    color: Colors.textMuted,
-    textAlign: "center",
-  },
-  statsRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.card,
-    marginHorizontal: Spacing.xl,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.lg,
-  },
-  statCol: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statColCenter: {
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: Colors.border,
-  },
-  statLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    fontWeight: "600",
-  },
-  statValue: {
-    fontSize: FontSize.md,
-    fontWeight: "700",
-    color: Colors.text,
-    marginTop: Spacing.xs,
-  },
-  dailyHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-  },
-  dailyCount: {
-    fontSize: FontSize.sm,
-    color: Colors.textMuted,
-  },
   listContent: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xxxl,
-  },
-  historyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.card,
-    padding: Spacing.lg,
-    borderRadius: Radius.md,
-  },
-  historyDate: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    width: 70,
-  },
-  historyValue: {
-    flex: 1,
-    fontSize: FontSize.md,
-    fontWeight: "700",
-    color: Colors.text,
-    textAlign: "center",
-  },
-  historyGain: {
-    fontSize: FontSize.sm,
-    fontWeight: "600",
-    width: 70,
-    textAlign: "right",
-  },
-  separator: {
-    height: Spacing.sm,
   },
   emptyContainer: {
     justifyContent: "center",
@@ -972,5 +670,30 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: "600",
     color: Colors.textSecondary,
+  },
+  knowledgeScoreCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    marginHorizontal: Spacing.xl,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.lg,
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.yellow + "30",
+  },
+  knowledgeScoreContent: {
+    flex: 1,
+  },
+  knowledgeScoreLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    fontWeight: "600",
+  },
+  knowledgeScoreValue: {
+    fontSize: FontSize.xl,
+    fontWeight: "800",
+    color: Colors.yellow,
   },
 });

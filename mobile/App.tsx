@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from './src/utils/theme';
 import { loadStoredToken, registerSignOutHandler } from './src/api/client';
@@ -16,19 +17,35 @@ import TradeScreen from './src/screens/TradeScreen';
 import PortfolioScreen from './src/screens/PortfolioScreen';
 import StocksScreen from './src/screens/StocksScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import LearnScreen from './src/screens/LearnScreen';
+import LessonScreen from './src/screens/LessonScreen';
+import type { LearnStackParamList } from './src/screens/LearnScreen';
 
 const queryClient = new QueryClient();
 const Tab = createBottomTabNavigator();
+const LearnStack = createNativeStackNavigator<LearnStackParamList>();
 
 const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
   Home: { focused: 'trophy', unfocused: 'trophy-outline' },
   Trade: { focused: 'swap-horizontal', unfocused: 'swap-horizontal-outline' },
   Portfolio: { focused: 'briefcase', unfocused: 'briefcase-outline' },
+  Learn: { focused: 'school', unfocused: 'school-outline' },
   Stocks: { focused: 'bar-chart', unfocused: 'bar-chart-outline' },
   Profile: { focused: 'person', unfocused: 'person-outline' },
 };
 
+function LearnStackNavigator() {
+  return (
+    <LearnStack.Navigator screenOptions={{ headerShown: false }}>
+      <LearnStack.Screen name="LearnHome" component={LearnScreen} />
+      <LearnStack.Screen name="Lesson" component={LessonScreen} />
+    </LearnStack.Navigator>
+  );
+}
+
 function MainTabs() {
+  const { mode } = useMode();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -49,6 +66,9 @@ function MainTabs() {
       <Tab.Screen name="Home" component={LeaderboardScreen} />
       <Tab.Screen name="Trade" component={TradeScreen} />
       <Tab.Screen name="Portfolio" component={PortfolioScreen} />
+      {mode === 'classroom' && (
+        <Tab.Screen name="Learn" component={LearnStackNavigator} />
+      )}
       <Tab.Screen name="Stocks" component={StocksScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

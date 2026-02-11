@@ -107,6 +107,7 @@ export interface UserProfile {
   is_admin: boolean;
   created_at: string;
   active_seasons: SeasonSummary[];
+  knowledge_score: number;
 }
 
 export const auth = {
@@ -315,4 +316,71 @@ export const stocks = {
   get: (symbol: string) => request<StockQuote>(`/stocks/${symbol}`),
 
   count: () => request<{ count: number }>("/stocks/count"),
+};
+
+// ── Education ──
+
+export interface TopicSummary {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  fact_count: number;
+  completed_count: number;
+  progress_pct: number;
+}
+
+export interface QuizQuestionResponse {
+  id: string;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+}
+
+export interface FactDetail {
+  id: string;
+  title: string;
+  explanation: string;
+  question: QuizQuestionResponse | null;
+  is_mastered: boolean;
+  is_locked: boolean;
+  retry_available_at: string | null;
+}
+
+export interface QuizAnswerRequest {
+  question_id: string;
+  selected_option: string;
+}
+
+export interface QuizAnswerResponse {
+  is_correct: boolean;
+  correct_option: string;
+  explanation: string;
+  points_earned: number;
+  retry_available_at: string | null;
+  knowledge_score: number;
+}
+
+export interface UserKnowledgeScore {
+  total_score: number;
+  questions_answered: number;
+  questions_correct: number;
+  topics_mastered: number;
+}
+
+export const education = {
+  topics: () => request<TopicSummary[]>("/education/topics"),
+
+  facts: (topicId: string) =>
+    request<FactDetail[]>(`/education/topics/${topicId}/facts`),
+
+  submitAnswer: (data: QuizAnswerRequest) =>
+    request<QuizAnswerResponse>("/education/quiz/answer", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  score: () => request<UserKnowledgeScore>("/education/score"),
 };
