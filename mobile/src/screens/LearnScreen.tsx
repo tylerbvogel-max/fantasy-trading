@@ -68,7 +68,7 @@ function buildChunkTiles(topics: TopicSummary[]): ChunkTile[] {
         topic,
         chunkIndex: i,
         totalChunks,
-        label: totalChunks > 1 ? `${topic.name} ${i + 1}` : topic.name,
+        label: `${topic.name} ${101 + i}`,
       });
     }
   }
