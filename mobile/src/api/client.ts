@@ -283,6 +283,9 @@ export const portfolio = {
     if (compareTo) params.append("compare_to", compareTo);
     return request<PortfolioAnalytics>(`/portfolio/analytics?${params}`);
   },
+
+  player: (seasonId: string, alias: string) =>
+    request<PortfolioSummary>(`/portfolio/player?season_id=${seasonId}&alias=${encodeURIComponent(alias)}`),
 };
 
 // ── Analytics ──

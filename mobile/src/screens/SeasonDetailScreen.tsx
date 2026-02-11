@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { useLeaderboard, useSeasons, useProfile, useJoinSeason } from "../hooks/
 import { useMode } from "../contexts/ModeContext";
 import { useSeason } from "../contexts/SeasonContext";
 import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
+import PlayerPortfolioModal from "../components/PlayerPortfolioModal";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SeasonsStackParamList } from "./SeasonsScreen";
 
@@ -23,6 +24,8 @@ export default function SeasonDetailScreen({ route, navigation }: Props) {
   const { seasonId, seasonName } = route.params;
   const { mode } = useMode();
   const { selectedSeasonId, setSelectedSeasonId } = useSeason();
+
+  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
 
   const { data: seasonsData } = useSeasons(mode ?? undefined);
   const { data: profile } = useProfile();
@@ -79,7 +82,7 @@ export default function SeasonDetailScreen({ route, navigation }: Props) {
             ? "\u{1F949}"
             : null;
 
-    return (
+    const row = (
       <View style={[styles.row, isCurrentUser && styles.rowHighlight]}>
         <View style={styles.rankContainer}>
           {rankEmoji ? (
@@ -118,6 +121,14 @@ export default function SeasonDetailScreen({ route, navigation }: Props) {
           </Text>
         </View>
       </View>
+    );
+
+    if (isCurrentUser) return row;
+
+    return (
+      <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedPlayer(item.alias)}>
+        {row}
+      </TouchableOpacity>
     );
   };
 
@@ -257,6 +268,14 @@ export default function SeasonDetailScreen({ route, navigation }: Props) {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
+
+      {/* Player portfolio modal */}
+      <PlayerPortfolioModal
+        visible={!!selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
+        seasonId={seasonId}
+        alias={selectedPlayer ?? ""}
+      />
     </View>
   );
 }

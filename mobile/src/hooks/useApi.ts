@@ -97,6 +97,14 @@ export function usePortfolioHistory(seasonId: string) {
   });
 }
 
+export function usePlayerPortfolio(seasonId: string, alias: string) {
+  return useQuery<PortfolioSummary>({
+    queryKey: ["playerPortfolio", seasonId, alias],
+    queryFn: () => portfolio.player(seasonId, alias),
+    enabled: !!seasonId && !!alias,
+  });
+}
+
 // ── Trading ──
 
 export function useTrade() {

@@ -83,6 +83,19 @@ async def get_portfolio(
     )
 
 
+async def get_portfolio_by_alias(
+    db: AsyncSession, alias: str, season_id: str
+) -> PortfolioSummary | None:
+    """Get a player's portfolio by their alias."""
+    result = await db.execute(
+        select(User).where(User.alias == alias)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
+    return await get_portfolio(db, user.id, season_id)
+
+
 async def get_leaderboard(db: AsyncSession, season_id: str) -> list[LeaderboardEntry]:
     """Calculate live leaderboard for a season."""
     # Get all player_seasons for this season with their holdings

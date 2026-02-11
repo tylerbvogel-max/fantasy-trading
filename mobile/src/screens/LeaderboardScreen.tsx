@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLeaderboard, useSeasons, useProfile, useJoinSeason } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import { useMode } from "../contexts/ModeContext";
+import PlayerPortfolioModal from "../components/PlayerPortfolioModal";
 
 export default function LeaderboardScreen() {
   const { mode } = useMode();
@@ -24,6 +25,7 @@ export default function LeaderboardScreen() {
   const activeSeasons = seasonsData?.filter((s) => s.is_active) || [];
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
   const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
 
   const seasonId = selectedSeasonId || activeSeasons[0]?.id || "";
 
@@ -67,7 +69,7 @@ export default function LeaderboardScreen() {
     const isTop3 = item.rank <= 3;
     const rankEmoji = item.rank === 1 ? "🥇" : item.rank === 2 ? "🥈" : item.rank === 3 ? "🥉" : null;
 
-    return (
+    const row = (
       <View style={[styles.row, isCurrentUser && styles.rowHighlight]}>
         {/* Rank */}
         <View style={styles.rankContainer}>
@@ -102,6 +104,14 @@ export default function LeaderboardScreen() {
           </Text>
         </View>
       </View>
+    );
+
+    if (isCurrentUser) return row;
+
+    return (
+      <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedPlayer(item.alias)}>
+        {row}
+      </TouchableOpacity>
     );
   };
 
@@ -183,6 +193,14 @@ export default function LeaderboardScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
+
+      {/* Player portfolio modal */}
+      <PlayerPortfolioModal
+        visible={!!selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
+        seasonId={seasonId}
+        alias={selectedPlayer ?? ""}
+      />
 
       {/* Season dropdown modal */}
       <Modal
