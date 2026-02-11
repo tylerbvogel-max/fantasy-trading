@@ -123,8 +123,6 @@ export default function SeasonDetailScreen({ route, navigation }: Props) {
       </View>
     );
 
-    if (isCurrentUser) return row;
-
     return (
       <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedPlayer(item.alias)}>
         {row}

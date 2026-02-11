@@ -106,8 +106,6 @@ export default function LeaderboardScreen() {
       </View>
     );
 
-    if (isCurrentUser) return row;
-
     return (
       <TouchableOpacity activeOpacity={0.7} onPress={() => setSelectedPlayer(item.alias)}>
         {row}
