@@ -89,6 +89,7 @@ export default function StocksScreen() {
     const hasPrice = item.price != null;
     const hasChange = item.change_pct != null;
     const isPositive = (item.change_pct ?? 0) >= 0;
+    const isETF = /\bETF\b/i.test(item.name);
 
     return (
       <View style={styles.stockRow}>
@@ -96,7 +97,14 @@ export default function StocksScreen() {
           style={styles.stockLeft}
           onPress={() => handleStockPress(item)}
         >
-          <Text style={styles.stockSymbol}>{item.symbol}</Text>
+          <View style={styles.symbolRow}>
+            <Text style={styles.stockSymbol}>{item.symbol}</Text>
+            {isETF && (
+              <View style={styles.etfBadge}>
+                <Text style={styles.etfBadgeText}>ETF</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.stockName} numberOfLines={1}>
             {item.name}
           </Text>
@@ -343,6 +351,22 @@ const styles = StyleSheet.create({
   stockLeft: {
     flex: 1,
     marginRight: Spacing.md,
+  },
+  symbolRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  etfBadge: {
+    backgroundColor: Colors.primary + "25",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: Radius.sm,
+  },
+  etfBadgeText: {
+    fontSize: 9,
+    fontFamily: FontFamily.bold,
+    color: Colors.primary,
   },
   stockSymbol: {
     fontSize: FontSize.md,

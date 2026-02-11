@@ -27,7 +27,23 @@ export type LearnStackParamList = {
   };
 };
 
-const CHUNK_SIZE = 3;
+/**
+ * Compute chunk sizes so every chunk has 3–5 items.
+ * e.g. 10 → [3,3,4], 11 → [3,4,4], 8 → [4,4], 5 → [5]
+ */
+export function computeChunkSizes(total: number): number[] {
+  if (total <= 5) return [total];
+  const numChunks = Math.floor(total / 3);
+  const remainder = total % 3;
+  const sizes = Array(numChunks).fill(3);
+  if (remainder === 1) {
+    sizes[sizes.length - 1] = 4;
+  } else if (remainder === 2) {
+    sizes[sizes.length - 1] = 4;
+    sizes[sizes.length - 2] = 4;
+  }
+  return sizes;
+}
 
 const TOPIC_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   "trending-up-outline": "trending-up-outline",
@@ -55,19 +71,21 @@ interface ChunkTile {
   topic: TopicSummary;
   chunkIndex: number;
   totalChunks: number;
+  chunkSize: number;
   label: string;
 }
 
 function buildChunkTiles(topics: TopicSummary[]): ChunkTile[] {
   const tiles: ChunkTile[] = [];
   for (const topic of topics) {
-    const totalChunks = Math.max(1, Math.ceil(topic.fact_count / CHUNK_SIZE));
-    for (let i = 0; i < totalChunks; i++) {
+    const sizes = computeChunkSizes(topic.fact_count);
+    for (let i = 0; i < sizes.length; i++) {
       tiles.push({
         key: `${topic.id}-${i}`,
         topic,
         chunkIndex: i,
-        totalChunks,
+        totalChunks: sizes.length,
+        chunkSize: sizes[i],
         label: `${topic.name} ${101 + i}`,
       });
     }
@@ -82,13 +100,11 @@ function ChunkTileCard({
   tile: ChunkTile;
   onPress: () => void;
 }) {
-  const { topic, chunkIndex } = tile;
-  // Estimate chunk mastery from aggregate progress
-  const factsInChunk = Math.min(
-    CHUNK_SIZE,
-    topic.fact_count - chunkIndex * CHUNK_SIZE
-  );
-  const chunkStart = chunkIndex * CHUNK_SIZE;
+  const { topic, chunkIndex, chunkSize } = tile;
+  const factsInChunk = chunkSize;
+  // Compute start offset by summing sizes of previous chunks
+  const sizes = computeChunkSizes(topic.fact_count);
+  const chunkStart = sizes.slice(0, chunkIndex).reduce((a, b) => a + b, 0);
   // We can't know exact per-chunk mastery from aggregate, so estimate
   const completedUpToChunkEnd = Math.min(topic.completed_count, chunkStart + factsInChunk);
   const chunkCompleted = Math.max(0, completedUpToChunkEnd - chunkStart);

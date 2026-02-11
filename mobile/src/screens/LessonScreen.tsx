@@ -16,11 +16,11 @@ import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import type { FactDetail } from "../api/client";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { LearnStackParamList } from "./LearnScreen";
+import { computeChunkSizes } from "./LearnScreen";
 
 type Props = NativeStackScreenProps<LearnStackParamList, "Lesson">;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CHUNK_SIZE = 3;
 
 // Ski slope difficulty scale
 const DIFFICULTY_CONFIG: Record<number, { label: string; icon: string; color: string }> = {
@@ -272,11 +272,13 @@ export default function LessonScreen({ route, navigation }: Props) {
   const [sessionAnswers, setSessionAnswers] = useState<Record<string, boolean>>({});
   const [showCompletion, setShowCompletion] = useState(false);
 
-  // Slice facts to just this chunk
-  const facts = useMemo(
-    () => allFacts ? allFacts.slice(chunkIndex * CHUNK_SIZE, (chunkIndex + 1) * CHUNK_SIZE) : undefined,
-    [allFacts, chunkIndex]
-  );
+  // Slice facts to just this chunk using variable chunk sizes
+  const facts = useMemo(() => {
+    if (!allFacts) return undefined;
+    const sizes = computeChunkSizes(allFacts.length);
+    const start = sizes.slice(0, chunkIndex).reduce((a, b) => a + b, 0);
+    return allFacts.slice(start, start + sizes[chunkIndex]);
+  }, [allFacts, chunkIndex]);
 
   const slides = facts ? buildSlides(facts, topicName, topicDescription) : [];
 
