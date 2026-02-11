@@ -28,17 +28,20 @@ async def list_topics(
     return await get_topics_with_progress(db, user.id)
 
 
-@router.get("/topics/{topic_id}/facts", response_model=list[FactDetail])
+@router.get("/topics/{topic_id}/facts")
 async def list_topic_facts(
     topic_id: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    import traceback
     try:
-        return await get_topic_facts(db, user.id, topic_id)
+        results = await get_topic_facts(db, user.id, topic_id)
+        # Manually validate to catch serialization errors
+        return [FactDetail.model_validate(r, from_attributes=True) if not isinstance(r, FactDetail) else r for r in results]
     except Exception as e:
         logger.exception(f"Error loading facts for topic {topic_id}")
-        raise
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 
 @router.post("/quiz/answer", response_model=QuizAnswerResponse)
