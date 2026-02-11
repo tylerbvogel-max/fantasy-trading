@@ -197,7 +197,7 @@ function QuizCard({
 
 export default function LessonScreen({ route, navigation }: Props) {
   const { topicId, topicName } = route.params;
-  const { data: facts, isLoading, refetch } = useTopicFacts(topicId);
+  const { data: facts, isLoading, isError, refetch } = useTopicFacts(topicId);
   const submitAnswer = useSubmitQuizAnswer();
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -268,6 +268,26 @@ export default function LessonScreen({ route, navigation }: Props) {
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.lessonHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.lessonTitle} numberOfLines={1}>{topicName}</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={Colors.red} />
+          <Text style={styles.errorText}>Failed to load lessons</Text>
+          <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -377,6 +397,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    gap: Spacing.md,
+  },
+  errorText: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.textSecondary,
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
+    marginTop: Spacing.sm,
+  },
+  retryButtonText: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
   },
   lessonHeader: {
     flexDirection: "row",

@@ -16,9 +16,12 @@ async def lifespan(app: FastAPI):
     # Create any new tables that don't exist yet
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Add game_mode column if missing (no-op if already exists)
+        # Add columns that were added after initial table creation
         await conn.execute(text(
             "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS game_mode VARCHAR(20) NOT NULL DEFAULT 'league'"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS difficulty INTEGER NOT NULL DEFAULT 1"
         ))
     # Startup
     start_scheduler()
