@@ -7,6 +7,7 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
+  Modal,
   type LayoutChangeEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -190,7 +191,7 @@ export default function PortfolioScreen() {
   const activeSeasons = profile?.active_seasons ?? [];
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
-  const [heatmapExpanded, setHeatmapExpanded] = useState(false);
+  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
   const seasonId = selectedSeasonId || activeSeasons[0]?.id || "";
 
   const {
@@ -227,19 +228,9 @@ export default function PortfolioScreen() {
     );
   }
 
-  const renderSeasonPill = (season: SeasonSummary) => {
-    const isSelected = season.id === seasonId;
-    return (
-      <TouchableOpacity
-        key={season.id}
-        style={[styles.seasonPill, isSelected && styles.seasonPillActive]}
-        onPress={() => setSelectedSeasonId(season.id)}
-      >
-        <Text style={[styles.seasonPillText, isSelected && styles.seasonPillTextActive]}>
-          {season.season_type === "open" ? "🌐" : "🎯"} {season.name}
-        </Text>
-      </TouchableOpacity>
-    );
+  const handleSeasonSelect = (id: string) => {
+    setSelectedSeasonId(id);
+    setSeasonDropdownOpen(false);
   };
 
   const renderHolding = ({ item }: { item: HoldingResponse }) => {
@@ -283,17 +274,17 @@ export default function PortfolioScreen() {
 
   const ListHeader = () => (
     <View>
-      {/* Season selector */}
+      {/* Season dropdown selector */}
       {activeSeasons.length > 1 && (
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={activeSeasons}
-          renderItem={({ item }) => renderSeasonPill(item)}
-          keyExtractor={(item) => item.id}
-          style={styles.seasonSelector}
-          contentContainerStyle={styles.seasonSelectorContent}
-        />
+        <TouchableOpacity
+          style={styles.seasonDropdown}
+          onPress={() => setSeasonDropdownOpen(true)}
+        >
+          <Text style={styles.seasonDropdownText} numberOfLines={1}>
+            {selectedSeason?.name ?? "Select Season"}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
+        </TouchableOpacity>
       )}
 
       {/* Summary card */}
@@ -342,6 +333,11 @@ export default function PortfolioScreen() {
             </View>
           </View>
         </View>
+      )}
+
+      {/* Heatmap — always visible */}
+      {portfolioData && (
+        <Heatmap holdings={portfolioData.holdings} seasonName={selectedSeasonName} />
       )}
 
       {/* Chart card */}
@@ -404,27 +400,6 @@ export default function PortfolioScreen() {
             </Text>
           </View>
         </View>
-      )}
-
-      {/* Heatmap toggle */}
-      <TouchableOpacity
-        style={styles.heatmapToggle}
-        onPress={() => setHeatmapExpanded(!heatmapExpanded)}
-      >
-        <View style={styles.heatmapToggleLeft}>
-          <Ionicons name="grid-outline" size={20} color={Colors.orange} />
-          <Text style={styles.heatmapToggleText}>Portfolio Heatmap</Text>
-        </View>
-        <Ionicons
-          name={heatmapExpanded ? "chevron-up" : "chevron-down"}
-          size={20}
-          color={Colors.textMuted}
-        />
-      </TouchableOpacity>
-
-      {/* Heatmap expanded */}
-      {heatmapExpanded && portfolioData && (
-        <Heatmap holdings={portfolioData.holdings} seasonName={selectedSeasonName} />
       )}
 
       {/* Holdings section title */}
@@ -514,6 +489,47 @@ export default function PortfolioScreen() {
           ) : null
         }
       />
+
+      {/* Season dropdown modal */}
+      <Modal
+        visible={seasonDropdownOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSeasonDropdownOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSeasonDropdownOpen(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Season</Text>
+            {activeSeasons.map((s) => (
+              <TouchableOpacity
+                key={s.id}
+                style={[
+                  styles.modalOption,
+                  s.id === seasonId && styles.modalOptionActive,
+                ]}
+                onPress={() => handleSeasonSelect(s.id)}
+              >
+                <Text
+                  style={[
+                    styles.modalOptionText,
+                    s.id === seasonId && styles.modalOptionTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {s.name}
+                </Text>
+                {s.id === seasonId && (
+                  <Ionicons name="checkmark" size={20} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -533,33 +549,25 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.text,
   },
-  seasonSelector: {
-    maxHeight: 44,
-    marginBottom: Spacing.md,
-  },
-  seasonSelectorContent: {
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.sm,
-  },
-  seasonPill: {
+  seasonDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.card,
+    marginHorizontal: Spacing.xl,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
+    marginBottom: Spacing.md,
   },
-  seasonPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  seasonPillText: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    fontWeight: "500",
-  },
-  seasonPillTextActive: {
+  seasonDropdownText: {
+    fontSize: FontSize.md,
+    fontWeight: "600",
     color: Colors.text,
+    flex: 1,
+    marginRight: Spacing.sm,
   },
   summaryCard: {
     backgroundColor: Colors.card,
@@ -792,27 +800,48 @@ const styles = StyleSheet.create({
     width: 70,
     textAlign: "right",
   },
-  heatmapToggle: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
     alignItems: "center",
+    padding: Spacing.xl,
+  },
+  modalContent: {
     backgroundColor: Colors.card,
-    marginHorizontal: Spacing.xl,
-    padding: Spacing.lg,
     borderRadius: Radius.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    padding: Spacing.lg,
+    width: "100%",
+    maxWidth: 340,
   },
-  heatmapToggleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  heatmapToggleText: {
-    fontSize: FontSize.md,
+  modalTitle: {
+    fontSize: FontSize.lg,
     fontWeight: "700",
     color: Colors.text,
+    marginBottom: Spacing.md,
+    textAlign: "center",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.xs,
+  },
+  modalOptionActive: {
+    backgroundColor: Colors.primary + "20",
+  },
+  modalOptionText: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    fontWeight: "500",
+    flex: 1,
+  },
+  modalOptionTextActive: {
+    color: Colors.primary,
+    fontWeight: "700",
   },
   heatmapCard: {
     backgroundColor: Colors.card,
