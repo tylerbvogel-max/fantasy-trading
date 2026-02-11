@@ -234,7 +234,7 @@ export default function LessonScreen({ route, navigation }: Props) {
             } else {
               Alert.alert(
                 "Not quite!",
-                `The correct answer is ${response.correct_option}.\n\n${response.explanation}\n\nYou can retry in 3 days.`,
+                `The correct answer is ${response.correct_option}.\n\n${response.explanation}\n\nYou can retry tomorrow.`,
                 [{ text: "Got it" }]
               );
             }

@@ -9,7 +9,7 @@ from app.schemas import (
 )
 
 CORRECT_POINTS = 10
-RETRY_COOLDOWN_DAYS = 3
+RETRY_COOLDOWN_DAYS = 1
 
 
 async def get_topics_with_progress(
