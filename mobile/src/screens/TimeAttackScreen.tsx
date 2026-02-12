@@ -162,20 +162,14 @@ export default function TimeAttackScreen() {
           <Text style={styles.timerValue}>{windowEndCountdown}</Text>
         </View>
 
-        {/* SPY price display */}
-        {currentWindow.spy_open_price && (
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>SPY Open</Text>
-            <Text style={styles.priceValue}>${currentWindow.spy_open_price.toFixed(2)}</Text>
-          </View>
-        )}
-
-        {/* Swipe card — centered in remaining space */}
+        {/* Swipe card with chart — centered in remaining space */}
         <View style={styles.swipeArea}>
           <SwipeCard
             onSwipeRight={() => handleSwipe("UP")}
             onSwipeLeft={() => handleSwipe("DOWN")}
             enabled={!submitPrediction.isPending}
+            candles={status?.spy_candles ?? []}
+            openPrice={currentWindow.spy_open_price}
           />
         </View>
 
@@ -524,23 +518,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     color: Colors.orange,
     marginTop: 2,
-  },
-  priceRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: Spacing.sm,
-    paddingBottom: Spacing.sm,
-  },
-  priceLabel: {
-    fontSize: FontSize.sm,
-    fontFamily: FontFamily.regular,
-    color: Colors.textMuted,
-  },
-  priceValue: {
-    fontSize: FontSize.md,
-    fontFamily: FontFamily.bold,
-    color: Colors.text,
   },
   swipeArea: {
     flex: 1,

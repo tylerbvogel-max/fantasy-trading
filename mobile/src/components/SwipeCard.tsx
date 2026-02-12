@@ -1,30 +1,50 @@
 import React, { useRef } from "react";
-import { View, Text, StyleSheet, Dimensions, Animated, PanResponder } from "react-native";
+import { View, Text, StyleSheet, Dimensions, Animated, PanResponder, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LineChart } from "react-native-chart-kit";
 import { Colors, FontFamily, FontSize, Spacing, Radius } from "../utils/theme";
+
+interface SpyCandlePoint {
+  timestamp: number;
+  close: number;
+}
 
 interface SwipeCardProps {
   onSwipeRight: () => void;
   onSwipeLeft: () => void;
   enabled: boolean;
+  candles: SpyCandlePoint[];
+  openPrice?: number | null;
 }
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CARD_WIDTH = SCREEN_WIDTH - Spacing.xl * 2;
+const CARD_SIZE = CARD_WIDTH; // square
 const COMMIT_THRESHOLD = CARD_WIDTH * 0.3;
 const VELOCITY_THRESHOLD = 0.5;
+const CHART_WIDTH = CARD_WIDTH - Spacing.lg * 2;
+const CHART_HEIGHT = CARD_SIZE - 120; // leave room for header + direction hints
 
-export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled }: SwipeCardProps) {
+export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles, openPrice }: SwipeCardProps) {
   const translateX = useRef(new Animated.Value(0)).current;
+
+  const hasPrice = (candles && candles.length >= 2) || !!openPrice;
+  const canSwipe = enabled && hasPrice;
 
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) =>
-        enabled && Math.abs(gesture.dx) > 10,
+        canSwipe && Math.abs(gesture.dx) > 10,
       onPanResponderMove: (_, gesture) => {
+        if (!canSwipe) return;
         translateX.setValue(gesture.dx);
       },
       onPanResponderRelease: (_, gesture) => {
+        if (!canSwipe) {
+          translateX.setValue(0);
+          return;
+        }
+
         const swipedRight =
           gesture.dx > COMMIT_THRESHOLD || gesture.vx > VELOCITY_THRESHOLD;
         const swipedLeft =
@@ -56,7 +76,6 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled }: SwipeC
     })
   ).current;
 
-  // Interpolations for visual feedback
   const rightOpacity = translateX.interpolate({
     inputRange: [0, 30, COMMIT_THRESHOLD],
     outputRange: [0, 0.3, 1],
@@ -87,6 +106,80 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled }: SwipeC
     extrapolate: "clamp",
   });
 
+  // Build chart data
+  const hasCandles = candles && candles.length >= 2;
+  let chartNode: React.ReactNode = null;
+
+  if (hasCandles) {
+    const step = Math.max(1, Math.floor(candles.length / 20));
+    const sampled = candles.filter((_, i) => i % step === 0 || i === candles.length - 1);
+    const prices = sampled.map((c) => c.close);
+    const labels = sampled.map((c) => {
+      const d = new Date(c.timestamp * 1000);
+      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    });
+    const labelStep = Math.max(1, Math.floor(labels.length / 4));
+    const displayLabels = labels.map((l, i) => (i % labelStep === 0 ? l : ""));
+    const priceChange = prices[prices.length - 1] - prices[0];
+    const lineColor = priceChange >= 0 ? Colors.green : Colors.accent;
+
+    chartNode = (
+      <View style={styles.chartArea}>
+        <View style={styles.chartHeader}>
+          <Text style={styles.spyLabel}>SPY</Text>
+          <Text style={[styles.spyPrice, { color: lineColor }]}>
+            ${prices[prices.length - 1].toFixed(2)}
+          </Text>
+        </View>
+        <LineChart
+          data={{ labels: displayLabels, datasets: [{ data: prices }] }}
+          width={CHART_WIDTH}
+          height={CHART_HEIGHT}
+          withDots={false}
+          withInnerLines={false}
+          withOuterLines={false}
+          withVerticalLabels={true}
+          withHorizontalLabels={true}
+          chartConfig={{
+            backgroundColor: "transparent",
+            backgroundGradientFrom: Colors.card,
+            backgroundGradientTo: Colors.card,
+            decimalPlaces: 2,
+            color: () => lineColor,
+            labelColor: () => Colors.textMuted,
+            propsForLabels: { fontSize: 10, fontFamily: FontFamily.regular },
+            strokeWidth: 2,
+          }}
+          bezier
+          style={styles.chart}
+        />
+      </View>
+    );
+  } else if (openPrice) {
+    chartNode = (
+      <View style={styles.chartArea}>
+        <View style={styles.chartHeader}>
+          <Text style={styles.spyLabel}>SPY</Text>
+          <Text style={[styles.spyPrice, { color: Colors.text }]}>
+            ${openPrice.toFixed(2)}
+          </Text>
+        </View>
+        <View style={styles.chartPlaceholder}>
+          <Text style={styles.chartPlaceholderText}>Chart building...</Text>
+        </View>
+      </View>
+    );
+  } else {
+    chartNode = (
+      <View style={styles.chartArea}>
+        <View style={styles.loadingArea}>
+          <ActivityIndicator size="small" color={Colors.orange} />
+          <Text style={styles.loadingText}>Loading SPY data...</Text>
+        </View>
+      </View>
+    );
+  }
+
   if (!enabled) {
     return (
       <View style={styles.wrapper}>
@@ -115,9 +208,7 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled }: SwipeC
       <Animated.View
         style={[
           styles.card,
-          {
-            transform: [{ translateX }, { rotate: cardRotation }],
-          },
+          { transform: [{ translateX }, { rotate: cardRotation }] },
         ]}
         {...panResponder.panHandlers}
       >
@@ -127,20 +218,22 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled }: SwipeC
         <Animated.View style={[styles.cardOverlay, { backgroundColor: Colors.accent, opacity: leftBgOpacity }]} />
 
         <View style={styles.cardContent}>
+          {chartNode}
+
+          {/* Direction hints at bottom */}
           <View style={styles.directionRow}>
             <View style={styles.directionHint}>
-              <Ionicons name="arrow-back" size={18} color={Colors.accent} />
-              <Text style={[styles.directionLabel, { color: Colors.accent }]}>DOWN</Text>
+              <Ionicons name="arrow-back" size={16} color={hasPrice ? Colors.accent : Colors.textMuted} />
+              <Text style={[styles.directionLabel, { color: hasPrice ? Colors.accent : Colors.textMuted }]}>DOWN</Text>
             </View>
-            <View style={styles.centerIcon}>
-              <Ionicons name="swap-horizontal" size={28} color={Colors.textMuted} />
-            </View>
+            <Text style={styles.swipePrompt}>
+              {hasPrice ? "Swipe to predict" : "Waiting for data..."}
+            </Text>
             <View style={styles.directionHint}>
-              <Text style={[styles.directionLabel, { color: Colors.green }]}>UP</Text>
-              <Ionicons name="arrow-forward" size={18} color={Colors.green} />
+              <Text style={[styles.directionLabel, { color: hasPrice ? Colors.green : Colors.textMuted }]}>UP</Text>
+              <Ionicons name="arrow-forward" size={16} color={hasPrice ? Colors.green : Colors.textMuted} />
             </View>
           </View>
-          <Text style={styles.swipePrompt}>Swipe to predict</Text>
         </View>
       </Animated.View>
     </View>
@@ -151,17 +244,14 @@ const styles = StyleSheet.create({
   wrapper: {
     alignItems: "center",
     justifyContent: "center",
-    height: 180,
   },
   card: {
     width: CARD_WIDTH,
-    height: 160,
+    height: CARD_SIZE,
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    justifyContent: "center",
-    alignItems: "center",
     overflow: "hidden",
   },
   cardOverlay: {
@@ -169,10 +259,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
   },
   cardContent: {
-    alignItems: "center",
-    gap: Spacing.md,
+    flex: 1,
+    padding: Spacing.lg,
+    justifyContent: "space-between",
   },
   cardDisabled: {
+    width: CARD_WIDTH,
+    height: CARD_SIZE,
+    justifyContent: "center",
+    alignItems: "center",
     opacity: 0.5,
     gap: Spacing.md,
   },
@@ -181,11 +276,58 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
     fontSize: FontSize.md,
   },
+
+  // Chart area inside card
+  chartArea: {
+    flex: 1,
+  },
+  chartHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  spyLabel: {
+    fontSize: FontSize.lg,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
+  },
+  spyPrice: {
+    fontSize: FontSize.lg,
+    fontFamily: FontFamily.bold,
+  },
+  chart: {
+    marginLeft: -16,
+    borderRadius: Radius.lg,
+  },
+  chartPlaceholder: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  chartPlaceholderText: {
+    color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+  },
+  loadingArea: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  loadingText: {
+    color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+  },
+
+  // Direction hints
   directionRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    width: "80%",
+    paddingTop: Spacing.sm,
   },
   directionHint: {
     flexDirection: "row",
@@ -194,16 +336,15 @@ const styles = StyleSheet.create({
   },
   directionLabel: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.lg,
-  },
-  centerIcon: {
-    opacity: 0.4,
+    fontSize: FontSize.md,
   },
   swipePrompt: {
     color: Colors.textMuted,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
   },
+
+  // Side indicators
   sideIndicator: {
     position: "absolute",
     alignItems: "center",
@@ -211,10 +352,10 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   leftIndicator: {
-    left: Spacing.md,
+    left: Spacing.xs,
   },
   rightIndicator: {
-    right: Spacing.md,
+    right: Spacing.xs,
   },
   sideIndicatorText: {
     fontFamily: FontFamily.bold,
