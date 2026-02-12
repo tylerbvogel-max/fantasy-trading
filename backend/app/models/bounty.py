@@ -45,6 +45,17 @@ class BountyPrediction(Base):
     )
 
 
+class SpyPriceLog(Base):
+    """Rolling log of SPY prices for chart display."""
+    __tablename__ = "spy_price_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class BountyPlayerStats(Base):
     __tablename__ = "bounty_player_stats"
 

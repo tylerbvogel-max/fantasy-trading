@@ -4,7 +4,7 @@ from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from sqlalchemy import select, func, and_, Integer, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.bounty import BountyWindow, BountyPrediction, BountyPlayerStats
+from app.models.bounty import BountyWindow, BountyPrediction, BountyPlayerStats, SpyPriceLog
 from app.models.user import User
 from app.services.finnhub_service import get_stock_price
 from app.config import get_settings
@@ -353,13 +353,25 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         if pred:
             previous_pick = _pick_to_response(pred)
 
-    # Fetch SPY candles — show the last hour of trading for context
+    # Log current SPY price and return recent price history for chart
     candles = []
-    if current and current.start_time:
+    if current:
+        price = await get_stock_price(db, "SPY")
+        if price:
+            db.add(SpyPriceLog(price=price))
+            await db.commit()
+
         now_utc = datetime.now(timezone.utc)
-        from_ts = int((now_utc - timedelta(hours=1)).timestamp())
-        to_ts = int(now_utc.timestamp())
-        candles = await fetch_spy_candles(from_ts, to_ts)
+        one_hour_ago = now_utc - timedelta(hours=1)
+        log_result = await db.execute(
+            select(SpyPriceLog)
+            .where(SpyPriceLog.recorded_at >= one_hour_ago)
+            .order_by(SpyPriceLog.recorded_at)
+        )
+        candles = [
+            {"timestamp": int(row.recorded_at.timestamp()), "close": float(row.price)}
+            for row in log_result.scalars().all()
+        ]
 
     return {
         "current_window": _window_to_response(current) if current else None,
