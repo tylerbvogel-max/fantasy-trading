@@ -47,6 +47,27 @@ async def fetch_company_profile(symbol: str) -> dict | None:
     return None
 
 
+async def fetch_yahoo_volume(symbol: str) -> int | None:
+    """Fetch today's trading volume from Yahoo Finance (no API key needed)."""
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+                params={"interval": "1d", "range": "1d"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                return None
+            result = resp.json().get("chart", {}).get("result", [])
+            if not result:
+                return None
+            volumes = result[0].get("indicators", {}).get("quote", [{}])[0].get("volume", [])
+            return volumes[-1] if volumes and volumes[-1] is not None else None
+        except (httpx.RequestError, KeyError, IndexError):
+            return None
+
+
 async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | None:
     """Fetch latest price from Finnhub and update the database."""
     quote = await fetch_quote(symbol)
@@ -54,6 +75,7 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
         return None
 
     now = datetime.now(timezone.utc)
+    volume = await fetch_yahoo_volume(symbol)
     stock = await db.get(StockActive, symbol)
 
     if stock:
@@ -62,6 +84,8 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
         stock.high = quote.get("h")
         stock.low = quote.get("l")
         stock.change_pct = quote.get("dp")
+        if volume is not None:
+            stock.volume = volume
         stock.last_updated = now
     else:
         # Need company profile for name
@@ -74,6 +98,7 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
             high=quote.get("h"),
             low=quote.get("l"),
             change_pct=quote.get("dp"),
+            volume=volume,
             market_cap=profile.get("marketCapitalization") if profile else None,
             last_updated=now,
         )
