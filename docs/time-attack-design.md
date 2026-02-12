@@ -3,18 +3,41 @@
 ## Overview
 A prediction-based mini-game where players predict whether SPY will go up or down over 2-hour windows. Designed for high engagement, daily habit formation, and cross-selling into education modules. Entirely separate game mode from league/arena/classroom seasons.
 
+Currency: **Double Dollars ($$)** — inspired by Trigun's bounty economy.
+
+---
+
+## Theme & Flavor: Sci-Fi Western
+
+Time Attack has its own personality layered on top of the app's retro 80s aesthetic. The core metaphor: you're a bounty hunter chasing predictions for double dollars.
+
+| Game Concept | Time Attack Name |
+|---|---|
+| Currency | Double Dollars ($$) |
+| Prediction windows | Bounties |
+| Streak count | Wanted Level |
+| Confidence 1x | Draw |
+| Confidence 2x | Quick Draw |
+| Confidence 3x | Dead Eye |
+| Streak shield | Last Stand |
+| Daily recap (9 PM) | Sunset Report |
+| Leaderboard | The Bounty Board |
+| #1 on weekly board | Most Wanted |
+| Perfect day (6/6) | Ace Gunslinger (badge) |
+
 ---
 
 ## Core Mechanic
-- Every 2 hours during trading hours, players receive a push notification
+- Every 2 hours during trading hours, a new bounty is posted
+- Players receive a push notification
 - They see a chart (1-minute candles) for SPY
 - Swipe right/up = price goes up, swipe left/down = price goes down
-- Result is revealed at the next window
+- Result is revealed at the next bounty window
 
 ## Schedule
-Fixed 2-hour windows during extended beta trading hours (9:30 AM - 9:00 PM ET):
+Fixed 2-hour bounty windows during extended beta trading hours (9:30 AM - 9:00 PM ET):
 
-| Window | Time (ET) | Context |
+| Bounty | Time (ET) | Context |
 |--------|-----------|---------|
 | 1 | 10:00 AM | Morning — post-open volatility |
 | 2 | 12:00 PM | Midday — lunch break engagement |
@@ -23,28 +46,28 @@ Fixed 2-hour windows during extended beta trading hours (9:30 AM - 9:00 PM ET):
 | 5 | 6:00 PM | Evening — after-work wind-down |
 | 6 | 8:00 PM | Night — casual couch check |
 
-~6 predictions per day. Fixed times (not rolling) so users can build habits around them.
+~6 bounties per day. Fixed times (not rolling) so players can build habits around them.
 
 ## User Flow
-1. Push notification: "Time for your next prediction" + social proof ("72% of players predicted UP. What's your call?")
+1. Push notification: "A new bounty just posted. 72% of gunslingers are betting UP. What's your call?"
 2. Open app → immediately see result of last pick (dopamine hit first)
-3. New chart appears for current window
-4. Player chooses confidence tier (1x, 2x, or 3x)
+3. New chart appears for current bounty
+4. Player chooses confidence: Draw (1x), Quick Draw (2x), or Dead Eye (3x)
 5. Player swipes up (green) or down (red/pink)
-6. Confirmation: "Locked in! Result at [next window time]"
+6. Confirmation: "Locked in! Bounty closes at [next window time]"
 7. Post-swipe: possibly show education prompt (see Education Integration below)
-8. Close app, wait for next notification
-9. End of day (9 PM ET): daily recap notification — "You went 4/6 today. 67% accuracy. Streak: 3"
+8. Close app, wait for next bounty
+9. End of day — Sunset Report: "Today's haul: $$1,850. You went 4/6. Wanted Level: 3."
 
 ---
 
 ## Security Selection
 
 ### Initial Build: SPY Only
-All players predict the same security (SPY / S&P 500) for every window.
+All players predict the same security (SPY / S&P 500) for every bounty.
 
 **Why SPY only:**
-- **Shared experience** — everyone has the same game, same result. "Did you get the 2 o'clock right?" only works if everyone is looking at the same thing (the Wordle effect)
+- **Shared experience** — everyone has the same bounty, same result. "Did you get the 2 o'clock right?" only works if everyone is looking at the same thing (the Wordle effect)
 - **No gaming** — allowing individual tickers would let players find low-volatility ETFs or predictable dividend plays to farm easy streaks, outside the spirit of the game
 - **Minimal price data** — one symbol per window instead of hundreds. SPY is the most liquid security on earth, Finnhub will always have accurate pricing
 - **Zero choice paralysis** — open app, swipe, done
@@ -62,19 +85,19 @@ Cap at 3-4 max. Individual stocks should never be added — it fragments the com
 
 ## Scoring System
 
-### Base Points
-Points are earned or lost per pick based on confidence tier:
+### Base Double Dollars
+Double dollars are earned or lost per bounty based on confidence tier:
 
 | Confidence | Correct Pick | Wrong Pick |
 |---|---|---|
-| 1x (safe) | +100 | -50 |
-| 2x (confident) | +200 | -100 |
-| 3x (all-in) | +300 | -150 |
+| Draw (1x) | +$$100 | -$$50 |
+| Quick Draw (2x) | +$$200 | -$$100 |
+| Dead Eye (3x) | +$$300 | -$$150 |
 
-### Streak Multiplier
-Consecutive correct picks multiply the base points. A wrong pick resets the streak to 0.
+### Wanted Level (Streak Multiplier)
+Consecutive correct picks increase your Wanted Level, which multiplies earnings. A wrong pick resets your Wanted Level to 0.
 
-| Streak Length | Multiplier |
+| Wanted Level | Multiplier |
 |---|---|
 | 1 (first correct) | 1x |
 | 2 in a row | 2x |
@@ -83,157 +106,157 @@ Consecutive correct picks multiply the base points. A wrong pick resets the stre
 | 5 in a row | 5x |
 | 6 in a row | 6x |
 
-**Formula:** Points = (base points for confidence tier) x (streak multiplier)
+**Formula:** Earnings = (base $$ for confidence tier) x (Wanted Level)
 
-Wrong picks always cost the flat penalty (no streak multiplier on losses).
+Wrong picks always cost the flat penalty (Wanted Level does not multiply losses).
 
 ### Full Day Scoring Matrix
 
 #### Perfect Day — All 6 Correct
 
-| Window | Streak | 1x Confidence | 2x Confidence | 3x Confidence |
-|--------|--------|---------------|---------------|---------------|
-| 1 | 1x | 100 | 200 | 300 |
-| 2 | 2x | 200 | 400 | 600 |
-| 3 | 3x | 300 | 600 | 900 |
-| 4 | 4x | 400 | 800 | 1,200 |
-| 5 | 5x | 500 | 1,000 | 1,500 |
-| 6 | 6x | 600 | 1,200 | 1,800 |
-| **Total** | | **2,100** | **4,200** | **6,300** |
+| Bounty | Wanted Level | Draw (1x) | Quick Draw (2x) | Dead Eye (3x) |
+|--------|-------------|-----------|-----------------|----------------|
+| 1 | 1x | $$100 | $$200 | $$300 |
+| 2 | 2x | $$200 | $$400 | $$600 |
+| 3 | 3x | $$300 | $$600 | $$900 |
+| 4 | 4x | $$400 | $$800 | $$1,200 |
+| 5 | 5x | $$500 | $$1,000 | $$1,500 |
+| 6 | 6x | $$600 | $$1,200 | $$1,800 |
+| **Total** | | **$$2,100** | **$$4,200** | **$$6,300** |
 
 #### Worst Day — All 6 Wrong
 
-| Window | Streak | 1x Confidence | 2x Confidence | 3x Confidence |
-|--------|--------|---------------|---------------|---------------|
-| 1 | reset | -50 | -100 | -150 |
-| 2 | reset | -50 | -100 | -150 |
-| 3 | reset | -50 | -100 | -150 |
-| 4 | reset | -50 | -100 | -150 |
-| 5 | reset | -50 | -100 | -150 |
-| 6 | reset | -50 | -100 | -150 |
-| **Total** | | **-300** | **-600** | **-900** |
+| Bounty | Wanted Level | Draw (1x) | Quick Draw (2x) | Dead Eye (3x) |
+|--------|-------------|-----------|-----------------|----------------|
+| 1 | reset | -$$50 | -$$100 | -$$150 |
+| 2 | reset | -$$50 | -$$100 | -$$150 |
+| 3 | reset | -$$50 | -$$100 | -$$150 |
+| 4 | reset | -$$50 | -$$100 | -$$150 |
+| 5 | reset | -$$50 | -$$100 | -$$150 |
+| 6 | reset | -$$50 | -$$100 | -$$150 |
+| **Total** | | **-$$300** | **-$$600** | **-$$900** |
 
-#### Mixed Day — Correct Until Window 4, Then Wrong
+#### Mixed Day — Correct Until Bounty 4, Then Wrong
 
-| Window | Result | Streak | 1x | 2x | 3x |
-|--------|--------|--------|-----|-----|-----|
-| 1 | Correct | 1x | 100 | 200 | 300 |
-| 2 | Correct | 2x | 200 | 400 | 600 |
-| 3 | Correct | 3x | 300 | 600 | 900 |
-| 4 | Wrong | reset | -50 | -100 | -150 |
-| 5 | Correct | 1x | 100 | 200 | 300 |
-| 6 | Correct | 2x | 200 | 400 | 600 |
-| **Total** | | | **850** | **1,700** | **2,550** |
+| Bounty | Result | Wanted Level | Draw | Quick Draw | Dead Eye |
+|--------|--------|-------------|------|------------|----------|
+| 1 | Correct | 1x | $$100 | $$200 | $$300 |
+| 2 | Correct | 2x | $$200 | $$400 | $$600 |
+| 3 | Correct | 3x | $$300 | $$600 | $$900 |
+| 4 | Wrong | reset | -$$50 | -$$100 | -$$150 |
+| 5 | Correct | 1x | $$100 | $$200 | $$300 |
+| 6 | Correct | 2x | $$200 | $$400 | $$600 |
+| **Total** | | | **$$850** | **$$1,700** | **$$2,550** |
 
 #### Alternating Day — Right, Wrong, Right, Wrong...
 
-| Window | Result | Streak | 1x | 2x | 3x |
-|--------|--------|--------|-----|-----|-----|
-| 1 | Correct | 1x | 100 | 200 | 300 |
-| 2 | Wrong | reset | -50 | -100 | -150 |
-| 3 | Correct | 1x | 100 | 200 | 300 |
-| 4 | Wrong | reset | -50 | -100 | -150 |
-| 5 | Correct | 1x | 100 | 200 | 300 |
-| 6 | Wrong | reset | -50 | -100 | -150 |
-| **Total** | | | **150** | **300** | **450** |
+| Bounty | Result | Wanted Level | Draw | Quick Draw | Dead Eye |
+|--------|--------|-------------|------|------------|----------|
+| 1 | Correct | 1x | $$100 | $$200 | $$300 |
+| 2 | Wrong | reset | -$$50 | -$$100 | -$$150 |
+| 3 | Correct | 1x | $$100 | $$200 | $$300 |
+| 4 | Wrong | reset | -$$50 | -$$100 | -$$150 |
+| 5 | Correct | 1x | $$100 | $$200 | $$300 |
+| 6 | Wrong | reset | -$$50 | -$$100 | -$$150 |
+| **Total** | | | **$$150** | **$$300** | **$$450** |
 
-#### Strategic Day — Low Confidence When Unsure, High When Confident (realistic play)
+#### Strategic Day — Mixed Confidence (Realistic Play)
 
-| Window | Result | Confidence | Streak | Points |
-|--------|--------|-----------|--------|--------|
-| 1 | Correct | 1x (unsure) | 1x | 100 |
-| 2 | Correct | 2x (feeling it) | 2x | 400 |
-| 3 | Correct | 3x (on a roll) | 3x | 900 |
-| 4 | Wrong | 1x (hedged) | reset | -50 |
-| 5 | Correct | 1x (cautious) | 1x | 100 |
-| 6 | Correct | 2x (building back) | 2x | 400 |
-| **Total** | | | | **1,850** |
+| Bounty | Result | Confidence | Wanted Level | Earnings |
+|--------|--------|-----------|-------------|----------|
+| 1 | Correct | Draw (unsure) | 1x | $$100 |
+| 2 | Correct | Quick Draw (feeling it) | 2x | $$400 |
+| 3 | Correct | Dead Eye (on a roll) | 3x | $$900 |
+| 4 | Wrong | Draw (hedged) | reset | -$$50 |
+| 5 | Correct | Draw (cautious) | 1x | $$100 |
+| 6 | Correct | Quick Draw (building back) | 2x | $$400 |
+| **Total** | | | | **$$1,850** |
 
 ### Key Takeaways from the Matrix
-- **Perfect 3x day (6,300) vs worst 3x day (-900):** A 7,200 point swing. High confidence is high stakes.
-- **Perfect 1x day (2,100) vs worst 1x day (-300):** Only a 2,400 point swing. Safe play is consistent.
-- **Streaks matter more than confidence:** A 6-streak at 1x (600 pts) beats a fresh pick at 3x (300 pts). This rewards consistency over gambling.
-- **Strategic confidence mixing (1,850)** is competitive with constant 2x (1,700 in the mixed scenario) — rewarding players who read the market and adjust.
-- **Losses are capped:** The worst possible day (-900) is only ~14% of the best possible day (6,300). Players can never lose catastrophically.
+- **Perfect Dead Eye day ($$6,300) vs worst Dead Eye day (-$$900):** A $$7,200 swing. Dead Eye is high stakes.
+- **Perfect Draw day ($$2,100) vs worst Draw day (-$$300):** Only a $$2,400 swing. Draw is consistent.
+- **Wanted Level matters more than confidence:** A Wanted Level 6 Draw ($$600) beats a fresh Dead Eye ($$300). This rewards consistency over gambling.
+- **Strategic confidence mixing ($$1,850)** is competitive with constant Quick Draw ($$1,700 in the mixed scenario) — rewarding players who read the market and adjust.
+- **Losses are capped:** The worst possible day (-$$900) is only ~14% of the best possible day ($$6,300). Players can never lose catastrophically.
 
 ### Score Storage
-Points are tracked as a standalone Time Attack score, separate from season portfolios. No cash injection into seasons — Time Attack is its own game mode with its own scoring. Score persists and accumulates over time for leaderboard ranking.
+Double dollars are tracked as a standalone Time Attack score, separate from season portfolios. No cash injection into seasons — Time Attack is its own game mode with its own economy. Score persists and accumulates over time for Bounty Board ranking.
 
 ---
 
-## Streak Shield (Under Review)
+## Last Stand (Streak Shield — Under Review)
 
-The streak shield concept: at 5+ streak, player earns a one-time shield that protects their streak multiplier on the next wrong pick (they still lose the flat penalty, but the multiplier doesn't reset).
+The Last Stand concept: at Wanted Level 5+, player earns a one-time shield that protects their Wanted Level on the next wrong pick (they still lose the flat $$ penalty, but the Wanted Level doesn't reset).
 
 **How it would interact with scoring:**
 
-Without shield — 5-streak, wrong pick at 2x:
-- Points: -100, streak resets to 0
-- Next correct pick starts at 1x again
+Without Last Stand — Wanted Level 5, wrong pick at Quick Draw:
+- Earnings: -$$100, Wanted Level resets to 0
+- Next correct pick starts at Wanted Level 1 again
 
-With shield — 5-streak, wrong pick at 2x:
-- Points: -100 (penalty still applies)
-- Shield consumed, streak stays at 5
-- Next correct pick earns at 6x multiplier
+With Last Stand — Wanted Level 5, wrong pick at Quick Draw:
+- Earnings: -$$100 (penalty still applies)
+- Last Stand consumed, Wanted Level stays at 5
+- Next correct pick earns at Wanted Level 6
 
-**Impact:** The shield's value scales with streak length. At streak 5, the shield preserves a 5x multiplier that would otherwise reset to 1x. This means the next correct pick at 3x confidence would earn 1,800 instead of 300 — a 1,500 point difference. This is powerful and may need balancing.
+**Impact:** Last Stand's value scales with Wanted Level. At level 5, it preserves a 5x multiplier that would otherwise reset to 1x. This means the next correct Dead Eye pick would earn $$1,800 instead of $$300 — a $$1,500 difference. This is powerful and may need balancing.
 
-**Decision:** Revisit after playtesting the base scoring system. The shield may be more appropriate as a rare reward or monetization feature than an automatic earn.
+**Decision:** Revisit after playtesting the base scoring system. Last Stand may be more appropriate as a rare reward or monetization feature than an automatic earn.
 
 ---
 
-## Leaderboard
+## The Bounty Board (Leaderboard)
 
 Entirely separate from league/arena/classroom leaderboards. Different game mode, different architecture.
 
-- **Weekly leaderboard:** Resets every Monday. Total points earned that week.
-- **All-time leaderboard:** Cumulative score since player started Time Attack.
-- **Accuracy ranking:** Win rate percentage (minimum 20 picks to qualify).
+- **Weekly Bounty Board:** Resets every Monday. Total $$ earned that week. #1 each week earns the **"Most Wanted"** title.
+- **All-Time Bounty Board:** Cumulative $$ since player started Time Attack.
+- **Accuracy ranking:** Win rate percentage (minimum 20 bounties to qualify).
 - **Badge system:**
-  - "Sharp Eye" — 70%+ accuracy over 50 picks
-  - "Hot Streak" — 10 correct in a row
-  - "Perfect Day" — 6/6 in one day
+  - **"Sharp Eye"** — 70%+ accuracy over 50 bounties
+  - **"Hot Streak"** — Wanted Level 10 (10 correct in a row)
+  - **"Ace Gunslinger"** — Perfect day, 6/6 bounties
 
 ---
 
 ## Notification Loop (Key Engagement Driver)
 
-### Prediction Window Push
+### Bounty Alert
 - Sent at each 2-hour window
-- Includes social proof: "72% of players predicted UP for this window. What's your call?"
+- "A new bounty just posted. 72% of gunslingers are betting UP. What's your call?"
 - Creates urgency (am I contrarian or going with the crowd?) and makes player feel part of something bigger
 
-### Daily Recap Push (9 PM ET)
-- Summary of the day: "You went 4/6 today. 67% accuracy. Your streak is at 3."
+### Sunset Report (9 PM ET)
+- "Today's haul: $$1,850. You went 4/6. Wanted Level: 3."
 - Closes the loop so the day feels complete
-- Teases tomorrow: "Can I keep this streak going?" is the thought they go to bed with
+- Teases tomorrow: "Can I keep this Wanted Level going?" is the thought they go to bed with
 
-### Missed Window Handling
-- If a player misses a prediction window, skip it — no penalty, no streak break
+### Missed Bounty Handling
+- If a player misses a bounty window, skip it — no penalty, no Wanted Level break
 - Rationale: punishing absence causes players who miss one window to give up on the rest of the day
-- Forgiving missed windows keeps the notification loop alive — a player who misses 10 AM can still jump in at noon
+- Forgiving missed bounties keeps the notification loop alive — a player who misses 10 AM can still jump in at noon
 
 ### Re-Engagement for Lapsed Players
 For players who drop out for 2+ days due to real-life circumstances:
 
-- **"Welcome Back" Streak Starter:** First correct pick after 2+ days of inactivity starts at 2x streak multiplier instead of 1x. Lowers the barrier to return — they don't feel like they're starting from zero.
-- **Weekly Digest (even if inactive):** A single push every Sunday evening: "SPY moved +2.3% this week. 61% of players predicted correctly. Your streak is waiting." Low pressure, no guilt, keeps the app in mind.
-- **Decay, Not Delete:** Never wipe historical stats or leaderboard position while away. When they come back, they see "You're #7 on the weekly board" — that's motivation to climb, not discouragement. Weekly board resets naturally on Monday, so returning on any Monday feels like a fresh start.
-- **Notification Tapering:** If a player hasn't engaged in 3+ days, reduce prediction window pushes to once per day (the best window — typically noon or 4 PM). Prevents notification fatigue that leads to app deletion. If no engagement after 7 days, stop prediction pushes entirely and only send the weekly digest.
+- **"Welcome Back" Boost:** First correct pick after 2+ days of inactivity starts at Wanted Level 2 instead of 1. Lowers the barrier to return — they don't feel like they're starting from zero.
+- **Weekly Digest (even if inactive):** A single push every Sunday evening: "SPY moved +2.3% this week. 61% of gunslingers predicted correctly. The bounty board is waiting." Low pressure, no guilt, keeps the app in mind.
+- **Decay, Not Delete:** Never wipe historical stats or Bounty Board position while away. When they come back, they see "You're #7 on the board" — that's motivation to climb, not discouragement. Weekly board resets naturally on Monday, so returning on any Monday feels like a fresh start.
+- **Notification Tapering:** If a player hasn't engaged in 3+ days, reduce bounty alerts to once per day (the best window — typically noon or 4 PM). Prevents notification fatigue that leads to app deletion. If no engagement after 7 days, stop bounty alerts entirely and only send the weekly digest.
 
 ---
 
 ## Education Integration
 
 ### Reward Connection
-Correct predictions and streak milestones increase the probability of receiving a learning prompt. The education modules are the primary cross-sell from Time Attack — not cash or trading perks.
+Correct predictions and Wanted Level milestones increase the probability of receiving a learning prompt. The education modules are the primary cross-sell from Time Attack — not cash or trading perks.
 
 ### Post-Swipe Quiz Prompt
-After a player locks in their prediction (step 6 above), optionally show a prompt to take a quick quiz. Framing: "Sharpen your edge?" or "Quick challenge?" — always dismissible.
+After a player locks in their prediction (step 6 above), optionally show a prompt to take a quick quiz. Framing: "Sharpen your edge, gunslinger?" or "Quick challenge?" — always dismissible.
 
 ### Timing Rules
 - **Show after swipe** (waiting for result) — this is dead time, perfect for engagement
-- **Never show before result** — users came back to see their pick, don't gate it
+- **Never show before result** — players came back to see their bounty, don't gate it
 - **Never show twice in a row** — prevents fatigue
 
 ### Context-Aware Topic Mapping
@@ -243,8 +266,8 @@ Tie the quiz topic to the player's current state:
 |---|---|
 | General SPY prediction | Market Fundamentals, Diversification |
 | Player picked "down" | Risk Management, Bear Markets |
-| Player is on a streak | Trading Psychology, Behavioral Finance |
-| Player just broke a streak | Loss Aversion, Emotional Trading |
+| Player is on a Wanted Level streak | Trading Psychology, Behavioral Finance |
+| Player just lost their Wanted Level | Loss Aversion, Emotional Trading |
 
 Implementation: a config lookup table of `prediction_context -> [eligible_topic_ids]`, then pick one at random from the eligible list.
 
@@ -266,25 +289,25 @@ A simpler, once-per-day prediction alongside Time Attack:
 - Predict SPY up or down for the full trading day (open to close)
 - Free for everyone, low stakes
 - Social sharing hook: "Did you pick up or down today?"
-- Serves as the "free drink" that gets users in the door; Time Attack is the table they sit down at
+- Serves as the "free drink" that gets you in the saloon; Time Attack is the table you sit down at
 
 ---
 
 ## Monetization Notes
 - 6 touchpoints per day creates viable ad/engagement surface
-- Confidence tiers create premium feature potential (e.g., unlock 3x tier)
-- Streak shields — potential IAP item (under review, see Streak Shield section)
+- Confidence tiers create premium feature potential (e.g., unlock Dead Eye as premium)
+- Last Stand — potential IAP item (under review, see Last Stand section)
 - Daily Call (free) funnels into Time Attack (engagement driver)
 
 ---
 
 ## Technical Considerations (for later)
 - Push notification infrastructure (Expo Notifications)
-- Price data: only need SPY quotes at window boundaries (minimal API load)
-- New DB models: prediction records, streaks, shields, Time Attack score, Time Attack leaderboard
+- Price data: only need SPY quotes at bounty window boundaries (minimal API load)
+- New DB models: bounty records, Wanted Level, Last Stand, double dollar balance, Bounty Board
 - Entirely separate from existing season/portfolio architecture — no shared models
 - Quiz topic mapping table
-- Social proof aggregation: track prediction distribution per window
+- Social proof aggregation: track prediction distribution per bounty window
 - Notification tapering logic for lapsed players
 
 ---
