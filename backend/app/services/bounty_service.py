@@ -48,7 +48,12 @@ async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
     # Check if there's already an active window
     current = await get_current_window(db)
     if current:
-        return [current]
+        # If the window duration doesn't match config, settle it (leftover from old schedule)
+        window_minutes = (current.end_time - current.start_time).total_seconds() / 60
+        if abs(window_minutes - WINDOW_DURATION_MINUTES) > 1:
+            await settle_window(db, current.id)
+        else:
+            return [current]
 
     # Create a new window aligned to WINDOW_DURATION_MINUTES boundaries
     minutes_since_midnight = now_et.hour * 60 + now_et.minute
