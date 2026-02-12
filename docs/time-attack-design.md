@@ -1,7 +1,7 @@
 # Time Attack Mode — Design Doc
 
 ## Overview
-A prediction-based mini-game where players predict whether SPY will go up or down over 2-hour windows. Designed for high engagement, daily habit formation, and cross-selling into education modules.
+A prediction-based mini-game where players predict whether SPY will go up or down over 2-hour windows. Designed for high engagement, daily habit formation, and cross-selling into education modules. Entirely separate game mode from league/arena/classroom seasons.
 
 ---
 
@@ -29,8 +29,8 @@ Fixed 2-hour windows during extended beta trading hours (9:30 AM - 9:00 PM ET):
 1. Push notification: "Time for your next prediction" + social proof ("72% of players predicted UP. What's your call?")
 2. Open app → immediately see result of last pick (dopamine hit first)
 3. New chart appears for current window
-4. Player swipes up (green) or down (red/pink)
-5. Optional: confidence tier selection (1x, 2x, 3x) before confirming
+4. Player chooses confidence tier (1x, 2x, or 3x)
+5. Player swipes up (green) or down (red/pink)
 6. Confirmation: "Locked in! Result at [next window time]"
 7. Post-swipe: possibly show education prompt (see Education Integration below)
 8. Close app, wait for next notification
@@ -60,37 +60,139 @@ Cap at 3-4 max. Individual stocks should never be added — it fragments the com
 
 ---
 
-## Reward System
+## Scoring System
 
-### Cash Injection (Primary)
-- Correct pick earns bonus virtual cash added to season portfolio
-- Base reward: ~$100 per correct pick
-- Streak multiplier: 2 correct in a row = 2x, 3 = 3x, etc.
-- Wrong pick resets streak and multiplier
+### Base Points
+Points are earned or lost per pick based on confidence tier:
 
-### Risk/Reward Confidence Tiers
-- Before confirming each swipe, player can choose: 1x, 2x, or 3x confidence
-- Higher confidence = more points/cash if right, bigger penalty if wrong
-- Adds strategy layer beyond binary up/down
-- "I'm really sure about this one" vs "no idea, playing it safe"
+| Confidence | Correct Pick | Wrong Pick |
+|---|---|---|
+| 1x (safe) | +100 | -50 |
+| 2x (confident) | +200 | -100 |
+| 3x (all-in) | +300 | -150 |
 
-### Streak Shield
-- If a player has a 5+ streak, they earn a one-time "shield"
-- Shield protects their streak multiplier on the next wrong pick (they still lose points for that pick, but the multiplier doesn't reset)
-- Creates loss aversion: "I have a shield, I can't waste it, I need to keep playing"
-- Natural monetization point later (buy extra shields via IAP)
+### Streak Multiplier
+Consecutive correct picks multiply the base points. A wrong pick resets the streak to 0.
 
-### Standalone Leaderboard
-- Separate "Prediction Accuracy" ranking
-- Weekly/monthly win rate tracked
-- Badge system:
+| Streak Length | Multiplier |
+|---|---|
+| 1 (first correct) | 1x |
+| 2 in a row | 2x |
+| 3 in a row | 3x |
+| 4 in a row | 4x |
+| 5 in a row | 5x |
+| 6 in a row | 6x |
+
+**Formula:** Points = (base points for confidence tier) x (streak multiplier)
+
+Wrong picks always cost the flat penalty (no streak multiplier on losses).
+
+### Full Day Scoring Matrix
+
+#### Perfect Day — All 6 Correct
+
+| Window | Streak | 1x Confidence | 2x Confidence | 3x Confidence |
+|--------|--------|---------------|---------------|---------------|
+| 1 | 1x | 100 | 200 | 300 |
+| 2 | 2x | 200 | 400 | 600 |
+| 3 | 3x | 300 | 600 | 900 |
+| 4 | 4x | 400 | 800 | 1,200 |
+| 5 | 5x | 500 | 1,000 | 1,500 |
+| 6 | 6x | 600 | 1,200 | 1,800 |
+| **Total** | | **2,100** | **4,200** | **6,300** |
+
+#### Worst Day — All 6 Wrong
+
+| Window | Streak | 1x Confidence | 2x Confidence | 3x Confidence |
+|--------|--------|---------------|---------------|---------------|
+| 1 | reset | -50 | -100 | -150 |
+| 2 | reset | -50 | -100 | -150 |
+| 3 | reset | -50 | -100 | -150 |
+| 4 | reset | -50 | -100 | -150 |
+| 5 | reset | -50 | -100 | -150 |
+| 6 | reset | -50 | -100 | -150 |
+| **Total** | | **-300** | **-600** | **-900** |
+
+#### Mixed Day — Correct Until Window 4, Then Wrong
+
+| Window | Result | Streak | 1x | 2x | 3x |
+|--------|--------|--------|-----|-----|-----|
+| 1 | Correct | 1x | 100 | 200 | 300 |
+| 2 | Correct | 2x | 200 | 400 | 600 |
+| 3 | Correct | 3x | 300 | 600 | 900 |
+| 4 | Wrong | reset | -50 | -100 | -150 |
+| 5 | Correct | 1x | 100 | 200 | 300 |
+| 6 | Correct | 2x | 200 | 400 | 600 |
+| **Total** | | | **850** | **1,700** | **2,550** |
+
+#### Alternating Day — Right, Wrong, Right, Wrong...
+
+| Window | Result | Streak | 1x | 2x | 3x |
+|--------|--------|--------|-----|-----|-----|
+| 1 | Correct | 1x | 100 | 200 | 300 |
+| 2 | Wrong | reset | -50 | -100 | -150 |
+| 3 | Correct | 1x | 100 | 200 | 300 |
+| 4 | Wrong | reset | -50 | -100 | -150 |
+| 5 | Correct | 1x | 100 | 200 | 300 |
+| 6 | Wrong | reset | -50 | -100 | -150 |
+| **Total** | | | **150** | **300** | **450** |
+
+#### Strategic Day — Low Confidence When Unsure, High When Confident (realistic play)
+
+| Window | Result | Confidence | Streak | Points |
+|--------|--------|-----------|--------|--------|
+| 1 | Correct | 1x (unsure) | 1x | 100 |
+| 2 | Correct | 2x (feeling it) | 2x | 400 |
+| 3 | Correct | 3x (on a roll) | 3x | 900 |
+| 4 | Wrong | 1x (hedged) | reset | -50 |
+| 5 | Correct | 1x (cautious) | 1x | 100 |
+| 6 | Correct | 2x (building back) | 2x | 400 |
+| **Total** | | | | **1,850** |
+
+### Key Takeaways from the Matrix
+- **Perfect 3x day (6,300) vs worst 3x day (-900):** A 7,200 point swing. High confidence is high stakes.
+- **Perfect 1x day (2,100) vs worst 1x day (-300):** Only a 2,400 point swing. Safe play is consistent.
+- **Streaks matter more than confidence:** A 6-streak at 1x (600 pts) beats a fresh pick at 3x (300 pts). This rewards consistency over gambling.
+- **Strategic confidence mixing (1,850)** is competitive with constant 2x (1,700 in the mixed scenario) — rewarding players who read the market and adjust.
+- **Losses are capped:** The worst possible day (-900) is only ~14% of the best possible day (6,300). Players can never lose catastrophically.
+
+### Score Storage
+Points are tracked as a standalone Time Attack score, separate from season portfolios. No cash injection into seasons — Time Attack is its own game mode with its own scoring. Score persists and accumulates over time for leaderboard ranking.
+
+---
+
+## Streak Shield (Under Review)
+
+The streak shield concept: at 5+ streak, player earns a one-time shield that protects their streak multiplier on the next wrong pick (they still lose the flat penalty, but the multiplier doesn't reset).
+
+**How it would interact with scoring:**
+
+Without shield — 5-streak, wrong pick at 2x:
+- Points: -100, streak resets to 0
+- Next correct pick starts at 1x again
+
+With shield — 5-streak, wrong pick at 2x:
+- Points: -100 (penalty still applies)
+- Shield consumed, streak stays at 5
+- Next correct pick earns at 6x multiplier
+
+**Impact:** The shield's value scales with streak length. At streak 5, the shield preserves a 5x multiplier that would otherwise reset to 1x. This means the next correct pick at 3x confidence would earn 1,800 instead of 300 — a 1,500 point difference. This is powerful and may need balancing.
+
+**Decision:** Revisit after playtesting the base scoring system. The shield may be more appropriate as a rare reward or monetization feature than an automatic earn.
+
+---
+
+## Leaderboard
+
+Entirely separate from league/arena/classroom leaderboards. Different game mode, different architecture.
+
+- **Weekly leaderboard:** Resets every Monday. Total points earned that week.
+- **All-time leaderboard:** Cumulative score since player started Time Attack.
+- **Accuracy ranking:** Win rate percentage (minimum 20 picks to qualify).
+- **Badge system:**
   - "Sharp Eye" — 70%+ accuracy over 50 picks
   - "Hot Streak" — 10 correct in a row
   - "Perfect Day" — 6/6 in one day
-
-### Trading Perks (Future)
-- Streak of 5+ unlocks extended trading hours for that day
-- Perfect day (6/6) unlocks a "free trade" that doesn't count toward trade limits
 
 ---
 
@@ -111,9 +213,20 @@ Cap at 3-4 max. Individual stocks should never be added — it fragments the com
 - Rationale: punishing absence causes players who miss one window to give up on the rest of the day
 - Forgiving missed windows keeps the notification loop alive — a player who misses 10 AM can still jump in at noon
 
+### Re-Engagement for Lapsed Players
+For players who drop out for 2+ days due to real-life circumstances:
+
+- **"Welcome Back" Streak Starter:** First correct pick after 2+ days of inactivity starts at 2x streak multiplier instead of 1x. Lowers the barrier to return — they don't feel like they're starting from zero.
+- **Weekly Digest (even if inactive):** A single push every Sunday evening: "SPY moved +2.3% this week. 61% of players predicted correctly. Your streak is waiting." Low pressure, no guilt, keeps the app in mind.
+- **Decay, Not Delete:** Never wipe historical stats or leaderboard position while away. When they come back, they see "You're #7 on the weekly board" — that's motivation to climb, not discouragement. Weekly board resets naturally on Monday, so returning on any Monday feels like a fresh start.
+- **Notification Tapering:** If a player hasn't engaged in 3+ days, reduce prediction window pushes to once per day (the best window — typically noon or 4 PM). Prevents notification fatigue that leads to app deletion. If no engagement after 7 days, stop prediction pushes entirely and only send the weekly digest.
+
 ---
 
 ## Education Integration
+
+### Reward Connection
+Correct predictions and streak milestones increase the probability of receiving a learning prompt. The education modules are the primary cross-sell from Time Attack — not cash or trading perks.
 
 ### Post-Swipe Quiz Prompt
 After a player locks in their prediction (step 6 above), optionally show a prompt to take a quick quiz. Framing: "Sharpen your edge?" or "Quick challenge?" — always dismissible.
@@ -160,7 +273,7 @@ A simpler, once-per-day prediction alongside Time Attack:
 ## Monetization Notes
 - 6 touchpoints per day creates viable ad/engagement surface
 - Confidence tiers create premium feature potential (e.g., unlock 3x tier)
-- Streak shields — earn one at 5+ streak, buy extras via IAP
+- Streak shields — potential IAP item (under review, see Streak Shield section)
 - Daily Call (free) funnels into Time Attack (engagement driver)
 
 ---
@@ -168,10 +281,11 @@ A simpler, once-per-day prediction alongside Time Attack:
 ## Technical Considerations (for later)
 - Push notification infrastructure (Expo Notifications)
 - Price data: only need SPY quotes at window boundaries (minimal API load)
-- New DB models: prediction records, streaks, shields, Time Attack leaderboard
-- Separate from existing season/portfolio architecture
+- New DB models: prediction records, streaks, shields, Time Attack score, Time Attack leaderboard
+- Entirely separate from existing season/portfolio architecture — no shared models
 - Quiz topic mapping table
 - Social proof aggregation: track prediction distribution per window
+- Notification tapering logic for lapsed players
 
 ---
 
