@@ -89,7 +89,11 @@ export default function TimeAttackScreen() {
           Alert.alert("Locked In!", data.message);
         },
         onError: (error) => {
-          Alert.alert("Error", error.message);
+          if (error.message?.includes("not currently active")) {
+            refetch();
+          } else {
+            Alert.alert("Error", error.message);
+          }
         },
       }
     );
