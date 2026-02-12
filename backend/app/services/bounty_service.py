@@ -19,9 +19,8 @@ BASE_PENALTY = {1: -50, 2: -100, 3: -150}
 WANTED_LEVEL_CAP = 10
 CONFIDENCE_LABELS = {1: "Draw", 2: "Quick Draw", 3: "Dead Eye"}
 
-# 6 bounty windows per day (ET hours) — starts at 9 AM to catch market open
-WINDOW_SCHEDULE = [(9, 0), (11, 0), (13, 0), (15, 0), (17, 0), (19, 0)]
-PREDICTION_WINDOW_MINUTES = 90  # 1.5 hours for beta testing (will tighten later)
+# Rolling window duration (set to 2 for rapid testing, 120 for production)
+WINDOW_DURATION_MINUTES = 2
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
@@ -32,44 +31,62 @@ class BountyError(Exception):
 
 
 async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
-    """Create 6 bounty windows for today if they don't exist. Skips weekends."""
+    """Ensure a current rolling window exists. Auto-settle any expired unsettled windows."""
     now_et = datetime.now(ET)
+    now_utc = datetime.now(timezone.utc)
     today = now_et.date()
 
-    # Skip weekends
-    if today.weekday() >= 5:
-        return []
-
-    # Check if windows already exist
+    # Auto-settle any expired, unsettled windows
     result = await db.execute(
         select(BountyWindow)
-        .where(BountyWindow.window_date == today)
-        .order_by(BountyWindow.window_index)
+        .where(BountyWindow.end_time <= now_utc, BountyWindow.is_settled == False)
     )
-    existing = list(result.scalars().all())
-    if existing:
-        return existing
+    unsettled = list(result.scalars().all())
+    for w in unsettled:
+        await settle_window(db, w.id)
 
-    windows = []
-    for i, (hour, minute) in enumerate(WINDOW_SCHEDULE, start=1):
-        start_dt = datetime.combine(today, time(hour, minute), tzinfo=ET)
-        end_hour, end_minute = WINDOW_SCHEDULE[i] if i < len(WINDOW_SCHEDULE) else (22, 0)
-        end_dt = datetime.combine(today, time(end_hour, end_minute), tzinfo=ET)
+    # Check if there's already an active window
+    current = await get_current_window(db)
+    if current:
+        return [current]
 
-        window = BountyWindow(
-            id=uuid.uuid4(),
-            window_date=today,
-            window_index=i,
-            start_time=start_dt,
-            end_time=end_dt,
+    # Create a new window aligned to WINDOW_DURATION_MINUTES boundaries
+    minutes_since_midnight = now_et.hour * 60 + now_et.minute
+    slot_start_minutes = (minutes_since_midnight // WINDOW_DURATION_MINUTES) * WINDOW_DURATION_MINUTES
+    slot_hour = slot_start_minutes // 60
+    slot_minute = slot_start_minutes % 60
+
+    start_dt = datetime.combine(today, time(slot_hour, slot_minute), tzinfo=ET)
+    end_dt = start_dt + timedelta(minutes=WINDOW_DURATION_MINUTES)
+
+    # Check if this exact window already exists (was just settled)
+    existing = await db.execute(
+        select(BountyWindow).where(
+            BountyWindow.window_date == today,
+            BountyWindow.start_time == start_dt,
         )
-        db.add(window)
-        windows.append(window)
+    )
+    if existing.scalars().first():
+        # Window for this slot already ran — wait for next slot
+        return []
 
+    # Get next window_index for today
+    count_result = await db.execute(
+        select(func.count(BountyWindow.id)).where(BountyWindow.window_date == today)
+    )
+    next_index = (count_result.scalar() or 0) + 1
+
+    window = BountyWindow(
+        id=uuid.uuid4(),
+        window_date=today,
+        window_index=next_index,
+        start_time=start_dt,
+        end_time=end_dt,
+    )
+    db.add(window)
     await db.commit()
-    for w in windows:
-        await db.refresh(w)
-    return windows
+    await db.refresh(window)
+    return [window]
 
 
 async def get_current_window(db: AsyncSession) -> BountyWindow | None:
@@ -97,23 +114,21 @@ async def get_previous_window(db: AsyncSession) -> BountyWindow | None:
 
 
 def get_next_window_time() -> datetime | None:
-    """Calculate the next window start time from WINDOW_SCHEDULE."""
+    """Calculate the next rolling window start time."""
     now_et = datetime.now(ET)
     today = now_et.date()
 
-    # Check remaining windows today
-    for hour, minute in WINDOW_SCHEDULE:
-        window_start = datetime.combine(today, time(hour, minute), tzinfo=ET)
-        if window_start > now_et:
-            return window_start
+    # Next window starts at the next WINDOW_DURATION_MINUTES boundary
+    minutes_since_midnight = now_et.hour * 60 + now_et.minute
+    next_slot_minutes = ((minutes_since_midnight // WINDOW_DURATION_MINUTES) + 1) * WINDOW_DURATION_MINUTES
+    next_hour = next_slot_minutes // 60
+    next_minute = next_slot_minutes % 60
 
-    # Next business day
-    next_day = today + timedelta(days=1)
-    while next_day.weekday() >= 5:
-        next_day += timedelta(days=1)
+    if next_hour >= 24:
+        next_day = today + timedelta(days=1)
+        return datetime.combine(next_day, time(0, 0), tzinfo=ET)
 
-    first_hour, first_minute = WINDOW_SCHEDULE[0]
-    return datetime.combine(next_day, time(first_hour, first_minute), tzinfo=ET)
+    return datetime.combine(today, time(next_hour, next_minute), tzinfo=ET)
 
 
 async def get_or_create_player_stats(db: AsyncSession, user_id: uuid.UUID) -> BountyPlayerStats:
@@ -146,11 +161,6 @@ async def submit_prediction(
     now = datetime.now(timezone.utc)
     if now < window.start_time or now >= window.end_time:
         raise BountyError("This bounty window is not currently active")
-
-    # Prediction cutoff disabled for beta testing
-    # prediction_cutoff = window.start_time + timedelta(minutes=PREDICTION_WINDOW_MINUTES)
-    # if now >= prediction_cutoff:
-    #     raise BountyError("Prediction window closed — picks are locked after the first 30 minutes")
 
     if window.is_settled:
         raise BountyError("This bounty window has already been settled")
@@ -282,14 +292,12 @@ def _pick_to_response(pred: BountyPrediction) -> dict:
 
 def _window_to_response(window: BountyWindow) -> dict:
     """Convert a window to response dict."""
-    prediction_cutoff = window.start_time + timedelta(minutes=PREDICTION_WINDOW_MINUTES)
     return {
         "id": window.id,
         "window_date": window.window_date,
         "window_index": window.window_index,
         "start_time": window.start_time,
         "end_time": window.end_time,
-        "prediction_cutoff": prediction_cutoff,
         "spy_open_price": float(window.spy_open_price) if window.spy_open_price else None,
         "spy_close_price": float(window.spy_close_price) if window.spy_close_price else None,
         "result": window.result,
@@ -340,11 +348,12 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         if pred:
             previous_pick = _pick_to_response(pred)
 
-    # Fetch SPY candles for the current window timeframe
+    # Fetch SPY candles — show the last hour of trading for context
     candles = []
     if current and current.start_time:
-        from_ts = int(current.start_time.timestamp())
-        to_ts = int(datetime.now(timezone.utc).timestamp())
+        now_utc = datetime.now(timezone.utc)
+        from_ts = int((now_utc - timedelta(hours=1)).timestamp())
+        to_ts = int(now_utc.timestamp())
         candles = await fetch_spy_candles(from_ts, to_ts)
 
     return {
@@ -429,7 +438,7 @@ async def fetch_spy_candles(from_ts: int, to_ts: int) -> list[dict]:
                 f"{FINNHUB_BASE}/stock/candle",
                 params={
                     "symbol": "SPY",
-                    "resolution": "5",
+                    "resolution": "1",
                     "from": from_ts,
                     "to": to_ts,
                     "token": settings.finnhub_api_key,
@@ -462,8 +471,7 @@ async def get_prediction_history(
     return [_pick_to_response(p) for p in predictions]
 
 
-# Time slot labels matching WINDOW_SCHEDULE
-TIME_SLOT_LABELS = {1: "9 AM", 2: "11 AM", 3: "1 PM", 4: "3 PM", 5: "5 PM", 6: "7 PM"}
+# Time slot stats are grouped by hour for display
 
 
 async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
@@ -503,10 +511,11 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
             })
     confidence_stats.sort(key=lambda c: c["confidence"])
 
-    # --- Time slot stats ---
+    # --- Time slot stats (grouped by hour of day) ---
+    hour_extract = func.extract("hour", BountyWindow.start_time).cast(Integer)
     slot_result = await db.execute(
         select(
-            BountyWindow.window_index,
+            hour_extract.label("hour"),
             func.count(BountyPrediction.id).label("total"),
             func.count(BountyPrediction.id).filter(
                 BountyPrediction.is_correct == True
@@ -514,28 +523,22 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         )
         .join(BountyWindow, BountyPrediction.bounty_window_id == BountyWindow.id)
         .where(BountyPrediction.user_id == user_id, BountyPrediction.is_correct.isnot(None))
-        .group_by(BountyWindow.window_index)
+        .group_by(hour_extract)
+        .order_by(hour_extract)
     )
     time_slot_stats = []
-    for row in slot_result.all():
+    for i, row in enumerate(slot_result.all()):
         total = row.total or 0
         correct = row.correct or 0
+        h = int(row.hour)
+        label = f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}"
         time_slot_stats.append({
-            "window_index": row.window_index,
-            "time_label": TIME_SLOT_LABELS.get(row.window_index, f"#{row.window_index}"),
+            "window_index": i + 1,
+            "time_label": label,
             "total": total,
             "correct": correct,
             "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
         })
-    # Fill missing slots
-    existing_slots = {s["window_index"] for s in time_slot_stats}
-    for idx in range(1, 7):
-        if idx not in existing_slots:
-            time_slot_stats.append({
-                "window_index": idx, "time_label": TIME_SLOT_LABELS.get(idx, f"#{idx}"),
-                "total": 0, "correct": 0, "win_rate": 0.0,
-            })
-    time_slot_stats.sort(key=lambda s: s["window_index"])
 
     # --- Weekly trend ---
     now_et = datetime.now(ET)

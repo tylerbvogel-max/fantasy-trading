@@ -334,7 +334,7 @@ export default function TimeAttackScreen() {
             <Text style={styles.waitingTitle}>Next Bounty</Text>
             <Text style={styles.countdown}>{nextWindowCountdown || "Calculating..."}</Text>
             <Text style={styles.waitingSubtext}>
-              Bounties run every 2 hours, 9 AM - 9 PM ET, weekdays.
+              New bounty every 2 minutes. Predict SPY direction!
             </Text>
           </View>
         )}
