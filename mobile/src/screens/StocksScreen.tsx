@@ -132,7 +132,7 @@ export default function StocksScreen() {
         </View>
         <TouchableOpacity
           style={styles.finvizButton}
-          onPress={() => Linking.openURL(`https://finviz.com/quote.ashx?t=${item.symbol}&P=w`)}
+          onPress={() => Linking.openURL(`https://finviz.com/quote.ashx?t=${item.symbol}&P=w&p=w`)}
         >
           <Ionicons name="open-outline" size={16} color={Colors.primary} />
         </TouchableOpacity>
