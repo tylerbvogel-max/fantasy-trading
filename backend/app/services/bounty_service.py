@@ -4,7 +4,7 @@ from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from sqlalchemy import select, func, and_, Integer, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.bounty import BountyWindow, BountyPrediction, BountyPlayerStats, SpyPriceLog
+from app.models.bounty import BountyWindow, BountyWindowStock, BountyPrediction, BountyPlayerStats, SpyPriceLog
 from app.models.user import User
 from app.services.finnhub_service import get_stock_price, fetch_quote
 from app.config import get_settings
@@ -21,6 +21,9 @@ CONFIDENCE_LABELS = {1: "Draw", 2: "Quick Draw", 3: "Dead Eye"}
 
 # Rolling window duration (set to 2 for rapid testing, 120 for production)
 WINDOW_DURATION_MINUTES = 2
+
+# Stocks to create per bounty window
+WINDOW_STOCKS = ["SPY", "NVDA"]
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
@@ -89,6 +92,15 @@ async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
         end_time=end_dt,
     )
     db.add(window)
+    await db.flush()
+
+    # Create per-stock rows
+    for symbol in WINDOW_STOCKS:
+        db.add(BountyWindowStock(
+            bounty_window_id=window.id,
+            symbol=symbol,
+        ))
+
     await db.commit()
     await db.refresh(window)
     return [window]
@@ -156,8 +168,13 @@ async def submit_prediction(
     window_id: uuid.UUID,
     prediction: str,
     confidence: int,
+    symbol: str = "SPY",
 ) -> BountyPrediction:
     """Submit a prediction for a bounty window."""
+    # Validate symbol
+    if symbol not in WINDOW_STOCKS:
+        raise BountyError(f"Invalid stock symbol: {symbol}")
+
     # Validate window exists and is active
     window = await db.get(BountyWindow, window_id)
     if not window:
@@ -170,15 +187,16 @@ async def submit_prediction(
     if window.is_settled:
         raise BountyError("This bounty window has already been settled")
 
-    # Check for existing prediction
+    # Check for existing prediction for this stock
     result = await db.execute(
         select(BountyPrediction).where(
             BountyPrediction.user_id == user_id,
             BountyPrediction.bounty_window_id == window_id,
+            BountyPrediction.symbol == symbol,
         )
     )
     if result.scalars().first():
-        raise BountyError("You've already made a prediction for this window")
+        raise BountyError(f"You've already made a prediction for {symbol} in this window")
 
     if prediction not in ("UP", "DOWN"):
         raise BountyError("Prediction must be UP or DOWN")
@@ -190,6 +208,7 @@ async def submit_prediction(
     pred = BountyPrediction(
         user_id=user_id,
         bounty_window_id=window_id,
+        symbol=symbol,
         prediction=prediction,
         confidence=confidence,
         wanted_level_at_pick=stats.wanted_level,
@@ -205,7 +224,7 @@ async def submit_prediction(
 
 
 async def record_window_open_price(db: AsyncSession, window_id: uuid.UUID) -> None:
-    """Fetch current SPY price and save as spy_open_price."""
+    """Fetch current SPY price and save as spy_open_price. Also set per-stock open prices."""
     window = await db.get(BountyWindow, window_id)
     if not window or window.spy_open_price is not None:
         return
@@ -213,38 +232,77 @@ async def record_window_open_price(db: AsyncSession, window_id: uuid.UUID) -> No
     price = await get_stock_price(db, "SPY")
     if price:
         window.spy_open_price = price
-        await db.commit()
+
+    # Set open prices on per-stock rows
+    result = await db.execute(
+        select(BountyWindowStock).where(
+            BountyWindowStock.bounty_window_id == window_id,
+            BountyWindowStock.open_price.is_(None),
+        )
+    )
+    for stock_row in result.scalars().all():
+        stock_price = await get_stock_price(db, stock_row.symbol)
+        if stock_price:
+            stock_row.open_price = stock_price
+
+    await db.commit()
 
 
 async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
-    """Settle a bounty window: fetch closing price, determine result, score all predictions."""
+    """Settle a bounty window: fetch closing prices per stock, determine results, score predictions."""
     window = await db.get(BountyWindow, window_id)
     if not window or window.is_settled:
         return
 
-    # Get closing SPY price
-    price = await get_stock_price(db, "SPY")
-    if not price:
-        return
+    # Settle per-stock rows
+    stock_result = await db.execute(
+        select(BountyWindowStock).where(BountyWindowStock.bounty_window_id == window_id)
+    )
+    stock_rows = list(stock_result.scalars().all())
 
-    window.spy_close_price = price
+    # Build symbol → result map for scoring predictions
+    stock_results: dict[str, str] = {}
 
-    # Determine result
-    if window.spy_open_price is not None:
-        window.result = "UP" if price >= float(window.spy_open_price) else "DOWN"
+    for stock_row in stock_rows:
+        if stock_row.is_settled:
+            if stock_row.result:
+                stock_results[stock_row.symbol] = stock_row.result
+            continue
+
+        price = await get_stock_price(db, stock_row.symbol)
+        if not price:
+            continue
+
+        stock_row.close_price = price
+        if stock_row.open_price is not None:
+            stock_row.result = "UP" if price >= float(stock_row.open_price) else "DOWN"
+        else:
+            stock_row.result = "UP"
+        stock_row.is_settled = True
+        stock_results[stock_row.symbol] = stock_row.result
+
+    # Also set legacy SPY fields on the window itself
+    spy_price = await get_stock_price(db, "SPY")
+    if spy_price:
+        window.spy_close_price = spy_price
+    if window.spy_open_price is not None and spy_price:
+        window.result = "UP" if spy_price >= float(window.spy_open_price) else "DOWN"
+    elif "SPY" in stock_results:
+        window.result = stock_results["SPY"]
     else:
-        window.result = "UP"  # Default if no open price recorded
+        window.result = "UP"
 
     window.is_settled = True
 
-    # Score all predictions
+    # Score all predictions by matching symbol
     result = await db.execute(
         select(BountyPrediction).where(BountyPrediction.bounty_window_id == window_id)
     )
     predictions = list(result.scalars().all())
 
     for pred in predictions:
-        is_correct = pred.prediction == window.result
+        stock_result_value = stock_results.get(pred.symbol, window.result)
+        is_correct = pred.prediction == stock_result_value
         pred.is_correct = is_correct
 
         if is_correct:
@@ -356,7 +414,7 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
     # Fetch SPY chart: Yahoo Finance (2h of 1-min data), fallback to self-logged prices
     candles = []
     if current:
-        candles = await fetch_spy_chart_yahoo()
+        candles = await fetch_chart_yahoo("SPY")
 
         # Fallback: use self-logged prices if Yahoo fails
         if not candles:
@@ -378,6 +436,39 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
             db.add(SpyPriceLog(price=quote["c"]))
             await db.commit()
 
+    # Build per-stock status
+    stocks_status = []
+    if current:
+        stock_result = await db.execute(
+            select(BountyWindowStock).where(
+                BountyWindowStock.bounty_window_id == current.id
+            )
+        )
+        stock_rows = list(stock_result.scalars().all())
+
+        # Get all user predictions for this window
+        pred_result = await db.execute(
+            select(BountyPrediction).where(
+                BountyPrediction.user_id == user_id,
+                BountyPrediction.bounty_window_id == current.id,
+            )
+        )
+        user_preds = {p.symbol: p for p in pred_result.scalars().all()}
+
+        for stock_row in stock_rows:
+            stock_candles = await fetch_chart_yahoo(stock_row.symbol)
+            stock_pick = user_preds.get(stock_row.symbol)
+
+            stocks_status.append({
+                "symbol": stock_row.symbol,
+                "open_price": float(stock_row.open_price) if stock_row.open_price else None,
+                "close_price": float(stock_row.close_price) if stock_row.close_price else None,
+                "result": stock_row.result,
+                "is_settled": stock_row.is_settled,
+                "candles": stock_candles,
+                "my_pick": _pick_to_response(stock_pick) if stock_pick else None,
+            })
+
     return {
         "current_window": _window_to_response(current) if current else None,
         "previous_window": _window_to_response(previous) if previous else None,
@@ -386,6 +477,7 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "player_stats": _stats_to_response(stats),
         "next_window_time": get_next_window_time(),
         "spy_candles": candles,
+        "stocks": stocks_status,
     }
 
 
@@ -452,12 +544,12 @@ async def get_bounty_board(db: AsyncSession, period: str = "alltime") -> list[di
         return board
 
 
-async def fetch_spy_chart_yahoo() -> list[dict]:
-    """Fetch last 2 hours of 1-minute SPY data from Yahoo Finance."""
+async def fetch_chart_yahoo(symbol: str = "SPY") -> list[dict]:
+    """Fetch last 2 hours of 1-minute data from Yahoo Finance."""
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
-                "https://query1.finance.yahoo.com/v8/finance/chart/SPY",
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
                 params={"interval": "1m", "range": "2h"},
                 headers={"User-Agent": "Mozilla/5.0"},
                 timeout=10.0,

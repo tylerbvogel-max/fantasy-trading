@@ -388,6 +388,16 @@ class BountyStatsResponse(BaseModel):
     best_streak: int = 0
 
 
+class BountyStockStatus(BaseModel):
+    symbol: str
+    open_price: float | None = None
+    close_price: float | None = None
+    result: str | None = None
+    is_settled: bool = False
+    candles: list[SpyCandlePoint] = []
+    my_pick: BountyPickResponse | None = None
+
+
 class BountyStatusResponse(BaseModel):
     current_window: BountyWindowResponse | None = None
     previous_window: BountyWindowResponse | None = None
@@ -396,18 +406,21 @@ class BountyStatusResponse(BaseModel):
     player_stats: BountyStatsResponse
     next_window_time: datetime | None = None
     spy_candles: list[SpyCandlePoint] = []
+    stocks: list[BountyStockStatus] = []
 
 
 class BountySubmitRequest(BaseModel):
     bounty_window_id: UUID
     prediction: str = Field(..., pattern="^(UP|DOWN)$")
     confidence: int = Field(..., ge=1, le=3)
+    symbol: str = "SPY"
 
 
 class BountySubmitResponse(BaseModel):
     prediction: str
     confidence_label: str
     message: str
+    symbol: str = "SPY"
 
 
 class ConfidenceStatEntry(BaseModel):

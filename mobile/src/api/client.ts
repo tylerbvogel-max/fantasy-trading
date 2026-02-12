@@ -436,6 +436,16 @@ export interface SpyCandlePoint {
   close: number;
 }
 
+export interface BountyStockStatus {
+  symbol: string;
+  open_price: number | null;
+  close_price: number | null;
+  result: string | null;
+  is_settled: boolean;
+  candles: SpyCandlePoint[];
+  my_pick: BountyPickResponse | null;
+}
+
 export interface BountyStatus {
   current_window: BountyWindowResponse | null;
   previous_window: BountyWindowResponse | null;
@@ -444,12 +454,14 @@ export interface BountyStatus {
   player_stats: BountyStatsResponse;
   next_window_time: string | null;
   spy_candles: SpyCandlePoint[];
+  stocks: BountyStockStatus[];
 }
 
 export interface BountySubmitResponse {
   prediction: string;
   confidence_label: string;
   message: string;
+  symbol: string;
 }
 
 export interface ConfidenceStatEntry {
@@ -506,7 +518,7 @@ export interface BountyBoardEntry {
 export const bounty = {
   status: () => request<BountyStatus>("/bounty/status"),
 
-  predict: (data: { bounty_window_id: string; prediction: string; confidence: number }) =>
+  predict: (data: { bounty_window_id: string; prediction: string; confidence: number; symbol: string }) =>
     request<BountySubmitResponse>("/bounty/predict", {
       method: "POST",
       body: JSON.stringify(data),

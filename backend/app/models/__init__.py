@@ -9,7 +9,7 @@ from app.models.snapshot import PortfolioSnapshot, HoldingsSnapshot, BenchmarkSn
 from app.models.season_archive import SeasonArchive
 from app.models.interaction import InteractionType, PlayerInteraction
 from app.models.education import EducationTopic, EducationFact, QuizQuestion, QuizAttempt
-from app.models.bounty import BountyWindow, BountyPrediction, BountyPlayerStats, SpyPriceLog
+from app.models.bounty import BountyWindow, BountyWindowStock, BountyPrediction, BountyPlayerStats, SpyPriceLog
 
 __all__ = [
     "User", "Season", "PlayerSeason", "Holding", "Transaction",
@@ -17,5 +17,5 @@ __all__ = [
     "PortfolioSnapshot", "HoldingsSnapshot", "BenchmarkSnapshot", "SeasonArchive",
     "InteractionType", "PlayerInteraction",
     "EducationTopic", "EducationFact", "QuizQuestion", "QuizAttempt",
-    "BountyWindow", "BountyPrediction", "BountyPlayerStats", "SpyPriceLog",
+    "BountyWindow", "BountyWindowStock", "BountyPrediction", "BountyPlayerStats", "SpyPriceLog",
 ]

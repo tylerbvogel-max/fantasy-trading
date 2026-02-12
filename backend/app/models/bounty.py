@@ -26,15 +26,32 @@ class BountyWindow(Base):
     )
 
 
+class BountyWindowStock(Base):
+    """Per-stock data within a bounty window."""
+    __tablename__ = "bounty_window_stocks"
+    __table_args__ = (
+        UniqueConstraint("bounty_window_id", "symbol", name="uq_bounty_window_stock"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    bounty_window_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bounty_windows.id"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(10), nullable=False)
+    open_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    close_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    result: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    is_settled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class BountyPrediction(Base):
     __tablename__ = "bounty_predictions"
     __table_args__ = (
-        UniqueConstraint("user_id", "bounty_window_id", name="uq_bounty_user_window"),
+        UniqueConstraint("user_id", "bounty_window_id", "symbol", name="uq_bounty_user_window_symbol"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     bounty_window_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bounty_windows.id"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(10), nullable=False, default="SPY")
     prediction: Mapped[str] = mapped_column(String(4), nullable=False)
     confidence: Mapped[int] = mapped_column(Integer, nullable=False)
     is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

@@ -85,23 +85,34 @@ export default function TimeAttackScreen() {
   const previousPick = status?.previous_pick;
   const stats = status?.player_stats;
 
+  // Multi-stock: derive unpicked and picked stocks
+  const allStocks = status?.stocks ?? [];
+  const unpickedStocks = allStocks.filter((s) => !s.my_pick);
+  const pickedStocks = allStocks.filter((s) => !!s.my_pick);
+  const currentStock = unpickedStocks.length > 0 ? unpickedStocks[0] : null;
+  const allPicked = allStocks.length > 0 && unpickedStocks.length === 0;
+  const stockProgress = allStocks.length > 0
+    ? `${pickedStocks.length + 1}/${allStocks.length}`
+    : "";
+
   const windowEndCountdown = useCountdown(currentWindow?.end_time ?? null);
   const nextWindowCountdown = useCountdown(
     !currentWindow ? status?.next_window_time ?? null : null
   );
 
   const handleSwipe = (prediction: "UP" | "DOWN") => {
-    if (!currentWindow) return;
+    if (!currentWindow || !currentStock) return;
 
     submitPrediction.mutate(
       {
         bounty_window_id: currentWindow.id,
         prediction,
         confidence,
+        symbol: currentStock.symbol,
       },
       {
         onSuccess: () => {
-          showToast("Locked In!");
+          showToast(`${currentStock.symbol} Locked In!`);
         },
         onError: (error) => {
           const msg = error.message ?? "";
@@ -154,10 +165,9 @@ export default function TimeAttackScreen() {
   ) : null;
 
   const hasActiveWindow = !!currentWindow;
-  const hasPicked = !!myPick;
 
-  // Active window, no pick — centered layout (no ScrollView)
-  if (hasActiveWindow && !hasPicked) {
+  // Active window, stocks still to pick
+  if (hasActiveWindow && currentStock) {
     return (
       <View style={styles.container}>
         {toastElement}
@@ -180,12 +190,15 @@ export default function TimeAttackScreen() {
           </View>
         )}
 
-        {/* Timer */}
+        {/* Timer + progress */}
         <View style={styles.timerRow}>
           <Text style={styles.timerLabel}>
             Bounty #{currentWindow.window_index} — Closes in
           </Text>
           <Text style={styles.timerValue}>{windowEndCountdown}</Text>
+          {allStocks.length > 1 && (
+            <Text style={styles.progressLabel}>{stockProgress}</Text>
+          )}
         </View>
 
         {/* Swipe card with chart — centered in remaining space */}
@@ -194,8 +207,9 @@ export default function TimeAttackScreen() {
             onSwipeRight={() => handleSwipe("UP")}
             onSwipeLeft={() => handleSwipe("DOWN")}
             enabled={!submitPrediction.isPending}
-            candles={status?.spy_candles ?? []}
-            openPrice={currentWindow.spy_open_price}
+            candles={currentStock.candles}
+            openPrice={currentStock.open_price}
+            symbol={currentStock.symbol}
           />
         </View>
 
@@ -232,8 +246,8 @@ export default function TimeAttackScreen() {
     );
   }
 
-  // Active window, already picked — no scroll
-  if (hasActiveWindow && hasPicked) {
+  // Active window, all stocks picked — locked-in state
+  if (hasActiveWindow && allPicked) {
     return (
       <View style={styles.container}>
         {toastElement}
@@ -269,30 +283,32 @@ export default function TimeAttackScreen() {
           <SpyChart candles={status?.spy_candles ?? []} openPrice={currentWindow?.spy_open_price} />
         </View>
 
-        {/* Compact locked-in bar at bottom */}
+        {/* Compact locked-in bar showing all picks */}
         <View style={styles.lockedBar}>
           <Ionicons name="checkmark-circle" size={24} color={Colors.green} />
           <Text style={styles.lockedBarText}>Locked In</Text>
-          <View style={[
-            styles.lockedBarBadge,
-            { backgroundColor: myPick!.prediction === "UP" ? Colors.green + "20" : Colors.accent + "20" },
-          ]}>
-            <Ionicons
-              name={myPick!.prediction === "UP" ? "arrow-up" : "arrow-down"}
-              size={16}
-              color={myPick!.prediction === "UP" ? Colors.green : Colors.accent}
-            />
-            <Text style={{
-              color: myPick!.prediction === "UP" ? Colors.green : Colors.accent,
-              fontFamily: FontFamily.bold,
-              fontSize: FontSize.md,
-            }}>
-              {myPick!.prediction}
-            </Text>
-          </View>
-          <Text style={styles.lockedBarConfidence}>
-            {myPick!.confidence_label}
-          </Text>
+          {pickedStocks.map((stock) => (
+            <View
+              key={stock.symbol}
+              style={[
+                styles.lockedBarBadge,
+                { backgroundColor: stock.my_pick!.prediction === "UP" ? Colors.green + "20" : Colors.accent + "20" },
+              ]}
+            >
+              <Text style={{
+                color: stock.my_pick!.prediction === "UP" ? Colors.green : Colors.accent,
+                fontFamily: FontFamily.bold,
+                fontSize: FontSize.xs,
+              }}>
+                {stock.symbol}
+              </Text>
+              <Ionicons
+                name={stock.my_pick!.prediction === "UP" ? "arrow-up" : "arrow-down"}
+                size={14}
+                color={stock.my_pick!.prediction === "UP" ? Colors.green : Colors.accent}
+              />
+            </View>
+          ))}
         </View>
 
         {/* Previous result inline */}
@@ -468,6 +484,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xl,
     fontFamily: FontFamily.bold,
     color: Colors.orange,
+    marginTop: 2,
+  },
+  progressLabel: {
+    fontSize: FontSize.xs,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.textMuted,
     marginTop: 2,
   },
   swipeArea: {

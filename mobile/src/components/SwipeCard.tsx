@@ -15,6 +15,7 @@ interface SwipeCardProps {
   enabled: boolean;
   candles: SpyCandlePoint[];
   openPrice?: number | null;
+  symbol?: string;
 }
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -25,7 +26,7 @@ const VELOCITY_THRESHOLD = 0.5;
 const CHART_WIDTH = CARD_WIDTH - Spacing.lg * 2;
 const CHART_HEIGHT = CARD_SIZE - 120; // leave room for header + direction hints
 
-export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles, openPrice }: SwipeCardProps) {
+export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles, openPrice, symbol = "SPY" }: SwipeCardProps) {
   const translateX = useRef(new Animated.Value(0)).current;
 
   const hasPrice = (candles && candles.length >= 2) || !!openPrice;
@@ -128,7 +129,7 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
     chartNode = (
       <View style={styles.chartArea}>
         <View style={styles.chartHeader}>
-          <Text style={styles.spyLabel}>SPY</Text>
+          <Text style={styles.spyLabel}>{symbol}</Text>
           <Text style={[styles.spyPrice, { color: lineColor }]}>
             ${prices[prices.length - 1].toFixed(2)}
           </Text>
@@ -167,7 +168,7 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
     chartNode = (
       <View style={styles.chartArea}>
         <View style={styles.chartHeader}>
-          <Text style={styles.spyLabel}>SPY</Text>
+          <Text style={styles.spyLabel}>{symbol}</Text>
           <Text style={[styles.spyPrice, { color: Colors.text }]}>
             ${openPrice.toFixed(2)}
           </Text>
@@ -182,7 +183,7 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
       <View style={styles.chartArea}>
         <View style={styles.loadingArea}>
           <ActivityIndicator size="small" color={Colors.orange} />
-          <Text style={styles.loadingText}>Loading SPY data...</Text>
+          <Text style={styles.loadingText}>Loading {symbol} data...</Text>
         </View>
       </View>
     );
