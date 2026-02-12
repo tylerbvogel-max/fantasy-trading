@@ -21,8 +21,7 @@ async def list_stocks(
         .where(StockMaster.is_active == True)
         .order_by(
             func.coalesce(StockActive.trending_rank, 9999).asc(),
-            func.coalesce(StockActive.market_cap, 0).desc(),
-            StockMaster.symbol,
+            (func.random() * func.coalesce(StockActive.market_cap, 0)).desc(),
         )
         .limit(limit)
     )
