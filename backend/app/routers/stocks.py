@@ -20,7 +20,8 @@ async def list_stocks(
         .outerjoin(StockActive, StockMaster.symbol == StockActive.symbol)
         .where(StockMaster.is_active == True)
         .order_by(
-            func.coalesce(StockActive.volume * StockActive.price, 0).desc(),
+            func.coalesce(StockActive.trending_rank, 9999).asc(),
+            func.coalesce(StockActive.market_cap, 0).desc(),
             StockMaster.symbol,
         )
         .limit(limit)

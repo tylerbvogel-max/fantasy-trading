@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 from app.database import get_db
 from app.services.auth_service import get_current_user, create_invite_code
-from app.services.finnhub_service import refresh_all_prices, import_all_us_stocks
+from app.services.finnhub_service import refresh_all_prices, import_all_us_stocks, refresh_trending_stocks
 from app.services.analytics_service import backfill_benchmark
 from app.services.portfolio_service import capture_daily_snapshot
 from app.models.user import User
@@ -134,6 +134,16 @@ async def force_price_refresh(
 ):
     count = await refresh_all_prices(db, all_stocks=all)
     return {"message": f"Refreshed prices for {count} stocks."}
+
+
+@router.post("/stocks/trending")
+async def refresh_trending(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch Yahoo Finance most-active stocks and update trending_rank."""
+    count = await refresh_trending_stocks(db)
+    return {"message": f"Trending stocks updated: {count} matched."}
 
 
 @router.post("/stocks/import")

@@ -1,7 +1,10 @@
 import httpx
 import asyncio
 from datetime import datetime, timezone
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
+import logging
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.stock import StockActive, StockMaster
 from app.models.holding import Holding
@@ -47,27 +50,6 @@ async def fetch_company_profile(symbol: str) -> dict | None:
     return None
 
 
-async def fetch_yahoo_volume(symbol: str) -> int | None:
-    """Fetch today's trading volume from Yahoo Finance (no API key needed)."""
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.get(
-                f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-                params={"interval": "1d", "range": "1d"},
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10.0,
-            )
-            if resp.status_code != 200:
-                return None
-            result = resp.json().get("chart", {}).get("result", [])
-            if not result:
-                return None
-            volumes = result[0].get("indicators", {}).get("quote", [{}])[0].get("volume", [])
-            return volumes[-1] if volumes and volumes[-1] is not None else None
-        except (httpx.RequestError, KeyError, IndexError):
-            return None
-
-
 async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | None:
     """Fetch latest price from Finnhub and update the database."""
     quote = await fetch_quote(symbol)
@@ -75,7 +57,6 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
         return None
 
     now = datetime.now(timezone.utc)
-    volume = await fetch_yahoo_volume(symbol)
     stock = await db.get(StockActive, symbol)
 
     if stock:
@@ -84,8 +65,6 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
         stock.high = quote.get("h")
         stock.low = quote.get("l")
         stock.change_pct = quote.get("dp")
-        if volume is not None:
-            stock.volume = volume
         stock.last_updated = now
     else:
         # Need company profile for name
@@ -98,7 +77,6 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
             high=quote.get("h"),
             low=quote.get("l"),
             change_pct=quote.get("dp"),
-            volume=volume,
             market_cap=profile.get("marketCapitalization") if profile else None,
             last_updated=now,
         )
@@ -198,6 +176,54 @@ async def import_all_us_stocks(db: AsyncSession) -> int:
 
     await db.commit()
     return added
+
+
+async def refresh_trending_stocks(db: AsyncSession) -> int:
+    """Fetch Yahoo Finance most-active list and update trending_rank on stocks_active."""
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved",
+                params={"scrIds": "most_actives", "count": 25},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=15.0,
+            )
+            if resp.status_code != 200:
+                logger.warning(f"Yahoo most_actives returned {resp.status_code}")
+                return 0
+            data = resp.json()
+        except (httpx.RequestError, ValueError) as e:
+            logger.error(f"Yahoo most_actives fetch failed: {e}")
+            return 0
+
+    quotes = (
+        data.get("finance", {})
+        .get("result", [{}])[0]
+        .get("quotes", [])
+    )
+    if not quotes:
+        logger.warning("Yahoo most_actives returned no quotes")
+        return 0
+
+    # Reset all trending_rank to NULL
+    await db.execute(
+        update(StockActive).where(StockActive.trending_rank.isnot(None)).values(trending_rank=None)
+    )
+
+    matched = 0
+    for rank, quote in enumerate(quotes, start=1):
+        symbol = quote.get("symbol", "")
+        stock = await db.get(StockActive, symbol)
+        if stock:
+            stock.trending_rank = rank
+            volume = quote.get("regularMarketVolume")
+            if volume is not None:
+                stock.volume = volume
+            matched += 1
+
+    await db.commit()
+    logger.info(f"Trending stocks updated: {matched} matched out of {len(quotes)}")
+    return matched
 
 
 async def search_stocks(db: AsyncSession, query: str, season_allowed: list[str] | None = None) -> list[StockMaster]:

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.database import async_session
 from app.models.season import Season
 from app.models.bounty import BountyWindow
-from app.services.finnhub_service import refresh_all_prices, refresh_stock_price
+from app.services.finnhub_service import refresh_all_prices, refresh_stock_price, refresh_trending_stocks
 from app.services.portfolio_service import capture_daily_snapshot
 from app.services.bounty_service import (
     get_or_create_today_windows,
@@ -32,6 +32,16 @@ async def job_refresh_prices():
             logger.info(f"Price refresh complete: {count} stocks updated")
         except Exception as e:
             logger.error(f"Price refresh failed: {e}")
+
+
+async def job_refresh_trending():
+    """Refresh trending stock rankings from Yahoo Finance."""
+    async with async_session() as db:
+        try:
+            count = await refresh_trending_stocks(db)
+            logger.info(f"Trending refresh complete: {count} stocks ranked")
+        except Exception as e:
+            logger.error(f"Trending refresh failed: {e}")
 
 
 async def job_daily_snapshot():
@@ -110,6 +120,14 @@ def start_scheduler():
         job_refresh_prices,
         CronTrigger(minute="*/15", day_of_week="mon-fri"),
         id="price_refresh",
+        replace_existing=True,
+    )
+
+    # Trending stocks: 10:00 AM ET (15:00 UTC), Mon-Fri
+    scheduler.add_job(
+        job_refresh_trending,
+        CronTrigger(hour=15, minute=0, day_of_week="mon-fri"),
+        id="trending_refresh",
         replace_existing=True,
     )
 
