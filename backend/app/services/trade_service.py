@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 MARKET_OPEN_HOUR = 9
 MARKET_OPEN_MINUTE = 30
-MARKET_CLOSE_HOUR = 16
+MARKET_CLOSE_HOUR = 21
 MARKET_CLOSE_MINUTE = 0
 
 
@@ -34,7 +34,7 @@ def _check_market_hours() -> str | None:
     if now_et < open_time:
         return f"Market hasn't opened yet. Trading starts at 9:30 AM ET."
     if now_et >= close_time:
-        return f"Market is closed. Trading ended at 4:00 PM ET."
+        return f"Market is closed. Trading ended at 9:00 PM ET."
     return None
 
 
