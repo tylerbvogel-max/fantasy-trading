@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { seasons, portfolio, trading, stocks, auth, education } from "../api/client";
+import { seasons, portfolio, trading, stocks, auth, education, bounty } from "../api/client";
 import type {
   LeaderboardEntry,
   PortfolioSummary,
@@ -17,6 +17,11 @@ import type {
   QuizAnswerRequest,
   QuizAnswerResponse,
   UserKnowledgeScore,
+  BountyStatus,
+  BountyBoardEntry,
+  BountyPickResponse,
+  BountySubmitResponse,
+  BountyDetailedStats,
 } from "../api/client";
 
 // ── Seasons ──
@@ -220,5 +225,51 @@ export function useKnowledgeScore() {
   return useQuery<UserKnowledgeScore>({
     queryKey: ["knowledgeScore"],
     queryFn: education.score,
+  });
+}
+
+// ── Bounty / Time Attack ──
+
+export function useBountyStatus() {
+  return useQuery<BountyStatus>({
+    queryKey: ["bountyStatus"],
+    queryFn: () => bounty.status(),
+    refetchInterval: 30000,
+  });
+}
+
+export function useBountyBoard(period: "weekly" | "alltime") {
+  return useQuery<BountyBoardEntry[]>({
+    queryKey: ["bountyBoard", period],
+    queryFn: () => bounty.board(period),
+  });
+}
+
+export function useBountyHistory(limit?: number) {
+  return useQuery<BountyPickResponse[]>({
+    queryKey: ["bountyHistory", limit],
+    queryFn: () => bounty.history(limit),
+  });
+}
+
+export function useBountyDetailedStats() {
+  return useQuery<BountyDetailedStats>({
+    queryKey: ["bountyDetailedStats"],
+    queryFn: () => bounty.stats(),
+  });
+}
+
+export function useSubmitPrediction() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    BountySubmitResponse,
+    Error,
+    { bounty_window_id: string; prediction: string; confidence: number }
+  >({
+    mutationFn: (data) => bounty.predict(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+    },
   });
 }

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import * as SecureStore from "expo-secure-store";
 
-export type AppMode = "classroom" | "league" | "arena";
+export type AppMode = "classroom" | "league" | "arena" | "timeAttack";
 
 interface ModeContextValue {
   mode: AppMode | null;

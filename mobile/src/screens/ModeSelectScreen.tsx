@@ -36,6 +36,14 @@ const MODES: {
     description:
       "Chaos and sabotage. Player interactions, forced swaps, strategic disruption.",
   },
+  {
+    key: "timeAttack",
+    icon: "timer-outline",
+    color: Colors.orange,
+    title: "Time Attack",
+    description:
+      "Predict SPY every 2 hours. Earn double dollars, build your Wanted Level.",
+  },
 ];
 
 export default function ModeSelectScreen() {

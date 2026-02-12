@@ -396,6 +396,131 @@ export interface UserKnowledgeScore {
   topics_mastered: number;
 }
 
+// ── Bounty / Time Attack ──
+
+export interface BountyWindowResponse {
+  id: string;
+  window_date: string;
+  window_index: number;
+  start_time: string;
+  end_time: string;
+  prediction_cutoff: string | null;
+  spy_open_price: number | null;
+  spy_close_price: number | null;
+  result: string | null;
+  is_settled: boolean;
+}
+
+export interface BountyPickResponse {
+  id: string;
+  prediction: string;
+  confidence: number;
+  confidence_label: string;
+  is_correct: boolean | null;
+  payout: number;
+  wanted_level_at_pick: number;
+  created_at: string;
+}
+
+export interface BountyStatsResponse {
+  double_dollars: number;
+  wanted_level: number;
+  total_predictions: number;
+  correct_predictions: number;
+  accuracy_pct: number;
+  best_streak: number;
+}
+
+export interface SpyCandlePoint {
+  timestamp: number;
+  close: number;
+}
+
+export interface BountyStatus {
+  current_window: BountyWindowResponse | null;
+  previous_window: BountyWindowResponse | null;
+  my_pick: BountyPickResponse | null;
+  previous_pick: BountyPickResponse | null;
+  player_stats: BountyStatsResponse;
+  next_window_time: string | null;
+  spy_candles: SpyCandlePoint[];
+}
+
+export interface BountySubmitResponse {
+  prediction: string;
+  confidence_label: string;
+  message: string;
+}
+
+export interface ConfidenceStatEntry {
+  confidence: number;
+  label: string;
+  total: number;
+  correct: number;
+  win_rate: number;
+}
+
+export interface TimeSlotStatEntry {
+  window_index: number;
+  time_label: string;
+  total: number;
+  correct: number;
+  win_rate: number;
+}
+
+export interface WeeklyTrend {
+  this_week: number;
+  last_week: number;
+  change: number;
+}
+
+export interface WantedLevelProgress {
+  current_level: number;
+  max_level: number;
+  progress_pct: number;
+}
+
+export interface BountyDetailedStats {
+  double_dollars: number;
+  wanted_level: number;
+  total_predictions: number;
+  correct_predictions: number;
+  accuracy_pct: number;
+  best_streak: number;
+  confidence_stats: ConfidenceStatEntry[];
+  time_slot_stats: TimeSlotStatEntry[];
+  weekly_trend: WeeklyTrend;
+  board_rank: number | null;
+  wanted_level_progress: WantedLevelProgress;
+}
+
+export interface BountyBoardEntry {
+  rank: number;
+  alias: string;
+  double_dollars: number;
+  accuracy_pct: number;
+  wanted_level: number;
+  total_predictions: number;
+}
+
+export const bounty = {
+  status: () => request<BountyStatus>("/bounty/status"),
+
+  predict: (data: { bounty_window_id: string; prediction: string; confidence: number }) =>
+    request<BountySubmitResponse>("/bounty/predict", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  board: (period: "weekly" | "alltime") =>
+    request<BountyBoardEntry[]>(`/bounty/board?period=${period}`),
+
+  history: (limit?: number) =>
+    request<BountyPickResponse[]>(`/bounty/history?limit=${limit ?? 20}`),
+
+  stats: () => request<BountyDetailedStats>("/bounty/stats"),
+};
+
 export const education = {
   topics: () => request<TopicSummary[]>("/education/topics"),
 

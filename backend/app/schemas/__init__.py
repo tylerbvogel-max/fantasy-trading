@@ -343,3 +343,119 @@ class FactUpdate(BaseModel):
     option_c: str | None = None
     option_d: str | None = None
     correct_option: str | None = Field(default=None, pattern="^[A-D]$")
+
+
+# ── Bounty / Time Attack ──
+
+class SpyCandlePoint(BaseModel):
+    timestamp: int
+    close: float
+
+
+class BountyWindowResponse(BaseModel):
+    id: UUID
+    window_date: date
+    window_index: int
+    start_time: datetime
+    end_time: datetime
+    prediction_cutoff: datetime | None = None
+    spy_open_price: float | None = None
+    spy_close_price: float | None = None
+    result: str | None = None
+    is_settled: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+class BountyPickResponse(BaseModel):
+    id: UUID
+    prediction: str
+    confidence: int
+    confidence_label: str
+    is_correct: bool | None = None
+    payout: int = 0
+    wanted_level_at_pick: int = 0
+    created_at: datetime
+
+
+class BountyStatsResponse(BaseModel):
+    double_dollars: int = 0
+    wanted_level: int = 0
+    total_predictions: int = 0
+    correct_predictions: int = 0
+    accuracy_pct: float = 0.0
+    best_streak: int = 0
+
+
+class BountyStatusResponse(BaseModel):
+    current_window: BountyWindowResponse | None = None
+    previous_window: BountyWindowResponse | None = None
+    my_pick: BountyPickResponse | None = None
+    previous_pick: BountyPickResponse | None = None
+    player_stats: BountyStatsResponse
+    next_window_time: datetime | None = None
+    spy_candles: list[SpyCandlePoint] = []
+
+
+class BountySubmitRequest(BaseModel):
+    bounty_window_id: UUID
+    prediction: str = Field(..., pattern="^(UP|DOWN)$")
+    confidence: int = Field(..., ge=1, le=3)
+
+
+class BountySubmitResponse(BaseModel):
+    prediction: str
+    confidence_label: str
+    message: str
+
+
+class ConfidenceStatEntry(BaseModel):
+    confidence: int
+    label: str
+    total: int
+    correct: int
+    win_rate: float
+
+
+class TimeSlotStatEntry(BaseModel):
+    window_index: int
+    time_label: str
+    total: int
+    correct: int
+    win_rate: float
+
+
+class WeeklyTrend(BaseModel):
+    this_week: int
+    last_week: int
+    change: int
+
+
+class WantedLevelProgress(BaseModel):
+    current_level: int
+    max_level: int
+    progress_pct: float
+
+
+class BountyDetailedStats(BaseModel):
+    double_dollars: int = 0
+    wanted_level: int = 0
+    total_predictions: int = 0
+    correct_predictions: int = 0
+    accuracy_pct: float = 0.0
+    best_streak: int = 0
+    confidence_stats: list[ConfidenceStatEntry] = []
+    time_slot_stats: list[TimeSlotStatEntry] = []
+    weekly_trend: WeeklyTrend
+    board_rank: int | None = None
+    wanted_level_progress: WantedLevelProgress
+
+
+class BountyBoardEntry(BaseModel):
+    rank: int
+    alias: str
+    double_dollars: int
+    accuracy_pct: float
+    wanted_level: int
+    total_predictions: int

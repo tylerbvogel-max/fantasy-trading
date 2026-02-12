@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, seasons, trade, portfolio, stocks, admin, education
+from app.routers import auth, seasons, trade, portfolio, stocks, admin, education, bounty
 from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.database import engine, Base
 from sqlalchemy import text
@@ -67,6 +67,7 @@ app.include_router(portfolio.router)
 app.include_router(stocks.router)
 app.include_router(admin.router)
 app.include_router(education.router)
+app.include_router(bounty.router)
 
 
 @app.get("/")

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -14,11 +14,14 @@ import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { signOut } from "../api/client";
 import { useMode, type AppMode } from "../contexts/ModeContext";
 import { useSeason } from "../contexts/SeasonContext";
+import { useWalkthrough } from "../contexts/WalkthroughContext";
+import ModeGuideScreen from "./ModeGuideScreen";
 
 const MODE_META: Record<AppMode, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
   classroom: { icon: "school-outline", color: Colors.primary, label: "Classroom" },
   league: { icon: "trophy-outline", color: Colors.yellow, label: "League" },
   arena: { icon: "flash-outline", color: Colors.accent, label: "Arena" },
+  timeAttack: { icon: "timer-outline", color: Colors.orange, label: "Time Attack" },
 };
 
 function formatDate(dateStr: string): string {
@@ -30,7 +33,9 @@ export default function ProfileScreen() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { mode, clearMode } = useMode();
   const { selectedSeasonId } = useSeason();
+  const { resetWalkthrough } = useWalkthrough();
   const { data: knowledgeScore } = useKnowledgeScore();
+  const [showModeGuide, setShowModeGuide] = useState(false);
   const activeSeasons = profile?.active_seasons ?? [];
   const modeSeasons = activeSeasons.filter((s) => s.mode === mode);
   const selectedSeason = modeSeasons.find((s) => s.id === (selectedSeasonId || modeSeasons[0]?.id));
@@ -52,6 +57,10 @@ export default function ProfileScreen() {
       { text: "Log Out", style: "destructive", onPress: () => signOut() },
     ]);
   };
+
+  if (showModeGuide) {
+    return <ModeGuideScreen onClose={() => setShowModeGuide(false)} />;
+  }
 
   if (profileLoading) {
     return (
@@ -87,6 +96,19 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* Knowledge Score (classroom mode only) */}
+      {mode === "classroom" && (
+        <View style={styles.knowledgeScoreCard}>
+          <Ionicons name="school-outline" size={24} color={Colors.yellow} />
+          <View style={styles.knowledgeScoreContent}>
+            <Text style={styles.knowledgeScoreLabel}>Knowledge Score</Text>
+            <Text style={styles.knowledgeScoreValue}>
+              ${((knowledgeScore?.total_score ?? profile?.knowledge_score ?? 0) * 25).toLocaleString()}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Mode indicator */}
       {mode && (
         <View style={styles.modeCard}>
@@ -101,19 +123,6 @@ export default function ProfileScreen() {
           <TouchableOpacity onPress={handleSwitchMode}>
             <Text style={styles.modeSwitchText}>Switch Mode</Text>
           </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Knowledge Score (classroom mode only) */}
-      {mode === "classroom" && (
-        <View style={styles.knowledgeScoreCard}>
-          <Ionicons name="school-outline" size={24} color={Colors.yellow} />
-          <View style={styles.knowledgeScoreContent}>
-            <Text style={styles.knowledgeScoreLabel}>Knowledge Score</Text>
-            <Text style={styles.knowledgeScoreValue}>
-              ${((knowledgeScore?.total_score ?? profile?.knowledge_score ?? 0) * 25).toLocaleString()}
-            </Text>
-          </View>
         </View>
       )}
     </View>
@@ -137,6 +146,16 @@ export default function ProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.listContent}>
         <ListHeader />
+
+        <TouchableOpacity style={styles.replayButton} onPress={() => setShowModeGuide(true)}>
+          <Ionicons name="game-controller-outline" size={20} color={Colors.primary} />
+          <Text style={styles.replayText}>Game Modes Explained</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.replayButton} onPress={resetWalkthrough}>
+          <Ionicons name="book-outline" size={20} color={Colors.primary} />
+          <Text style={styles.replayText}>Replay Walkthrough</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color={Colors.red} />
@@ -170,8 +189,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
     backgroundColor: Colors.primary + "15",
-    borderRadius: Radius.md,
-    marginBottom: Spacing.md,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.sm,
   },
   seasonBannerText: {
     fontSize: FontSize.sm,
@@ -188,10 +207,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    marginHorizontal: Spacing.xl,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   userAvatar: {
     width: 56,
@@ -217,8 +235,25 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   listContent: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xxxl,
+  },
+  replayButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    backgroundColor: Colors.card,
+    marginTop: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  replayText: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.primary,
   },
   logoutButton: {
     flexDirection: "row",
@@ -226,9 +261,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: Spacing.sm,
     backgroundColor: Colors.card,
-    marginTop: Spacing.xxl,
+    marginTop: Spacing.md,
     padding: Spacing.lg,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -242,10 +277,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Colors.card,
-    marginHorizontal: Spacing.xl,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    marginBottom: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -274,10 +307,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.card,
-    marginHorizontal: Spacing.xl,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     gap: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.yellow + "30",

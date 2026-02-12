@@ -19,6 +19,8 @@ import { Colors } from './src/utils/theme';
 import { loadStoredToken, registerSignOutHandler } from './src/api/client';
 import { ModeProvider, useMode } from './src/contexts/ModeContext';
 import { SeasonProvider } from './src/contexts/SeasonContext';
+import { WalkthroughProvider, useWalkthrough } from './src/contexts/WalkthroughContext';
+import WalkthroughScreen from './src/screens/WalkthroughScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import ModeSelectScreen from './src/screens/ModeSelectScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
@@ -31,6 +33,8 @@ import LessonScreen from './src/screens/LessonScreen';
 import SeasonsScreen from './src/screens/SeasonsScreen';
 import SeasonDetailScreen from './src/screens/SeasonDetailScreen';
 import CreateSeasonScreen from './src/screens/CreateSeasonScreen';
+import TimeAttackScreen from './src/screens/TimeAttackScreen';
+import BountyBoardScreen from './src/screens/BountyBoardScreen';
 import type { LearnStackParamList } from './src/screens/LearnScreen';
 import type { SeasonsStackParamList } from './src/screens/SeasonsScreen';
 
@@ -47,6 +51,8 @@ const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocu
   Learn: { focused: 'school', unfocused: 'school-outline' },
   Stocks: { focused: 'bar-chart', unfocused: 'bar-chart-outline' },
   Profile: { focused: 'person', unfocused: 'person-outline' },
+  Bounty: { focused: 'timer', unfocused: 'timer-outline' },
+  Board: { focused: 'list', unfocused: 'list-outline' },
 };
 
 function LearnStackNavigator() {
@@ -71,6 +77,8 @@ function SeasonsStackNavigator() {
 function MainTabs() {
   const { mode } = useMode();
 
+  const tintColor = mode === 'timeAttack' ? Colors.orange : Colors.primary;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -80,7 +88,7 @@ function MainTabs() {
           const iconName = focused ? icons.focused : icons.unfocused;
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: Colors.primary,
+        tabBarActiveTintColor: tintColor,
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarStyle: {
           backgroundColor: Colors.card,
@@ -88,18 +96,29 @@ function MainTabs() {
         },
       })}
     >
-      {mode === 'classroom' ? (
-        <Tab.Screen name="Home" component={LeaderboardScreen} />
+      {mode === 'timeAttack' ? (
+        <>
+          <Tab.Screen name="Bounty" component={TimeAttackScreen} />
+          <Tab.Screen name="Board" component={BountyBoardScreen} />
+          <Tab.Screen name="Learn" component={LearnStackNavigator} />
+          <Tab.Screen name="Profile" component={ProfileScreen} />
+        </>
       ) : (
-        <Tab.Screen name="Seasons" component={SeasonsStackNavigator} />
+        <>
+          {mode === 'classroom' ? (
+            <Tab.Screen name="Home" component={LeaderboardScreen} />
+          ) : (
+            <Tab.Screen name="Seasons" component={SeasonsStackNavigator} />
+          )}
+          <Tab.Screen name="Trade" component={TradeScreen} />
+          <Tab.Screen name="Portfolio" component={PortfolioScreen} />
+          {mode === 'classroom' && (
+            <Tab.Screen name="Learn" component={LearnStackNavigator} />
+          )}
+          <Tab.Screen name="Stocks" component={StocksScreen} />
+          <Tab.Screen name="Profile" component={ProfileScreen} />
+        </>
       )}
-      <Tab.Screen name="Trade" component={TradeScreen} />
-      <Tab.Screen name="Portfolio" component={PortfolioScreen} />
-      {mode === 'classroom' && (
-        <Tab.Screen name="Learn" component={LearnStackNavigator} />
-      )}
-      <Tab.Screen name="Stocks" component={StocksScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
@@ -108,6 +127,7 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { mode, isLoading: modeLoading } = useMode();
+  const { showWalkthrough, isLoading: walkthroughLoading } = useWalkthrough();
 
   useEffect(() => {
     registerSignOutHandler(() => setIsAuthenticated(false));
@@ -117,7 +137,7 @@ function AppContent() {
     });
   }, []);
 
-  if (isLoading || modeLoading) {
+  if (isLoading || modeLoading || walkthroughLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
         <ActivityIndicator size="large" color={Colors.primary} />
@@ -131,6 +151,10 @@ function AppContent() {
 
   if (!mode) {
     return <ModeSelectScreen />;
+  }
+
+  if (showWalkthrough) {
+    return <WalkthroughScreen />;
   }
 
   return (
@@ -162,8 +186,10 @@ export default function App() {
       <SafeAreaProvider>
         <ModeProvider>
           <SeasonProvider>
-            <StatusBar style="light" />
-            <AppContent />
+            <WalkthroughProvider>
+              <StatusBar style="light" />
+              <AppContent />
+            </WalkthroughProvider>
           </SeasonProvider>
         </ModeProvider>
       </SafeAreaProvider>
