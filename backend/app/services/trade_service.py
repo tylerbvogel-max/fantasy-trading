@@ -151,8 +151,8 @@ async def execute_trade(
 
     symbol = req.stock_symbol.upper()
 
-    # 1. Validate player is in season
-    ps = await _get_player_season(db, user_id, req.season_id)
+    # 1. Validate player is in season (lock row to prevent concurrent trades)
+    ps = await _get_player_season(db, user_id, req.season_id, lock=True)
     if not ps:
         raise TradeError("You are not a member of this season.")
 
@@ -198,7 +198,7 @@ async def execute_trade(
                 f"Insufficient funds. Need ${total:,.2f} but have ${cash:,.2f}."
             )
     else:
-        holding = await _get_holding(db, ps.id, symbol)
+        holding = await _get_holding(db, ps.id, symbol, lock=True)
         owned = float(holding.shares_owned) if holding else 0
         if req.shares > owned:
             raise TradeError(
@@ -225,8 +225,8 @@ async def execute_trade(
         new_cash = cash + total
     ps.cash_balance = round(new_cash, 2)
 
-    # Update holdings
-    holding = await _get_holding(db, ps.id, symbol)
+    # Update holdings (already locked for SELL, need lock for BUY)
+    holding = await _get_holding(db, ps.id, symbol, lock=True)
 
     if req.transaction_type == "BUY":
         if holding:
@@ -285,24 +285,26 @@ async def get_transaction_history(
 # ── Private helpers ──
 
 async def _get_player_season(
-    db: AsyncSession, user_id: UUID, season_id: str
+    db: AsyncSession, user_id: UUID, season_id: str, lock: bool = False
 ) -> PlayerSeason | None:
-    result = await db.execute(
-        select(PlayerSeason).where(
-            PlayerSeason.user_id == user_id,
-            PlayerSeason.season_id == season_id,
-        )
+    stmt = select(PlayerSeason).where(
+        PlayerSeason.user_id == user_id,
+        PlayerSeason.season_id == season_id,
     )
+    if lock:
+        stmt = stmt.with_for_update()
+    result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
 async def _get_holding(
-    db: AsyncSession, player_season_id: UUID, symbol: str
+    db: AsyncSession, player_season_id: UUID, symbol: str, lock: bool = False
 ) -> Holding | None:
-    result = await db.execute(
-        select(Holding).where(
-            Holding.player_season_id == player_season_id,
-            Holding.stock_symbol == symbol,
-        )
+    stmt = select(Holding).where(
+        Holding.player_season_id == player_season_id,
+        Holding.stock_symbol == symbol,
     )
+    if lock:
+        stmt = stmt.with_for_update()
+    result = await db.execute(stmt)
     return result.scalar_one_or_none()
