@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Alert,
 } from "react-native";
@@ -205,141 +204,147 @@ export default function TimeAttackScreen() {
     );
   }
 
-  // All other states — scrollable
+  // Active window, already picked — no scroll
+  if (hasActiveWindow && hasPicked) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Time Attack</Text>
+        </View>
+
+        {/* Compact stats row */}
+        {stats && (
+          <View style={styles.compactStatsRow}>
+            <Text style={styles.compactStat}>
+              <Text style={{ color: Colors.yellow }}>$$</Text> {stats.double_dollars.toLocaleString()}
+            </Text>
+            <Text style={styles.compactStatDivider}>|</Text>
+            <Text style={styles.compactStat}>
+              <Text style={{ color: Colors.orange }}>Lv.{stats.wanted_level}</Text>
+            </Text>
+            <Text style={styles.compactStatDivider}>|</Text>
+            <Text style={styles.compactStat}>{stats.accuracy_pct}%</Text>
+          </View>
+        )}
+
+        {/* Timer */}
+        <View style={styles.timerRow}>
+          <Text style={styles.timerLabel}>
+            Bounty #{currentWindow!.window_index} — Closes in
+          </Text>
+          <Text style={styles.timerValue}>{windowEndCountdown}</Text>
+        </View>
+
+        {/* SPY chart centered */}
+        <View style={styles.lockedChartArea}>
+          <SpyChart candles={status?.spy_candles ?? []} openPrice={currentWindow?.spy_open_price} />
+        </View>
+
+        {/* Compact locked-in bar at bottom */}
+        <View style={styles.lockedBar}>
+          <Ionicons name="checkmark-circle" size={24} color={Colors.green} />
+          <Text style={styles.lockedBarText}>Locked In</Text>
+          <View style={[
+            styles.lockedBarBadge,
+            { backgroundColor: myPick!.prediction === "UP" ? Colors.green + "20" : Colors.accent + "20" },
+          ]}>
+            <Ionicons
+              name={myPick!.prediction === "UP" ? "arrow-up" : "arrow-down"}
+              size={16}
+              color={myPick!.prediction === "UP" ? Colors.green : Colors.accent}
+            />
+            <Text style={{
+              color: myPick!.prediction === "UP" ? Colors.green : Colors.accent,
+              fontFamily: FontFamily.bold,
+              fontSize: FontSize.md,
+            }}>
+              {myPick!.prediction}
+            </Text>
+          </View>
+          <Text style={styles.lockedBarConfidence}>
+            {myPick!.confidence_label}
+          </Text>
+        </View>
+
+        {/* Previous result inline */}
+        {previousWindow && previousWindow.is_settled && previousPick && (
+          <View style={styles.prevResultBar}>
+            <Text style={styles.prevResultLabel}>Last:</Text>
+            <Text style={[
+              styles.prevResultPayout,
+              { color: (previousPick.payout ?? 0) >= 0 ? Colors.green : Colors.accent },
+            ]}>
+              {(previousPick.payout ?? 0) >= 0 ? "+" : ""}$${previousPick.payout}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // No active window — no scroll
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Time Attack</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Stats bar */}
-        {stats && (
-          <View style={styles.statsBar}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>$$</Text>
-              <Text style={[styles.statValue, { color: Colors.yellow }]}>
-                {stats.double_dollars.toLocaleString()}
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Wanted</Text>
-              <Text style={[styles.statValue, { color: Colors.orange }]}>
-                Lv.{stats.wanted_level}
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Accuracy</Text>
-              <Text style={styles.statValue}>{stats.accuracy_pct}%</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Best</Text>
-              <Text style={[styles.statValue, { color: Colors.green }]}>
-                {stats.best_streak}
-              </Text>
-            </View>
-          </View>
-        )}
+      {/* Compact stats row */}
+      {stats && (
+        <View style={styles.compactStatsRow}>
+          <Text style={styles.compactStat}>
+            <Text style={{ color: Colors.yellow }}>$$</Text> {stats.double_dollars.toLocaleString()}
+          </Text>
+          <Text style={styles.compactStatDivider}>|</Text>
+          <Text style={styles.compactStat}>
+            <Text style={{ color: Colors.orange }}>Lv.{stats.wanted_level}</Text>
+          </Text>
+          <Text style={styles.compactStatDivider}>|</Text>
+          <Text style={styles.compactStat}>{stats.accuracy_pct}%</Text>
+        </View>
+      )}
 
-        {/* Previous result card */}
-        {previousWindow && previousWindow.is_settled && (
-          <View style={styles.resultCard}>
-            <View style={styles.resultHeader}>
-              <Text style={styles.resultTitle}>Last Bounty</Text>
-              <View style={[
-                styles.resultBadge,
-                { backgroundColor: previousWindow.result === "UP" ? Colors.green + "20" : Colors.accent + "20" },
-              ]}>
-                <Ionicons
-                  name={previousWindow.result === "UP" ? "arrow-up" : "arrow-down"}
-                  size={14}
-                  color={previousWindow.result === "UP" ? Colors.green : Colors.accent}
-                />
-                <Text style={{
-                  color: previousWindow.result === "UP" ? Colors.green : Colors.accent,
-                  fontFamily: FontFamily.bold,
-                  fontSize: FontSize.sm,
-                }}>
-                  {previousWindow.result}
-                </Text>
-              </View>
-            </View>
-            {previousPick && (
-              <View style={styles.resultDetails}>
-                <Text style={styles.resultDetailText}>
-                  You picked {previousPick.prediction} ({previousPick.confidence_label})
-                </Text>
-                <Text style={[
-                  styles.resultPayout,
-                  { color: (previousPick.payout ?? 0) >= 0 ? Colors.green : Colors.accent },
-                ]}>
-                  {(previousPick.payout ?? 0) >= 0 ? "+" : ""}$${previousPick.payout}
-                </Text>
-              </View>
-            )}
-            {!previousPick && (
-              <Text style={styles.resultMissed}>You didn't pick this bounty</Text>
-            )}
-          </View>
-        )}
-
-        {/* Active window, already picked */}
-        {hasActiveWindow && hasPicked && (
-          <>
-            <View style={styles.windowInfo}>
-              <Text style={styles.windowLabel}>
-                Bounty #{currentWindow!.window_index} — Closes in
-              </Text>
-              <Text style={styles.countdown}>{windowEndCountdown}</Text>
-            </View>
-
-            <SpyChart candles={status?.spy_candles ?? []} openPrice={currentWindow?.spy_open_price} />
-
-            <View style={styles.lockedCard}>
-              <Ionicons name="checkmark-circle" size={48} color={Colors.green} />
-              <Text style={styles.lockedTitle}>Locked In!</Text>
-              <View style={styles.lockedDetails}>
-                <View style={[
-                  styles.predictionBadge,
-                  { backgroundColor: myPick!.prediction === "UP" ? Colors.green + "20" : Colors.accent + "20" },
-                ]}>
-                  <Ionicons
-                    name={myPick!.prediction === "UP" ? "arrow-up" : "arrow-down"}
-                    size={20}
-                    color={myPick!.prediction === "UP" ? Colors.green : Colors.accent}
-                  />
-                  <Text style={{
-                    color: myPick!.prediction === "UP" ? Colors.green : Colors.accent,
-                    fontFamily: FontFamily.bold,
-                    fontSize: FontSize.lg,
-                  }}>
-                    {myPick!.prediction}
-                  </Text>
-                </View>
-                <Text style={styles.lockedConfidence}>
-                  {myPick!.confidence_label}
-                </Text>
-              </View>
-            </View>
-          </>
-        )}
-
-        {/* No active window — show countdown */}
-        {!hasActiveWindow && (
-          <View style={styles.waitingCard}>
-            <Ionicons name="timer-outline" size={48} color={Colors.orange} />
-            <Text style={styles.waitingTitle}>Next Bounty</Text>
-            <Text style={styles.countdown}>{nextWindowCountdown || "Calculating..."}</Text>
-            <Text style={styles.waitingSubtext}>
-              New bounty every 2 minutes. Predict SPY direction!
+      {/* Previous result card */}
+      {previousWindow && previousWindow.is_settled && (
+        <View style={styles.resultCardCompact}>
+          <Text style={styles.resultCompactLabel}>Last Bounty</Text>
+          <View style={[
+            styles.resultBadgeInline,
+            { backgroundColor: previousWindow.result === "UP" ? Colors.green + "20" : Colors.accent + "20" },
+          ]}>
+            <Ionicons
+              name={previousWindow.result === "UP" ? "arrow-up" : "arrow-down"}
+              size={14}
+              color={previousWindow.result === "UP" ? Colors.green : Colors.accent}
+            />
+            <Text style={{
+              color: previousWindow.result === "UP" ? Colors.green : Colors.accent,
+              fontFamily: FontFamily.bold,
+              fontSize: FontSize.sm,
+            }}>
+              {previousWindow.result}
             </Text>
           </View>
-        )}
+          {previousPick && (
+            <Text style={[
+              styles.resultCompactPayout,
+              { color: (previousPick.payout ?? 0) >= 0 ? Colors.green : Colors.accent },
+            ]}>
+              {(previousPick.payout ?? 0) >= 0 ? "+" : ""}$${previousPick.payout}
+            </Text>
+          )}
+        </View>
+      )}
 
-      </ScrollView>
+      {/* Centered waiting card */}
+      <View style={styles.waitingArea}>
+        <Ionicons name="timer-outline" size={48} color={Colors.orange} />
+        <Text style={styles.waitingTitle}>Next Bounty</Text>
+        <Text style={styles.waitingCountdown}>{nextWindowCountdown || "Calculating..."}</Text>
+        <Text style={styles.waitingSubtext}>
+          New bounty every 2 minutes. Predict SPY direction!
+        </Text>
+      </View>
     </View>
   );
 }
@@ -446,149 +451,108 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  // ── Scrollable content (other states) ──
-  content: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xxxl,
-  },
-  statsBar: {
-    flexDirection: "row",
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statItem: {
-    alignItems: "center",
+  // ── Locked-in state ──
+  lockedChartArea: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
   },
-  statLabel: {
-    fontSize: FontSize.xs,
-    fontFamily: FontFamily.regular,
-    color: Colors.textMuted,
-    marginBottom: 2,
-  },
-  statValue: {
-    fontSize: FontSize.md,
-    fontFamily: FontFamily.bold,
-    color: Colors.text,
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: Colors.border,
-  },
-  resultCard: {
+  lockedBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
     backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderTopWidth: 1,
+    borderTopColor: Colors.green + "30",
   },
-  resultHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.sm,
-  },
-  resultTitle: {
-    fontSize: FontSize.md,
+  lockedBarText: {
     fontFamily: FontFamily.bold,
-    color: Colors.text,
+    fontSize: FontSize.md,
+    color: Colors.green,
   },
-  resultBadge: {
+  lockedBarBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: Spacing.xs,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: Radius.full,
   },
-  resultDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  resultDetailText: {
+  lockedBarConfidence: {
+    fontFamily: FontFamily.semiBold,
     fontSize: FontSize.sm,
-    fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
   },
-  resultPayout: {
-    fontSize: FontSize.lg,
-    fontFamily: FontFamily.bold,
+  prevResultBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingBottom: Spacing.xxxl,
+    paddingTop: Spacing.xs,
+    backgroundColor: Colors.card,
   },
-  resultMissed: {
-    fontSize: FontSize.sm,
+  prevResultLabel: {
     fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
     color: Colors.textMuted,
   },
-  windowInfo: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-  },
-  windowLabel: {
-    fontSize: FontSize.sm,
-    fontFamily: FontFamily.regular,
-    color: Colors.textSecondary,
-  },
-  countdown: {
-    fontSize: FontSize.xxxl,
+  prevResultPayout: {
     fontFamily: FontFamily.bold,
-    color: Colors.orange,
-    marginTop: Spacing.xs,
+    fontSize: FontSize.sm,
   },
-  lockedCard: {
+
+  // ── Waiting / no active window ──
+  resultCardCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginHorizontal: Spacing.xl,
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
-    padding: Spacing.xxxl,
-    alignItems: "center",
+    padding: Spacing.md,
     borderWidth: 1,
-    borderColor: Colors.green + "30",
-    marginTop: Spacing.lg,
+    borderColor: Colors.border,
   },
-  lockedTitle: {
-    fontSize: FontSize.xl,
-    fontFamily: FontFamily.bold,
-    color: Colors.green,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.lg,
+  resultCompactLabel: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
   },
-  lockedDetails: {
+  resultBadgeInline: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.lg,
-  },
-  predictionBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
     borderRadius: Radius.full,
   },
-  lockedConfidence: {
-    fontSize: FontSize.md,
-    fontFamily: FontFamily.semiBold,
-    color: Colors.textSecondary,
+  resultCompactPayout: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.sm,
+    marginLeft: "auto",
   },
-  waitingCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: Spacing.xxxl,
+  waitingArea: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.orange + "30",
-    marginTop: Spacing.xxl,
+    paddingHorizontal: Spacing.xl,
   },
   waitingTitle: {
     fontSize: FontSize.xl,
     fontFamily: FontFamily.bold,
     color: Colors.text,
     marginTop: Spacing.lg,
+  },
+  waitingCountdown: {
+    fontSize: FontSize.xxxl,
+    fontFamily: FontFamily.bold,
+    color: Colors.orange,
+    marginTop: Spacing.xs,
   },
   waitingSubtext: {
     fontSize: FontSize.sm,
