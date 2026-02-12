@@ -43,9 +43,12 @@ The explanation should be accessible from the Time Attack settings/help at any t
 
 ## Core Mechanic
 - Every 2 hours during trading hours, a new bounty is posted
-- Players receive a push notification
-- They see a chart (1-minute candles) for SPY
-- Swipe right/up = price goes up, swipe left/down = price goes down
+- Players see a simple line chart of SPY's recent movement
+- Swipe up = price goes up, swipe down = price goes down
+- **Picks are permanent** — locked on swipe, no revisions. The swipe *is* the commitment.
+- Result determined by SPY's closing price at window end vs opening price at window start
+- Flat price (0.00% change) counts as "up" — system biases toward wins
+- Any price movement is valid, no minimum threshold
 - Result is revealed at the next bounty window
 
 ## Schedule
@@ -63,15 +66,16 @@ Fixed 2-hour bounty windows during extended beta trading hours (9:30 AM - 9:00 P
 ~6 bounties per day. Fixed times (not rolling) so players can build habits around them.
 
 ## User Flow
-1. Push notification: "A new bounty just posted. 72% of gunslingers are betting UP. What's your call?"
-2. Open app → immediately see result of last pick (dopamine hit first)
-3. New chart appears for current bounty
-4. Player chooses confidence: Draw (1x), Quick Draw (2x), or Dead Eye (3x)
-5. Player swipes up (green) or down (red/pink)
-6. Confirmation: "Locked in! Bounty closes at [next window time]"
-7. Post-swipe: possibly show education prompt (see Education Integration below)
-8. Close app, wait for next bounty
-9. End of day — Sunset Report with near-miss messaging (see Retention & Psychology below)
+1. Open Time Attack (accessed as 4th game mode alongside classroom/league/arena)
+2. If between windows: see countdown to next bounty + stats/Bounty Board
+3. If bounty is active: see result of last pick first (dopamine hit), then current bounty
+4. SPY line chart appears for current window
+5. Player chooses confidence: Draw (1x), Quick Draw (2x), or Dead Eye (3x)
+6. Player swipes up (green) or down (red/pink) — **pick is permanently locked on swipe**
+7. Confirmation: "Locked in! Bounty closes at [next window time]"
+8. Post-swipe: possibly show education prompt (see Education Integration below)
+9. Close app, wait for next bounty
+10. End of day — Sunset Report with near-miss messaging (see Retention & Psychology below)
 
 ---
 
@@ -119,6 +123,10 @@ Consecutive correct picks increase your Wanted Level, which multiplies earnings.
 | 4 in a row | 4x |
 | 5 in a row | 5x |
 | 6 in a row | 6x |
+| ... | ... |
+| 10+ in a row | 10x (cap) |
+
+**Wanted Level caps at 10x.** Higher/infinite caps to be revisited after playtesting.
 
 **Formula:** Earnings = (base $$ for confidence tier) x (Wanted Level)
 
@@ -384,14 +392,19 @@ A simpler, once-per-day prediction alongside Time Attack:
 ---
 
 ## Technical Considerations (for later)
-- Push notification infrastructure (Expo Notifications)
 - Price data: only need SPY quotes at bounty window boundaries (minimal API load)
 - New DB models: bounty records, Wanted Level, Last Stand, double dollar balance, Bounty Board
 - Entirely separate from existing season/portfolio architecture — no shared models
 - Quiz topic mapping table
 - Social proof aggregation: track prediction distribution per bounty window
-- Notification tapering logic for lapsed players
 - Time Attack onboarding/tutorial (replayable from settings)
+
+## Future Development (Not in Initial Build)
+- **Push notifications** — Add after migrating from Expo. Bounty alerts, Sunset Reports, weekly digests, notification tapering for lapsed players
+- **OHLC candlestick chart** — Replace simple line chart with full candlestick chart for richer market data visualization
+- **Wanted Level cap adjustment** — Revisit 10x cap, consider higher/infinite scaling after playtesting
+- **Last Stand (streak shield)** — Revisit after base scoring is playtested
+- **Pick revision window** — Currently picks are permanent. Revisit whether a revision window (e.g., changeable until 15 min before close) would improve or hurt engagement
 
 ---
 
