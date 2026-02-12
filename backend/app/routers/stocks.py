@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, outerjoin
+from sqlalchemy import select, outerjoin, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.stock import StockActive, StockMaster
@@ -19,7 +19,10 @@ async def list_stocks(
         select(StockMaster, StockActive)
         .outerjoin(StockActive, StockMaster.symbol == StockActive.symbol)
         .where(StockMaster.is_active == True)
-        .order_by(StockMaster.symbol)
+        .order_by(
+            func.coalesce(StockActive.volume * StockActive.price, 0).desc(),
+            StockMaster.symbol,
+        )
         .limit(limit)
     )
 
