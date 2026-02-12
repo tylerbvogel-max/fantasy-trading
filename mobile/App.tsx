@@ -35,6 +35,7 @@ import SeasonDetailScreen from './src/screens/SeasonDetailScreen';
 import CreateSeasonScreen from './src/screens/CreateSeasonScreen';
 import TimeAttackScreen from './src/screens/TimeAttackScreen';
 import BountyBoardScreen from './src/screens/BountyBoardScreen';
+import BountyStatsScreen from './src/screens/BountyStatsScreen';
 import type { LearnStackParamList } from './src/screens/LearnScreen';
 import type { SeasonsStackParamList } from './src/screens/SeasonsScreen';
 
@@ -52,6 +53,7 @@ const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocu
   Stocks: { focused: 'bar-chart', unfocused: 'bar-chart-outline' },
   Profile: { focused: 'person', unfocused: 'person-outline' },
   Bounty: { focused: 'timer', unfocused: 'timer-outline' },
+  Stats: { focused: 'stats-chart', unfocused: 'stats-chart-outline' },
   Board: { focused: 'list', unfocused: 'list-outline' },
 };
 
@@ -99,6 +101,7 @@ function MainTabs() {
       {mode === 'timeAttack' ? (
         <>
           <Tab.Screen name="Bounty" component={TimeAttackScreen} />
+          <Tab.Screen name="Stats" component={BountyStatsScreen} />
           <Tab.Screen name="Board" component={BountyBoardScreen} />
           <Tab.Screen name="Learn" component={LearnStackNavigator} />
           <Tab.Screen name="Profile" component={ProfileScreen} />
