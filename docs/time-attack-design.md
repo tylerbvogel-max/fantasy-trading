@@ -27,6 +27,20 @@ Time Attack has its own personality layered on top of the app's retro 80s aesthe
 
 ---
 
+## Onboarding
+
+Time Attack requires its own introductory explanation, separate from the main game modes. This should be a short, replayable walkthrough that covers:
+
+- What bounties are and how the 2-hour windows work
+- How to swipe (up = price goes up, down = price goes down)
+- The three confidence tiers: Draw, Quick Draw, Dead Eye
+- How Wanted Level (streaks) multiply earnings
+- How the Bounty Board works
+
+The explanation should be accessible from the Time Attack settings/help at any time for replayability, not just shown once on first launch.
+
+---
+
 ## Core Mechanic
 - Every 2 hours during trading hours, a new bounty is posted
 - Players receive a push notification
@@ -57,7 +71,7 @@ Fixed 2-hour bounty windows during extended beta trading hours (9:30 AM - 9:00 P
 6. Confirmation: "Locked in! Bounty closes at [next window time]"
 7. Post-swipe: possibly show education prompt (see Education Integration below)
 8. Close app, wait for next bounty
-9. End of day — Sunset Report: "Today's haul: $$1,850. You went 4/6. Wanted Level: 3."
+9. End of day — Sunset Report with near-miss messaging (see Retention & Psychology below)
 
 ---
 
@@ -95,7 +109,7 @@ Double dollars are earned or lost per bounty based on confidence tier:
 | Dead Eye (3x) | +$$300 | -$$150 |
 
 ### Wanted Level (Streak Multiplier)
-Consecutive correct picks increase your Wanted Level, which multiplies earnings. A wrong pick resets your Wanted Level to 0.
+Consecutive correct picks increase your Wanted Level, which multiplies earnings. A wrong pick resets your Wanted Level to 0. **Wanted Level carries overnight** — a streak built on Tuesday afternoon continues Wednesday morning.
 
 | Wanted Level | Multiplier |
 |---|---|
@@ -109,6 +123,14 @@ Consecutive correct picks increase your Wanted Level, which multiplies earnings.
 **Formula:** Earnings = (base $$ for confidence tier) x (Wanted Level)
 
 Wrong picks always cost the flat penalty (Wanted Level does not multiply losses).
+
+### Balance Floor: $$0 Minimum
+A player's total double dollar balance can never go below $$0. If a wrong pick would bring them below zero, the balance stays at $$0.
+
+**Why floor at zero:**
+- A player at $$0 thinks "fresh start, let me climb back." A player at -$$4,500 thinks "I'm buried" and uninstalls.
+- Zero feels recoverable. Negative feels like debt.
+- Players at $$0 still see what they *would have earned* on correct picks, creating motivation without punishment.
 
 ### Full Day Scoring Matrix
 
@@ -172,12 +194,39 @@ Wrong picks always cost the flat penalty (Wanted Level does not multiply losses)
 | 6 | Correct | Quick Draw (building back) | 2x | $$400 |
 | **Total** | | | | **$$1,850** |
 
+#### Casual Player — 50% Engagement, Draw Only, 3/3 Correct (Skipped Windows)
+
+| Bounty | Engaged? | Result | Wanted Level | Earnings |
+|--------|----------|--------|-------------|----------|
+| 1 (10 AM) | Yes | Correct | 1x | $$100 |
+| 2 (12 PM) | Skip | — | stays 1x | $$0 |
+| 3 (2 PM) | Yes | Correct | 2x | $$200 |
+| 4 (4 PM) | Skip | — | stays 2x | $$0 |
+| 5 (6 PM) | Skip | — | stays 2x | $$0 |
+| 6 (8 PM) | Yes | Correct | 3x | $$300 |
+| **Total** | | | | **$$600** |
+
+A casual player who only engages half the time but picks correctly is always net positive. Missed windows don't break streaks, so partial engagement is rewarded, not punished.
+
+#### Aggressive Player Always Wrong — Dead Eye, 0/6 Over Time
+
+| Timeframe | Daily Loss | Cumulative |
+|-----------|-----------|------------|
+| 1 day | -$$900 | -$$900 (floored at $$0) |
+| 1 week (5 days) | -$$900/day | -$$4,500 (floored at $$0) |
+| 1 month (22 days) | -$$900/day | -$$19,800 (floored at $$0) |
+
+Compare to perfect aggressive player: +$$6,300/day = $$31,500/week = $$138,600/month.
+
+The worst aggressive player's daily loss (-$$900) is only ~14% of the best aggressive player's daily gain ($$6,300). Combined with the $$0 floor, even the worst-case player can never feel "in the hole."
+
 ### Key Takeaways from the Matrix
 - **Perfect Dead Eye day ($$6,300) vs worst Dead Eye day (-$$900):** A $$7,200 swing. Dead Eye is high stakes.
 - **Perfect Draw day ($$2,100) vs worst Draw day (-$$300):** Only a $$2,400 swing. Draw is consistent.
 - **Wanted Level matters more than confidence:** A Wanted Level 6 Draw ($$600) beats a fresh Dead Eye ($$300). This rewards consistency over gambling.
 - **Strategic confidence mixing ($$1,850)** is competitive with constant Quick Draw ($$1,700 in the mixed scenario) — rewarding players who read the market and adjust.
-- **Losses are capped:** The worst possible day (-$$900) is only ~14% of the best possible day ($$6,300). Players can never lose catastrophically.
+- **Casual players are always net positive:** 50% engagement at Draw with correct picks earns $$600/day. The system never punishes showing up.
+- **Aggressive wrong players are capped:** The $$0 floor means the worst outcome is "back to zero," never debt. This prevents discouragement-driven churn.
 
 ### Score Storage
 Double dollars are tracked as a standalone Time Attack score, separate from season portfolios. No cash injection into seasons — Time Attack is its own game mode with its own economy. Score persists and accumulates over time for Bounty Board ranking.
@@ -219,6 +268,39 @@ Entirely separate from league/arena/classroom leaderboards. Different game mode,
 
 ---
 
+## Retention & Psychology
+
+### What Drives Next-Day Return (Ranked by Impact)
+
+1. **Active Wanted Level** — "I have Wanted Level 4, I can't waste it" is the single strongest pull. This is why missed windows don't break streaks and Wanted Level carries overnight.
+
+2. **Near-miss framing** — "You were 1 pick away from Ace Gunslinger" or "3 more correct picks to Sharp Eye." Showing proximity to the next milestone leverages the Zeigarnik effect — people remember and return to incomplete tasks more than completed ones.
+
+3. **Social position** — "You're #7 on the Bounty Board. #6 is only $$200 ahead." Leaderboard proximity to the next rank is more motivating than absolute score.
+
+4. **Sunset Report cliffhanger** — End the day with tomorrow teased: "Tomorrow's first bounty drops at 10 AM. Your Wanted Level carries over." The overnight streak carry is the hook.
+
+5. **$$0 floor** — Prevents the "I'm too far gone" dropout. A player at zero feels like a fresh start, not a debt.
+
+### Sunset Report Examples (Near-Miss Messaging)
+
+**Good day:**
+> "Today's haul: $$1,850. You went 4/6. Wanted Level: 3. Tomorrow's first bounty drops at 10 AM — your Wanted Level carries over."
+
+**Bad day, almost had it:**
+> "Rough day: -$$200. But you were 1 pick away from Wanted Level 4. Tomorrow's a fresh bounty — first one at 10 AM."
+
+**At $$0:**
+> "You're at $$0. A single correct Draw gets you back to $$100. First bounty tomorrow at 10 AM."
+
+**Near a badge:**
+> "You went 3/5 today. You're 2 correct picks away from Sharp Eye. Tomorrow at 10 AM."
+
+**Near leaderboard move:**
+> "Today's haul: $$850. You're #7 on the Bounty Board — only $$200 behind #6. Tomorrow at 10 AM."
+
+---
+
 ## Notification Loop (Key Engagement Driver)
 
 ### Bounty Alert
@@ -227,9 +309,9 @@ Entirely separate from league/arena/classroom leaderboards. Different game mode,
 - Creates urgency (am I contrarian or going with the crowd?) and makes player feel part of something bigger
 
 ### Sunset Report (9 PM ET)
-- "Today's haul: $$1,850. You went 4/6. Wanted Level: 3."
+- Daily summary with near-miss messaging (see examples above)
 - Closes the loop so the day feels complete
-- Teases tomorrow: "Can I keep this Wanted Level going?" is the thought they go to bed with
+- Always ends with "Tomorrow at 10 AM" to plant the next-day hook
 
 ### Missed Bounty Handling
 - If a player misses a bounty window, skip it — no penalty, no Wanted Level break
@@ -309,6 +391,7 @@ A simpler, once-per-day prediction alongside Time Attack:
 - Quiz topic mapping table
 - Social proof aggregation: track prediction distribution per bounty window
 - Notification tapering logic for lapsed players
+- Time Attack onboarding/tutorial (replayable from settings)
 
 ---
 
