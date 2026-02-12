@@ -122,8 +122,8 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
     const displayLabels = labels.map((l, i) => (i % labelStep === 0 ? l : ""));
     const priceChange = prices[prices.length - 1] - prices[0];
     const lineColor = priceChange >= 0 ? Colors.green : Colors.accent;
-    const minPrice = Math.min(...prices) - 5;
-    const maxPrice = Math.max(...prices) + 5;
+    const minPrice = Math.min(...prices) - 2;
+    const maxPrice = Math.max(...prices) + 2;
 
     chartNode = (
       <View style={styles.chartArea}>
