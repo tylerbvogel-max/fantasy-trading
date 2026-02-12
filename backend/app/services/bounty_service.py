@@ -6,7 +6,7 @@ from sqlalchemy import select, func, and_, Integer, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.bounty import BountyWindow, BountyPrediction, BountyPlayerStats, SpyPriceLog
 from app.models.user import User
-from app.services.finnhub_service import get_stock_price
+from app.services.finnhub_service import get_stock_price, fetch_quote
 from app.config import get_settings
 
 settings = get_settings()
@@ -353,12 +353,13 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         if pred:
             previous_pick = _pick_to_response(pred)
 
-    # Log current SPY price and return recent price history for chart
+    # Log current SPY price (fresh quote, not cached) for chart
     candles = []
     if current:
-        price = await get_stock_price(db, "SPY")
-        if price:
-            db.add(SpyPriceLog(price=price))
+        quote = await fetch_quote("SPY")
+        if quote:
+            live_price = quote["c"]
+            db.add(SpyPriceLog(price=live_price))
             await db.commit()
 
         now_utc = datetime.now(timezone.utc)
