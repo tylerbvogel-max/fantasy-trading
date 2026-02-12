@@ -111,7 +111,7 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
   let chartNode: React.ReactNode = null;
 
   if (hasCandles) {
-    const step = Math.max(1, Math.floor(candles.length / 20));
+    const step = Math.max(1, Math.floor(candles.length / 60));
     const sampled = candles.filter((_, i) => i % step === 0 || i === candles.length - 1);
     const prices = sampled.map((c) => c.close);
     const labels = sampled.map((c) => {
@@ -122,8 +122,8 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
     const displayLabels = labels.map((l, i) => (i % labelStep === 0 ? l : ""));
     const priceChange = prices[prices.length - 1] - prices[0];
     const lineColor = priceChange >= 0 ? Colors.green : Colors.accent;
-    const minPrice = Math.min(...prices) - 10;
-    const maxPrice = Math.max(...prices) + 10;
+    const minPrice = Math.min(...prices) - 5;
+    const maxPrice = Math.max(...prices) + 5;
 
     chartNode = (
       <View style={styles.chartArea}>
