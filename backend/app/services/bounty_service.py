@@ -363,6 +363,18 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
 
         now_utc = datetime.now(timezone.utc)
         one_hour_ago = now_utc - timedelta(hours=1)
+
+        # Check if we have enough data points
+        count_result = await db.execute(
+            select(func.count(SpyPriceLog.id))
+            .where(SpyPriceLog.recorded_at >= one_hour_ago)
+        )
+        point_count = count_result.scalar() or 0
+
+        # Backfill from Yahoo Finance if data is thin (cold start / sleep wake-up)
+        if point_count < 5:
+            await backfill_spy_prices(db)
+
         log_result = await db.execute(
             select(SpyPriceLog)
             .where(SpyPriceLog.recorded_at >= one_hour_ago)
@@ -447,31 +459,39 @@ async def get_bounty_board(db: AsyncSession, period: str = "alltime") -> list[di
         return board
 
 
-async def fetch_spy_candles(from_ts: int, to_ts: int) -> list[dict]:
-    """Fetch SPY candle data from Finnhub."""
+async def backfill_spy_prices(db: AsyncSession) -> None:
+    """Backfill SPY price log from Yahoo Finance when data is thin (cold start)."""
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
-                f"{FINNHUB_BASE}/stock/candle",
-                params={
-                    "symbol": "SPY",
-                    "resolution": "1",
-                    "from": from_ts,
-                    "to": to_ts,
-                    "token": settings.finnhub_api_key,
-                },
+                "https://query1.finance.yahoo.com/v8/finance/chart/SPY",
+                params={"interval": "1m", "range": "1h"},
+                headers={"User-Agent": "Mozilla/5.0"},
                 timeout=10.0,
             )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("s") == "ok" and data.get("t"):
-                    return [
-                        {"timestamp": t, "close": c}
-                        for t, c in zip(data["t"], data["c"])
-                    ]
-        except httpx.RequestError:
+            if resp.status_code != 200:
+                return
+
+            data = resp.json()
+            result = data.get("chart", {}).get("result", [])
+            if not result:
+                return
+
+            timestamps = result[0].get("timestamp", [])
+            closes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+
+            if not timestamps or not closes:
+                return
+
+            for ts, close in zip(timestamps, closes):
+                if close is None:
+                    continue
+                recorded = datetime.fromtimestamp(ts, tz=timezone.utc)
+                db.add(SpyPriceLog(price=close, recorded_at=recorded))
+
+            await db.commit()
+        except (httpx.RequestError, KeyError, IndexError):
             pass
-    return []
 
 
 async def get_prediction_history(
