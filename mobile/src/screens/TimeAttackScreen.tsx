@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Animated as RNAnimated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
@@ -63,6 +64,20 @@ export default function TimeAttackScreen() {
   const { data: status, isLoading, isError, refetch } = useBountyStatus();
   const submitPrediction = useSubmitPrediction();
   const [confidence, setConfidence] = useState(1);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastOpacity = useState(() => new RNAnimated.Value(0))[0];
+
+  const showToast = (message: string) => {
+    setToast(message);
+    toastOpacity.setValue(1);
+    setTimeout(() => {
+      RNAnimated.timing(toastOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }).start(() => setToast(null));
+    }, 4500);
+  };
 
   const currentWindow = status?.current_window;
   const previousWindow = status?.previous_window;
@@ -85,8 +100,8 @@ export default function TimeAttackScreen() {
         confidence,
       },
       {
-        onSuccess: (data) => {
-          Alert.alert("Locked In!", data.message);
+        onSuccess: () => {
+          showToast("Locked In!");
         },
         onError: (error) => {
           const msg = error.message ?? "";
@@ -131,6 +146,13 @@ export default function TimeAttackScreen() {
     );
   }
 
+  const toastElement = toast ? (
+    <RNAnimated.View style={[styles.toast, { opacity: toastOpacity }]}>
+      <Ionicons name="checkmark-circle" size={20} color={Colors.green} />
+      <Text style={styles.toastText}>{toast}</Text>
+    </RNAnimated.View>
+  ) : null;
+
   const hasActiveWindow = !!currentWindow;
   const hasPicked = !!myPick;
 
@@ -138,6 +160,7 @@ export default function TimeAttackScreen() {
   if (hasActiveWindow && !hasPicked) {
     return (
       <View style={styles.container}>
+        {toastElement}
         <View style={styles.header}>
           <Text style={styles.title}>Time Attack</Text>
         </View>
@@ -213,6 +236,7 @@ export default function TimeAttackScreen() {
   if (hasActiveWindow && hasPicked) {
     return (
       <View style={styles.container}>
+        {toastElement}
         <View style={styles.header}>
           <Text style={styles.title}>Time Attack</Text>
         </View>
@@ -358,6 +382,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  toast: {
+    position: "absolute",
+    top: Spacing.statusBar + 50,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.green + "40",
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    zIndex: 100,
+  },
+  toastText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.md,
+    color: Colors.green,
   },
   header: {
     paddingHorizontal: Spacing.xl,

@@ -66,12 +66,12 @@ export default function BountyStatsScreen() {
           </View>
           <View style={styles.overviewDivider} />
           <View style={styles.overviewItem}>
-            <Text style={styles.overviewLabel}>Predictions</Text>
+            <Text style={styles.overviewLabel}>Picks</Text>
             <Text style={styles.overviewValue}>{stats.total_predictions}</Text>
           </View>
           <View style={styles.overviewDivider} />
           <View style={styles.overviewItem}>
-            <Text style={styles.overviewLabel}>Best Streak</Text>
+            <Text style={styles.overviewLabel}>Streak</Text>
             <Text style={[styles.overviewValue, { color: Colors.green }]}>
               {stats.best_streak}
             </Text>
