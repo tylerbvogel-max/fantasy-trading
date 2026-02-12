@@ -182,6 +182,32 @@ export default function BountyStatsScreen() {
             </View>
           ))}
         </View>
+
+        {/* Ticker Win Rates */}
+        {stats.ticker_stats && stats.ticker_stats.length > 0 && (
+          <View style={styles.statsCard}>
+            <Text style={styles.statsCardTitle}>Win Rate by Ticker</Text>
+            {stats.ticker_stats.map((tk) => (
+              <View key={tk.symbol} style={styles.statRow}>
+                <Text style={styles.statRowLabel}>{tk.symbol}</Text>
+                <View style={styles.statBarBg}>
+                  <View
+                    style={[
+                      styles.statBarFill,
+                      {
+                        width: `${Math.min(tk.win_rate, 100)}%`,
+                        backgroundColor: Colors.accent,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.statRowValue}>
+                  {tk.total > 0 ? `${tk.win_rate}%` : "—"}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );

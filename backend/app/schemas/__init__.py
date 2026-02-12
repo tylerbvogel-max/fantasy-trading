@@ -439,6 +439,13 @@ class TimeSlotStatEntry(BaseModel):
     win_rate: float
 
 
+class TickerStatEntry(BaseModel):
+    symbol: str
+    total: int
+    correct: int
+    win_rate: float
+
+
 class WeeklyTrend(BaseModel):
     this_week: int
     last_week: int
@@ -460,6 +467,7 @@ class BountyDetailedStats(BaseModel):
     best_streak: int = 0
     confidence_stats: list[ConfidenceStatEntry] = []
     time_slot_stats: list[TimeSlotStatEntry] = []
+    ticker_stats: list[TickerStatEntry] = []
     weekly_trend: WeeklyTrend
     board_rank: int | None = None
     wanted_level_progress: WantedLevelProgress

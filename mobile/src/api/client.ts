@@ -480,6 +480,13 @@ export interface TimeSlotStatEntry {
   win_rate: number;
 }
 
+export interface TickerStatEntry {
+  symbol: string;
+  total: number;
+  correct: number;
+  win_rate: number;
+}
+
 export interface WeeklyTrend {
   this_week: number;
   last_week: number;
@@ -501,6 +508,7 @@ export interface BountyDetailedStats {
   best_streak: number;
   confidence_stats: ConfidenceStatEntry[];
   time_slot_stats: TimeSlotStatEntry[];
+  ticker_stats: TickerStatEntry[];
   weekly_trend: WeeklyTrend;
   board_rank: number | null;
   wanted_level_progress: WantedLevelProgress;

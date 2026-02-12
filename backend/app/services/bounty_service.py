@@ -669,6 +669,30 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
             "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
         })
 
+    # --- Ticker stats ---
+    ticker_result = await db.execute(
+        select(
+            BountyPrediction.symbol,
+            func.count(BountyPrediction.id).label("total"),
+            func.count(BountyPrediction.id).filter(
+                BountyPrediction.is_correct == True
+            ).label("correct"),
+        )
+        .where(BountyPrediction.user_id == user_id, BountyPrediction.is_correct.isnot(None))
+        .group_by(BountyPrediction.symbol)
+    )
+    ticker_stats = []
+    for row in ticker_result.all():
+        total = row.total or 0
+        correct = row.correct or 0
+        ticker_stats.append({
+            "symbol": row.symbol,
+            "total": total,
+            "correct": correct,
+            "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
+        })
+    ticker_stats.sort(key=lambda t: t["symbol"])
+
     # --- Weekly trend ---
     now_et = datetime.now(ET)
     this_week_start = now_et.date() - timedelta(days=now_et.weekday())
@@ -716,6 +740,7 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "best_streak": stats.best_streak,
         "confidence_stats": confidence_stats,
         "time_slot_stats": time_slot_stats,
+        "ticker_stats": ticker_stats,
         "weekly_trend": {
             "this_week": this_week_total,
             "last_week": last_week_total,
