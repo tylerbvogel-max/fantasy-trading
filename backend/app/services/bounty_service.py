@@ -539,11 +539,16 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
             })
     confidence_stats.sort(key=lambda c: c["confidence"])
 
-    # --- Time slot stats (grouped by hour of day) ---
-    hour_extract = func.extract("hour", BountyWindow.start_time).cast(Integer)
+    # --- Time slot stats (grouped into 2-hour ET buckets) ---
+    # Extract ET hour from UTC start_time
+    et_hour_col = func.extract(
+        "hour",
+        func.timezone("America/New_York", BountyWindow.start_time)
+    ).cast(Integer)
+
     slot_result = await db.execute(
         select(
-            hour_extract.label("hour"),
+            et_hour_col.label("et_hour"),
             func.count(BountyPrediction.id).label("total"),
             func.count(BountyPrediction.id).filter(
                 BountyPrediction.is_correct == True
@@ -551,17 +556,21 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         )
         .join(BountyWindow, BountyPrediction.bounty_window_id == BountyWindow.id)
         .where(BountyPrediction.user_id == user_id, BountyPrediction.is_correct.isnot(None))
-        .group_by(hour_extract)
-        .order_by(hour_extract)
+        .group_by(et_hour_col)
     )
+    # Collect per-hour data
+    hour_data = {int(row.et_hour): (row.total or 0, row.correct or 0) for row in slot_result.all()}
+
+    # Always show all 6 standard 2-hour slots, summing both hours in each slot
+    TIME_SLOTS = [(9, "9 AM"), (11, "11 AM"), (13, "1 PM"), (15, "3 PM"), (17, "5 PM"), (19, "7 PM")]
     time_slot_stats = []
-    for i, row in enumerate(slot_result.all()):
-        total = row.total or 0
-        correct = row.correct or 0
-        h = int(row.hour)
-        label = f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}"
+    for i, (slot_hour, label) in enumerate(TIME_SLOTS, start=1):
+        t1, c1 = hour_data.get(slot_hour, (0, 0))
+        t2, c2 = hour_data.get(slot_hour + 1, (0, 0))
+        total = t1 + t2
+        correct = c1 + c2
         time_slot_stats.append({
-            "window_index": i + 1,
+            "window_index": i,
             "time_label": label,
             "total": total,
             "correct": correct,

@@ -78,31 +78,6 @@ export default function BountyStatsScreen() {
           </View>
         </View>
 
-        {/* Wanted Level XP Bar */}
-        <View style={styles.xpCard}>
-          <View style={styles.xpHeader}>
-            <Text style={styles.xpLabel}>
-              Wanted Level {stats.wanted_level_progress.current_level}
-            </Text>
-            <Text style={styles.xpMax}>
-              / {stats.wanted_level_progress.max_level}
-            </Text>
-          </View>
-          <View style={styles.xpBarBg}>
-            <View
-              style={[
-                styles.xpBarFill,
-                { width: `${stats.wanted_level_progress.progress_pct}%` },
-              ]}
-            />
-          </View>
-          <Text style={styles.xpSubtext}>
-            {stats.wanted_level_progress.current_level < stats.wanted_level_progress.max_level
-              ? `1 correct pick to Lv.${stats.wanted_level_progress.current_level + 1}`
-              : "Max level reached!"}
-          </Text>
-        </View>
-
         {/* Board Rank + Weekly Trend row */}
         <View style={styles.twoColRow}>
           <View style={styles.miniCard}>
@@ -130,6 +105,31 @@ export default function BountyStatsScreen() {
               </Text>
             )}
           </View>
+        </View>
+
+        {/* Wanted Level XP Bar */}
+        <View style={styles.xpCard}>
+          <View style={styles.xpHeader}>
+            <Text style={styles.xpLabel}>
+              Wanted Level {stats.wanted_level_progress.current_level}
+            </Text>
+            <Text style={styles.xpMax}>
+              / {stats.wanted_level_progress.max_level}
+            </Text>
+          </View>
+          <View style={styles.xpBarBg}>
+            <View
+              style={[
+                styles.xpBarFill,
+                { width: `${stats.wanted_level_progress.progress_pct}%` },
+              ]}
+            />
+          </View>
+          <Text style={styles.xpSubtext}>
+            {stats.wanted_level_progress.current_level < stats.wanted_level_progress.max_level
+              ? `1 correct pick to Lv.${stats.wanted_level_progress.current_level + 1}`
+              : "Max level reached!"}
+          </Text>
         </View>
 
         {/* Confidence Level Win Rates */}
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   statRowLabel: {
-    width: 80,
+    width: 100,
     fontSize: FontSize.sm,
     fontFamily: FontFamily.semiBold,
     color: Colors.text,
