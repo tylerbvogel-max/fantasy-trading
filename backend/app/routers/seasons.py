@@ -54,6 +54,10 @@ async def list_seasons(
             start_date=s.start_date,
             end_date=s.end_date,
             max_trades_per_player=s.max_trades_per_player,
+            margin_enabled=s.margin_enabled,
+            leverage_multiplier=float(s.leverage_multiplier) if s.leverage_multiplier else None,
+            margin_interest_rate=float(s.margin_interest_rate) if s.margin_interest_rate else None,
+            maintenance_margin_pct=float(s.maintenance_margin_pct) if s.maintenance_margin_pct else None,
         ))
 
     return summaries
@@ -85,6 +89,10 @@ async def get_season(season_id: str, db: AsyncSession = Depends(get_db)):
         allowed_stocks=season.allowed_stocks,
         description=season.description,
         max_trades_per_player=season.max_trades_per_player,
+        margin_enabled=season.margin_enabled,
+        leverage_multiplier=float(season.leverage_multiplier) if season.leverage_multiplier else None,
+        margin_interest_rate=float(season.margin_interest_rate) if season.margin_interest_rate else None,
+        maintenance_margin_pct=float(season.maintenance_margin_pct) if season.maintenance_margin_pct else None,
     )
 
 
@@ -110,6 +118,10 @@ async def create_season(
         description=data.description,
         max_trades_per_player=data.max_trades_per_player,
         created_by=user.id,
+        margin_enabled=data.margin_enabled,
+        leverage_multiplier=data.leverage_multiplier if data.margin_enabled else None,
+        margin_interest_rate=data.margin_interest_rate if data.margin_enabled else None,
+        maintenance_margin_pct=data.maintenance_margin_pct if data.margin_enabled else None,
     )
     db.add(season)
 
@@ -135,6 +147,10 @@ async def create_season(
         allowed_stocks=None,
         description=season.description,
         max_trades_per_player=season.max_trades_per_player,
+        margin_enabled=season.margin_enabled,
+        leverage_multiplier=float(season.leverage_multiplier) if season.leverage_multiplier else None,
+        margin_interest_rate=float(season.margin_interest_rate) if season.margin_interest_rate else None,
+        maintenance_margin_pct=float(season.maintenance_margin_pct) if season.maintenance_margin_pct else None,
     )
 
 

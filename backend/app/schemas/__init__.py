@@ -53,6 +53,10 @@ class SeasonCreate(BaseModel):
     end_date: datetime | None = None
     starting_cash: float = 100000.00
     description: str | None = None
+    margin_enabled: bool = False
+    leverage_multiplier: float = Field(default=2.0, ge=1.5, le=4.0)
+    margin_interest_rate: float = Field(default=0.08, ge=0.01, le=0.20)
+    maintenance_margin_pct: float = Field(default=0.30, ge=0.20, le=0.50)
 
 
 class SeasonSummary(BaseModel):
@@ -66,6 +70,10 @@ class SeasonSummary(BaseModel):
     start_date: datetime
     end_date: datetime | None = None
     max_trades_per_player: int | None = None
+    margin_enabled: bool = False
+    leverage_multiplier: float | None = None
+    margin_interest_rate: float | None = None
+    maintenance_margin_pct: float | None = None
 
     class Config:
         from_attributes = True
@@ -82,6 +90,10 @@ class PlayerSeasonCreate(BaseModel):
     duration_days: int = Field(default=14, ge=1, le=31)
     max_trades_per_player: int | None = Field(default=None, ge=1, le=1000)
     description: str | None = None
+    margin_enabled: bool = False
+    leverage_multiplier: float = Field(default=2.0, ge=1.5, le=4.0)
+    margin_interest_rate: float = Field(default=0.08, ge=0.01, le=0.20)
+    maintenance_margin_pct: float = Field(default=0.30, ge=0.20, le=0.50)
 
 
 class JoinSeasonResponse(BaseModel):
@@ -98,6 +110,7 @@ class TradeRequest(BaseModel):
     stock_symbol: str = Field(..., max_length=10)
     transaction_type: str = Field(..., pattern="^(BUY|SELL)$")
     shares: int = Field(..., gt=0)
+    use_margin: bool = False
 
 
 class TradeResponse(BaseModel):
@@ -109,6 +122,8 @@ class TradeResponse(BaseModel):
     total_amount: float
     new_cash_balance: float
     executed_at: datetime
+    margin_used: float = 0
+    new_margin_loan: float = 0
 
 
 class TradeValidation(BaseModel):
@@ -119,6 +134,8 @@ class TradeValidation(BaseModel):
     available_cash: float | None = None
     available_shares: float | None = None
     message: str
+    buying_power: float | None = None
+    margin_warning: str | None = None
 
 
 class TransactionHistory(BaseModel):
@@ -156,6 +173,9 @@ class PortfolioSummary(BaseModel):
     total_value: float
     percent_gain: float
     holdings: list[HoldingResponse] = []
+    margin_loan_balance: float = 0
+    margin_equity: float = 0
+    margin_call_active: bool = False
 
 
 class PortfolioHistoryPoint(BaseModel):

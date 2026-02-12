@@ -8,6 +8,7 @@ from app.services.auth_service import get_current_user, create_invite_code
 from app.services.finnhub_service import refresh_all_prices, import_all_us_stocks, refresh_trending_stocks
 from app.services.analytics_service import backfill_benchmark
 from app.services.portfolio_service import capture_daily_snapshot
+from app.services.margin_service import apply_daily_interest, check_margin_calls, execute_expired_liquidations
 from app.models.user import User
 from app.models.season import Season
 from app.models.invite_code import InviteCode
@@ -84,6 +85,10 @@ async def create_season(
         end_date=req.end_date,
         starting_cash=req.starting_cash,
         description=req.description,
+        margin_enabled=req.margin_enabled,
+        leverage_multiplier=req.leverage_multiplier if req.margin_enabled else None,
+        margin_interest_rate=req.margin_interest_rate if req.margin_enabled else None,
+        maintenance_margin_pct=req.maintenance_margin_pct if req.margin_enabled else None,
     )
     db.add(season)
     await db.commit()
@@ -101,6 +106,10 @@ async def create_season(
         end_date=season.end_date,
         allowed_stocks=season.allowed_stocks,
         description=season.description,
+        margin_enabled=season.margin_enabled,
+        leverage_multiplier=float(season.leverage_multiplier) if season.leverage_multiplier else None,
+        margin_interest_rate=float(season.margin_interest_rate) if season.margin_interest_rate else None,
+        maintenance_margin_pct=float(season.maintenance_margin_pct) if season.maintenance_margin_pct else None,
     )
 
 
@@ -200,6 +209,48 @@ async def backfill_benchmarks(
     if errors:
         result["errors"] = errors
     return result
+
+
+# ── Margin Admin ──
+
+@router.post("/margin/run")
+async def run_margin_daily(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually trigger margin daily processing (interest + margin calls + liquidations)."""
+    result = await db.execute(
+        select(Season).where(Season.is_active == True, Season.margin_enabled == True)
+    )
+    seasons = list(result.scalars().all())
+
+    if not seasons:
+        return {"message": "No active margin-enabled seasons found."}
+
+    total_interest = 0
+    total_calls = []
+    total_liquidations = []
+
+    for season in seasons:
+        interest_count = await apply_daily_interest(db, season.id)
+        total_interest += interest_count
+
+        calls = await check_margin_calls(db, season.id)
+        total_calls.extend(calls)
+
+        liquidations = await execute_expired_liquidations(db, season.id)
+        total_liquidations.extend(liquidations)
+
+    await db.commit()
+
+    return {
+        "message": f"Margin processing complete for {len(seasons)} season(s).",
+        "interest_charged": total_interest,
+        "margin_calls": len(total_calls),
+        "liquidations": len(total_liquidations),
+        "call_details": total_calls,
+        "liquidation_details": total_liquidations,
+    }
 
 
 # ── Education Admin ──

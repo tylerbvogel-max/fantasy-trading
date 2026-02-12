@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import String, Boolean, DateTime, Numeric, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -19,6 +20,9 @@ class PlayerSeason(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    margin_loan_balance: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    margin_call_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    margin_call_issued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="player_seasons")
     season: Mapped["Season"] = relationship(back_populates="player_seasons")

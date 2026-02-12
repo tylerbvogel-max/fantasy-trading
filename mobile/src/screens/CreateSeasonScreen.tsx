@@ -19,7 +19,7 @@ import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { SeasonsStackParamList } from "./SeasonsScreen";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 const DURATION_PRESETS = [
   { label: "1 Week", days: 7 },
@@ -73,6 +73,10 @@ export default function CreateSeasonScreen() {
   const [showCustomCash, setShowCustomCash] = useState(false);
   const [limitTrades, setLimitTrades] = useState(false);
   const [maxTrades, setMaxTrades] = useState("");
+  const [marginEnabled, setMarginEnabled] = useState(false);
+  const [leverageMultiplier, setLeverageMultiplier] = useState(2.0);
+  const [marginInterestRate, setMarginInterestRate] = useState(0.08);
+  const [maintenanceMarginPct, setMaintenanceMarginPct] = useState(0.30);
 
   const canNext = () => {
     if (step === 0) return name.trim().length >= 2;
@@ -119,6 +123,10 @@ export default function CreateSeasonScreen() {
         duration_days: durationDays,
         max_trades_per_player: tradeLimit,
         description: description.trim() || null,
+        margin_enabled: marginEnabled,
+        leverage_multiplier: marginEnabled ? leverageMultiplier : undefined,
+        margin_interest_rate: marginEnabled ? marginInterestRate : undefined,
+        maintenance_margin_pct: marginEnabled ? maintenanceMarginPct : undefined,
       },
       {
         onSuccess: (data) => {
@@ -280,6 +288,111 @@ export default function CreateSeasonScreen() {
       case 3:
         return (
           <View>
+            <Text style={styles.stepTitle}>Margin Trading</Text>
+            <Text style={styles.stepSubtitle}>
+              Advanced — borrowed funds accrue interest
+            </Text>
+
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() => setMarginEnabled(!marginEnabled)}
+            >
+              <View style={styles.toggleInfo}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="warning-outline" size={16} color={Colors.orange} />
+                  <Text style={styles.toggleLabel}>Enable Margin Trading</Text>
+                </View>
+                <Text style={styles.toggleSubtext}>
+                  Players can borrow to amplify gains (and losses)
+                </Text>
+              </View>
+              <View style={[styles.toggle, marginEnabled && styles.toggleActive]}>
+                <View style={[styles.toggleKnob, marginEnabled && styles.toggleKnobActive]} />
+              </View>
+            </TouchableOpacity>
+
+            {marginEnabled && (
+              <View style={{ marginTop: Spacing.xl }}>
+                <Text style={styles.marginSectionLabel}>Leverage</Text>
+                <View style={styles.presetGrid}>
+                  {[1.5, 2, 3, 4].map((val) => (
+                    <TouchableOpacity
+                      key={val}
+                      style={[
+                        styles.presetButton,
+                        leverageMultiplier === val && styles.presetButtonActive,
+                      ]}
+                      onPress={() => setLeverageMultiplier(val)}
+                    >
+                      <Text
+                        style={[
+                          styles.presetButtonText,
+                          leverageMultiplier === val && styles.presetButtonTextActive,
+                        ]}
+                      >
+                        {val}x
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={[styles.marginSectionLabel, { marginTop: Spacing.xl }]}>
+                  Interest Rate (Annual)
+                </Text>
+                <View style={styles.presetGrid}>
+                  {[0.04, 0.08, 0.12].map((val) => (
+                    <TouchableOpacity
+                      key={val}
+                      style={[
+                        styles.presetButton,
+                        marginInterestRate === val && styles.presetButtonActive,
+                      ]}
+                      onPress={() => setMarginInterestRate(val)}
+                    >
+                      <Text
+                        style={[
+                          styles.presetButtonText,
+                          marginInterestRate === val && styles.presetButtonTextActive,
+                        ]}
+                      >
+                        {val * 100}%
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={[styles.marginSectionLabel, { marginTop: Spacing.xl }]}>
+                  Maintenance Margin
+                </Text>
+                <View style={styles.presetGrid}>
+                  {[0.20, 0.30, 0.40, 0.50].map((val) => (
+                    <TouchableOpacity
+                      key={val}
+                      style={[
+                        styles.presetButton,
+                        maintenanceMarginPct === val && styles.presetButtonActive,
+                      ]}
+                      onPress={() => setMaintenanceMarginPct(val)}
+                    >
+                      <Text
+                        style={[
+                          styles.presetButtonText,
+                          maintenanceMarginPct === val && styles.presetButtonTextActive,
+                        ]}
+                      >
+                        {val * 100}%
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        );
+
+      case 4:
+        return (
+          <View>
             <Text style={styles.stepTitle}>Trade Limits & Confirm</Text>
 
             {/* Trade limit toggle */}
@@ -341,6 +454,17 @@ export default function CreateSeasonScreen() {
                   {effectiveTradeLimit ? `${effectiveTradeLimit} trades` : "Unlimited"}
                 </Text>
               </View>
+              {marginEnabled ? (
+                <>
+                  <View style={styles.summaryDivider} />
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Margin Trading</Text>
+                    <Text style={[styles.summaryValue, { color: Colors.orange }]}>
+                      {leverageMultiplier}x leverage, {marginInterestRate * 100}% interest
+                    </Text>
+                  </View>
+                </>
+              ) : null}
               {description.trim() ? (
                 <>
                   <View style={styles.summaryDivider} />
@@ -610,6 +734,12 @@ const styles = StyleSheet.create({
   toggleKnobActive: {
     alignSelf: "flex-end",
     backgroundColor: Colors.text,
+  },
+  marginSectionLabel: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
   },
   tradeLimitInput: {
     flexDirection: "row",

@@ -14,7 +14,7 @@ class Transaction(Base):
     )
     season_id: Mapped[str] = mapped_column(ForeignKey("seasons.id"), nullable=False)
     stock_symbol: Mapped[str] = mapped_column(String(10), nullable=False)
-    transaction_type: Mapped[str] = mapped_column(String(4), nullable=False)  # BUY or SELL
+    transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)  # BUY, SELL, MARGIN_INTEREST, MARGIN_LIQUIDATION
     shares: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     price_per_share: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     total_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)

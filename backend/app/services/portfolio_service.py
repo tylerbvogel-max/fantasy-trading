@@ -61,9 +61,11 @@ async def get_portfolio(
             weight_pct=0,  # calculated below
         ))
 
-    total_value = float(ps.cash_balance) + holdings_value
+    margin_loan = float(ps.margin_loan_balance) if ps.margin_loan_balance else 0
+    total_value = float(ps.cash_balance) + holdings_value - margin_loan
     starting_cash = float(ps.season.starting_cash)
     percent_gain = ((total_value - starting_cash) / starting_cash * 100) if starting_cash > 0 else 0
+    margin_equity = float(ps.cash_balance) + holdings_value - margin_loan
 
     # Calculate weight percentages
     for h in holdings_list:
@@ -80,6 +82,9 @@ async def get_portfolio(
         total_value=round(total_value, 2),
         percent_gain=round(percent_gain, 2),
         holdings=holdings_list,
+        margin_loan_balance=round(margin_loan, 2),
+        margin_equity=round(margin_equity, 2),
+        margin_call_active=bool(ps.margin_call_active),
     )
 
 
@@ -137,7 +142,8 @@ async def get_leaderboard(db: AsyncSession, season_id: str) -> list[LeaderboardE
             float(h.shares_owned) * stock_lookup.get(h.stock_symbol, 0)
             for h in ps.holdings
         )
-        total_value = float(ps.cash_balance) + holdings_value
+        margin_loan = float(ps.margin_loan_balance) if ps.margin_loan_balance else 0
+        total_value = float(ps.cash_balance) + holdings_value - margin_loan
         percent_gain = ((total_value - starting_cash) / starting_cash * 100) if starting_cash > 0 else 0
 
         entries.append(LeaderboardEntry(
@@ -192,7 +198,8 @@ async def capture_daily_snapshot(db: AsyncSession, season_id: str) -> int:
             float(h.shares_owned) * stock_lookup.get(h.stock_symbol, 0)
             for h in ps.holdings
         )
-        total_value = float(ps.cash_balance) + holdings_value
+        margin_loan = float(ps.margin_loan_balance) if ps.margin_loan_balance else 0
+        total_value = float(ps.cash_balance) + holdings_value - margin_loan
         percent_gain = ((total_value - starting_cash) / starting_cash * 100) if starting_cash > 0 else 0
 
         # Upsert snapshot (one per day per player)

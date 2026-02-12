@@ -10,6 +10,7 @@ from app.models.season import Season
 from app.models.bounty import BountyWindow
 from app.services.finnhub_service import refresh_all_prices, refresh_stock_price, refresh_trending_stocks
 from app.services.portfolio_service import capture_daily_snapshot
+from app.services.margin_service import apply_daily_interest, check_margin_calls, execute_expired_liquidations
 from app.services.bounty_service import (
     get_or_create_today_windows,
     settle_window,
@@ -112,6 +113,31 @@ async def job_settle_bounty_window():
             logger.error(f"Bounty settlement failed: {e}")
 
 
+async def job_margin_daily():
+    """Apply daily interest, check margin calls, execute liquidations for margin-enabled seasons."""
+    async with async_session() as db:
+        try:
+            result = await db.execute(
+                select(Season).where(Season.is_active == True, Season.margin_enabled == True)
+            )
+            seasons = list(result.scalars().all())
+
+            for season in seasons:
+                interest = await apply_daily_interest(db, season.id)
+                calls = await check_margin_calls(db, season.id)
+                liquidations = await execute_expired_liquidations(db, season.id)
+                logger.info(
+                    f"Margin daily for {season.id}: "
+                    f"{interest} interest charges, {len(calls)} margin calls, "
+                    f"{len(liquidations)} liquidations"
+                )
+
+            await db.commit()
+            logger.info(f"Margin daily complete: {len(seasons)} seasons processed")
+        except Exception as e:
+            logger.error(f"Margin daily failed: {e}")
+
+
 def start_scheduler():
     """Initialize and start the background job scheduler."""
     # Price refresh: every 15 min during market hours (Mon-Fri 9:30-16:00 ET)
@@ -144,6 +170,14 @@ def start_scheduler():
         job_daily_snapshot,
         CronTrigger(hour=21, minute=30),
         id="daily_snapshot",
+        replace_existing=True,
+    )
+
+    # Margin daily: 9 PM ET (02:00 UTC), Mon-Fri — after market close
+    scheduler.add_job(
+        job_margin_daily,
+        CronTrigger(hour=2, minute=0, day_of_week="mon-fri"),
+        id="margin_daily",
         replace_existing=True,
     )
 

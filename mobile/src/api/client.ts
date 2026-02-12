@@ -139,6 +139,10 @@ export interface SeasonSummary {
   start_date: string;
   end_date: string | null;
   max_trades_per_player: number | null;
+  margin_enabled: boolean;
+  leverage_multiplier: number | null;
+  margin_interest_rate: number | null;
+  maintenance_margin_pct: number | null;
 }
 
 export interface SeasonDetail extends SeasonSummary {
@@ -152,6 +156,10 @@ export interface CreateSeasonRequest {
   duration_days: number;
   max_trades_per_player?: number | null;
   description?: string | null;
+  margin_enabled?: boolean;
+  leverage_multiplier?: number;
+  margin_interest_rate?: number;
+  maintenance_margin_pct?: number;
 }
 
 export interface LeaderboardEntry {
@@ -195,6 +203,7 @@ export interface TradeRequest {
   stock_symbol: string;
   transaction_type: "BUY" | "SELL";
   shares: number;
+  use_margin?: boolean;
 }
 
 export interface TradeResponse {
@@ -206,6 +215,8 @@ export interface TradeResponse {
   total_amount: number;
   new_cash_balance: number;
   executed_at: string;
+  margin_used: number;
+  new_margin_loan: number;
 }
 
 export interface TransactionHistory {
@@ -226,6 +237,8 @@ export interface TradeValidation {
   available_cash: number | null;
   available_shares: number | null;
   message: string;
+  buying_power: number | null;
+  margin_warning: string | null;
 }
 
 export const trading = {
@@ -267,6 +280,9 @@ export interface PortfolioSummary {
   total_value: number;
   percent_gain: number;
   holdings: HoldingResponse[];
+  margin_loan_balance: number;
+  margin_equity: number;
+  margin_call_active: boolean;
 }
 
 export const portfolio = {

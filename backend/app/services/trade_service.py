@@ -7,6 +7,7 @@ from app.models.transaction import Transaction
 from app.models.season import Season
 from app.models.stock import StockMaster
 from app.services.finnhub_service import get_stock_price
+from app.services.margin_service import calculate_buying_power, _get_holdings_value
 from app.schemas import TradeRequest, TradeResponse, TradeValidation
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -112,17 +113,63 @@ async def validate_trade(
 
     if req.transaction_type == "BUY":
         cash = float(ps.cash_balance)
-        if total > cash:
+
+        if season.margin_enabled and season.leverage_multiplier:
+            holdings_value = await _get_holdings_value(db, ps.id)
+            buying_power = calculate_buying_power(cash, holdings_value, float(season.leverage_multiplier))
+
+            # Penny stock rule: no margin on stocks under $3
+            if req.use_margin and price < 3.0:
+                return TradeValidation(
+                    is_valid=False, stock_symbol=req.stock_symbol, current_price=price,
+                    estimated_total=total, available_cash=cash, buying_power=buying_power,
+                    message=f"Stocks under $3.00 cannot be purchased on margin."
+                )
+
+            # Margin call: block new margin trades
+            if ps.margin_call_active and total > cash:
+                return TradeValidation(
+                    is_valid=False, stock_symbol=req.stock_symbol, current_price=price,
+                    estimated_total=total, available_cash=cash, buying_power=buying_power,
+                    message="Margin call active — new margin trades are blocked. Sell positions to restore equity."
+                )
+
+            if total > buying_power:
+                return TradeValidation(
+                    is_valid=False, stock_symbol=req.stock_symbol, current_price=price,
+                    estimated_total=total, available_cash=cash, buying_power=buying_power,
+                    message=f"Insufficient buying power. Need ${total:,.2f} but have ${buying_power:,.2f}."
+                )
+
+            # Margin warning if trade would use borrowed funds
+            margin_warning = None
+            if total > cash:
+                margin_needed = total - cash
+                rate_pct = float(season.margin_interest_rate or 0.08) * 100
+                margin_warning = (
+                    f"This trade uses ${margin_needed:,.2f} in margin (borrowed funds). "
+                    f"You'll be charged {rate_pct:.0f}% annual interest on the borrowed amount."
+                )
+
             return TradeValidation(
-                is_valid=False, stock_symbol=req.stock_symbol, current_price=price,
-                estimated_total=total, available_cash=cash,
-                message=f"Insufficient funds. Need ${total:,.2f} but have ${cash:,.2f}."
+                is_valid=True, stock_symbol=req.stock_symbol, current_price=price,
+                estimated_total=total, available_cash=cash, buying_power=buying_power,
+                margin_warning=margin_warning,
+                message=f"Ready to buy {req.shares} shares of {req.stock_symbol} at ${price:,.2f}."
             )
-        return TradeValidation(
-            is_valid=True, stock_symbol=req.stock_symbol, current_price=price,
-            estimated_total=total, available_cash=cash,
-            message=f"Ready to buy {req.shares} shares of {req.stock_symbol} at ${price:,.2f}."
-        )
+        else:
+            # Non-margin season: cash only
+            if total > cash:
+                return TradeValidation(
+                    is_valid=False, stock_symbol=req.stock_symbol, current_price=price,
+                    estimated_total=total, available_cash=cash,
+                    message=f"Insufficient funds. Need ${total:,.2f} but have ${cash:,.2f}."
+                )
+            return TradeValidation(
+                is_valid=True, stock_symbol=req.stock_symbol, current_price=price,
+                estimated_total=total, available_cash=cash,
+                message=f"Ready to buy {req.shares} shares of {req.stock_symbol} at ${price:,.2f}."
+            )
 
     else:  # SELL
         holding = await _get_holding(db, ps.id, req.stock_symbol.upper())
@@ -192,11 +239,29 @@ async def execute_trade(
     cash = float(ps.cash_balance)
 
     # 5. Validate funds/shares
+    margin_used = 0.0
     if req.transaction_type == "BUY":
-        if total > cash:
-            raise TradeError(
-                f"Insufficient funds. Need ${total:,.2f} but have ${cash:,.2f}."
-            )
+        if season.margin_enabled and season.leverage_multiplier:
+            holdings_value = await _get_holdings_value(db, ps.id)
+            buying_power = calculate_buying_power(cash, holdings_value, float(season.leverage_multiplier))
+
+            # Penny stock rule
+            if price < 3.0 and total > cash:
+                raise TradeError("Stocks under $3.00 cannot be purchased on margin.")
+
+            # Margin call: block new margin trades
+            if ps.margin_call_active and total > cash:
+                raise TradeError("Margin call active — new margin trades are blocked.")
+
+            if total > buying_power:
+                raise TradeError(
+                    f"Insufficient buying power. Need ${total:,.2f} but have ${buying_power:,.2f}."
+                )
+        else:
+            if total > cash:
+                raise TradeError(
+                    f"Insufficient funds. Need ${total:,.2f} but have ${cash:,.2f}."
+                )
     else:
         holding = await _get_holding(db, ps.id, symbol, lock=True)
         owned = float(holding.shares_owned) if holding else 0
@@ -218,11 +283,24 @@ async def execute_trade(
     )
     db.add(txn)
 
-    # Update cash
+    # Update cash (margin-aware)
     if req.transaction_type == "BUY":
-        new_cash = cash - total
-    else:
-        new_cash = cash + total
+        if season.margin_enabled and total > cash:
+            # Margin buy: borrow the shortfall
+            margin_used = round(total - cash, 2)
+            ps.margin_loan_balance = round(float(ps.margin_loan_balance) + margin_used, 2)
+            new_cash = 0.0
+        else:
+            new_cash = cash - total
+    else:  # SELL
+        proceeds = total
+        if season.margin_enabled and float(ps.margin_loan_balance) > 0:
+            # Auto-repay loan from proceeds
+            repayment = min(proceeds, float(ps.margin_loan_balance))
+            ps.margin_loan_balance = round(float(ps.margin_loan_balance) - repayment, 2)
+            new_cash = cash + (proceeds - repayment)
+        else:
+            new_cash = cash + proceeds
     ps.cash_balance = round(new_cash, 2)
 
     # Update holdings (already locked for SELL, need lock for BUY)
@@ -262,6 +340,8 @@ async def execute_trade(
         total_amount=total,
         new_cash_balance=round(new_cash, 2),
         executed_at=txn.executed_at,
+        margin_used=margin_used,
+        new_margin_loan=round(float(ps.margin_loan_balance), 2),
     )
 
 
