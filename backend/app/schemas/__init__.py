@@ -97,7 +97,7 @@ class TradeRequest(BaseModel):
     season_id: str
     stock_symbol: str = Field(..., max_length=10)
     transaction_type: str = Field(..., pattern="^(BUY|SELL)$")
-    shares: float = Field(..., gt=0)
+    shares: int = Field(..., gt=0)
 
 
 class TradeResponse(BaseModel):
