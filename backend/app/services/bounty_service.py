@@ -353,38 +353,30 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         if pred:
             previous_pick = _pick_to_response(pred)
 
-    # Log current SPY price (fresh quote, not cached) for chart
+    # Fetch SPY chart: Yahoo Finance (2h of 1-min data), fallback to self-logged prices
     candles = []
     if current:
+        candles = await fetch_spy_chart_yahoo()
+
+        # Fallback: use self-logged prices if Yahoo fails
+        if not candles:
+            now_utc = datetime.now(timezone.utc)
+            two_hours_ago = now_utc - timedelta(hours=2)
+            log_result = await db.execute(
+                select(SpyPriceLog)
+                .where(SpyPriceLog.recorded_at >= two_hours_ago)
+                .order_by(SpyPriceLog.recorded_at)
+            )
+            candles = [
+                {"timestamp": int(row.recorded_at.timestamp()), "close": float(row.price)}
+                for row in log_result.scalars().all()
+            ]
+
+        # Still log current price for fallback data
         quote = await fetch_quote("SPY")
         if quote:
-            live_price = quote["c"]
-            db.add(SpyPriceLog(price=live_price))
+            db.add(SpyPriceLog(price=quote["c"]))
             await db.commit()
-
-        now_utc = datetime.now(timezone.utc)
-        one_hour_ago = now_utc - timedelta(hours=1)
-
-        # Check if we have enough data points
-        count_result = await db.execute(
-            select(func.count(SpyPriceLog.id))
-            .where(SpyPriceLog.recorded_at >= one_hour_ago)
-        )
-        point_count = count_result.scalar() or 0
-
-        # Backfill from Yahoo Finance if data is thin (cold start / sleep wake-up)
-        if point_count < 5:
-            await backfill_spy_prices(db)
-
-        log_result = await db.execute(
-            select(SpyPriceLog)
-            .where(SpyPriceLog.recorded_at >= one_hour_ago)
-            .order_by(SpyPriceLog.recorded_at)
-        )
-        candles = [
-            {"timestamp": int(row.recorded_at.timestamp()), "close": float(row.price)}
-            for row in log_result.scalars().all()
-        ]
 
     return {
         "current_window": _window_to_response(current) if current else None,
@@ -460,39 +452,37 @@ async def get_bounty_board(db: AsyncSession, period: str = "alltime") -> list[di
         return board
 
 
-async def backfill_spy_prices(db: AsyncSession) -> None:
-    """Backfill SPY price log from Yahoo Finance when data is thin (cold start)."""
+async def fetch_spy_chart_yahoo() -> list[dict]:
+    """Fetch last 2 hours of 1-minute SPY data from Yahoo Finance."""
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
                 "https://query1.finance.yahoo.com/v8/finance/chart/SPY",
-                params={"interval": "1m", "range": "1h"},
+                params={"interval": "1m", "range": "2h"},
                 headers={"User-Agent": "Mozilla/5.0"},
                 timeout=10.0,
             )
             if resp.status_code != 200:
-                return
+                return []
 
             data = resp.json()
             result = data.get("chart", {}).get("result", [])
             if not result:
-                return
+                return []
 
             timestamps = result[0].get("timestamp", [])
             closes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
 
             if not timestamps or not closes:
-                return
+                return []
 
-            for ts, close in zip(timestamps, closes):
-                if close is None:
-                    continue
-                recorded = datetime.fromtimestamp(ts, tz=timezone.utc)
-                db.add(SpyPriceLog(price=close, recorded_at=recorded))
-
-            await db.commit()
+            return [
+                {"timestamp": ts, "close": round(close, 2)}
+                for ts, close in zip(timestamps, closes)
+                if close is not None
+            ]
         except (httpx.RequestError, KeyError, IndexError):
-            pass
+            return []
 
 
 async def get_prediction_history(
