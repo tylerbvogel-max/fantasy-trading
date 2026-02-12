@@ -320,6 +320,11 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
     await get_or_create_today_windows(db)
 
     current = await get_current_window(db)
+
+    # Record open price if not set yet
+    if current and current.spy_open_price is None:
+        await record_window_open_price(db, current.id)
+        await db.refresh(current)
     previous = await get_previous_window(db)
     stats = await get_or_create_player_stats(db, user_id)
 

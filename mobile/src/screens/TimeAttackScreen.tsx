@@ -15,9 +15,9 @@ import SpyChart from "../components/SpyChart";
 import SwipeCard from "../components/SwipeCard";
 
 const CONFIDENCE_OPTIONS = [
-  { value: 1, label: "Draw", description: "$$100 / -$$50", color: Colors.textSecondary },
-  { value: 2, label: "Quick Draw", description: "$$200 / -$$100", color: Colors.yellow },
-  { value: 3, label: "Dead Eye", description: "$$300 / -$$150", color: Colors.orange },
+  { value: 1, label: "Draw", description: "$$100", color: Colors.text, bgColor: Colors.surface },
+  { value: 2, label: "Quick Draw", description: "$$200", color: Colors.yellow, bgColor: Colors.yellow + "20" },
+  { value: 3, label: "Dead Eye", description: "$$300", color: Colors.orange, bgColor: Colors.orange + "20" },
 ];
 
 function useCountdown(targetTime: string | null) {
@@ -73,13 +73,9 @@ export default function TimeAttackScreen() {
   const stats = status?.player_stats;
 
   const windowEndCountdown = useCountdown(currentWindow?.end_time ?? null);
-  const predictionCutoffCountdown = useCountdown(currentWindow?.prediction_cutoff ?? null);
   const nextWindowCountdown = useCountdown(
     !currentWindow ? status?.next_window_time ?? null : null
   );
-
-  // Prediction cutoff disabled for beta testing
-  const predictionsClosed = false;
 
   const handleSwipe = (prediction: "UP" | "DOWN") => {
     if (!currentWindow) return;
@@ -121,14 +117,11 @@ export default function TimeAttackScreen() {
           <Text style={styles.title}>Time Attack</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <Text style={{ color: Colors.textMuted, fontFamily: FontFamily.regular, fontSize: FontSize.md, textAlign: "center", marginBottom: Spacing.lg }}>
+          <Text style={styles.errorText}>
             Could not load bounty data.{"\n"}The server may be waking up.
           </Text>
-          <TouchableOpacity
-            style={{ backgroundColor: Colors.orange, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: Radius.lg }}
-            onPress={() => refetch()}
-          >
-            <Text style={{ color: Colors.text, fontFamily: FontFamily.bold, fontSize: FontSize.md }}>Retry</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -138,6 +131,88 @@ export default function TimeAttackScreen() {
   const hasActiveWindow = !!currentWindow;
   const hasPicked = !!myPick;
 
+  // Active window, no pick — centered layout (no ScrollView)
+  if (hasActiveWindow && !hasPicked) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Time Attack</Text>
+        </View>
+
+        {/* Compact stats row */}
+        {stats && (
+          <View style={styles.compactStatsRow}>
+            <Text style={styles.compactStat}>
+              <Text style={{ color: Colors.yellow }}>$$</Text> {stats.double_dollars.toLocaleString()}
+            </Text>
+            <Text style={styles.compactStatDivider}>|</Text>
+            <Text style={styles.compactStat}>
+              <Text style={{ color: Colors.orange }}>Lv.{stats.wanted_level}</Text>
+            </Text>
+            <Text style={styles.compactStatDivider}>|</Text>
+            <Text style={styles.compactStat}>{stats.accuracy_pct}%</Text>
+          </View>
+        )}
+
+        {/* Timer */}
+        <View style={styles.timerRow}>
+          <Text style={styles.timerLabel}>
+            Bounty #{currentWindow.window_index} — Closes in
+          </Text>
+          <Text style={styles.timerValue}>{windowEndCountdown}</Text>
+        </View>
+
+        {/* SPY price display */}
+        {currentWindow.spy_open_price && (
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>SPY Open</Text>
+            <Text style={styles.priceValue}>${currentWindow.spy_open_price.toFixed(2)}</Text>
+          </View>
+        )}
+
+        {/* Swipe card — centered in remaining space */}
+        <View style={styles.swipeArea}>
+          <SwipeCard
+            onSwipeRight={() => handleSwipe("UP")}
+            onSwipeLeft={() => handleSwipe("DOWN")}
+            enabled={!submitPrediction.isPending}
+          />
+        </View>
+
+        {/* Confidence selector — compact at bottom */}
+        <View style={styles.confidenceBar}>
+          {CONFIDENCE_OPTIONS.map((opt) => {
+            const isSelected = confidence === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  styles.confButton,
+                  isSelected && { backgroundColor: opt.bgColor },
+                ]}
+                onPress={() => setConfidence(opt.value)}
+              >
+                <Text style={[
+                  styles.confLabel,
+                  { color: isSelected ? opt.color : Colors.textMuted },
+                ]}>
+                  {opt.label}
+                </Text>
+                <Text style={[
+                  styles.confDesc,
+                  { color: isSelected ? opt.color : Colors.textMuted, opacity: isSelected ? 0.7 : 0.5 },
+                ]}>
+                  {opt.description}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  // All other states — scrollable
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -218,75 +293,6 @@ export default function TimeAttackScreen() {
           </View>
         )}
 
-        {/* Active window with no pick */}
-        {hasActiveWindow && !hasPicked && (
-          <>
-            <View style={styles.windowInfo}>
-              {predictionsClosed ? (
-                <>
-                  <Text style={styles.windowLabel}>
-                    Bounty #{currentWindow!.window_index} — Picks locked, settles in
-                  </Text>
-                  <Text style={styles.countdown}>{windowEndCountdown}</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.windowLabel}>
-                    Bounty #{currentWindow!.window_index} — Pick closes in
-                  </Text>
-                  <Text style={styles.countdown}>{predictionCutoffCountdown}</Text>
-                </>
-              )}
-            </View>
-
-            <SpyChart candles={status?.spy_candles ?? []} />
-
-            {predictionsClosed ? (
-              <View style={styles.lockedCard}>
-                <Ionicons name="time-outline" size={48} color={Colors.textMuted} />
-                <Text style={styles.lockedTitle}>Picks Locked</Text>
-                <Text style={styles.missedText}>
-                  You missed this window. Next bounty opens soon.
-                </Text>
-              </View>
-            ) : (
-              <>
-                {/* Confidence selector */}
-                <View style={styles.confidenceSection}>
-                  <Text style={styles.confidenceTitle}>Confidence Level</Text>
-                  <View style={styles.confidenceRow}>
-                    {CONFIDENCE_OPTIONS.map((opt) => (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[
-                          styles.confidenceButton,
-                          confidence === opt.value && styles.confidenceButtonActive,
-                          confidence === opt.value && { borderColor: opt.color },
-                        ]}
-                        onPress={() => setConfidence(opt.value)}
-                      >
-                        <Text style={[
-                          styles.confidenceLabel,
-                          confidence === opt.value && { color: opt.color },
-                        ]}>
-                          {opt.label}
-                        </Text>
-                        <Text style={styles.confidenceDesc}>{opt.description}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <SwipeCard
-                  onSwipeUp={() => handleSwipe("UP")}
-                  onSwipeDown={() => handleSwipe("DOWN")}
-                  enabled={!submitPrediction.isPending}
-                />
-              </>
-            )}
-          </>
-        )}
-
         {/* Active window, already picked */}
         {hasActiveWindow && hasPicked && (
           <>
@@ -297,7 +303,7 @@ export default function TimeAttackScreen() {
               <Text style={styles.countdown}>{windowEndCountdown}</Text>
             </View>
 
-            <SpyChart candles={status?.spy_candles ?? []} />
+            <SpyChart candles={status?.spy_candles ?? []} openPrice={currentWindow?.spy_open_price} />
 
             <View style={styles.lockedCard}>
               <Ionicons name="checkmark-circle" size={48} color={Colors.green} />
@@ -335,8 +341,7 @@ export default function TimeAttackScreen() {
             <Text style={styles.waitingTitle}>Next Bounty</Text>
             <Text style={styles.countdown}>{nextWindowCountdown || "Calculating..."}</Text>
             <Text style={styles.waitingSubtext}>
-              Bounties run every 2 hours, 9 AM - 9 PM ET, weekdays.{"\n"}
-              You have 90 minutes to lock in your pick.
+              Bounties run every 2 hours, 9 AM - 9 PM ET, weekdays.
             </Text>
           </View>
         )}
@@ -456,7 +461,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.statusBar,
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   title: {
     fontSize: FontSize.xxl,
@@ -468,6 +473,106 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  errorText: {
+    color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    textAlign: "center",
+    marginBottom: Spacing.lg,
+  },
+  retryButton: {
+    backgroundColor: Colors.orange,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.lg,
+  },
+  retryText: {
+    color: Colors.text,
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.md,
+  },
+
+  // ── Compact prediction layout (no scroll) ──
+  compactStatsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  compactStat: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.sm,
+    color: Colors.text,
+  },
+  compactStatDivider: {
+    color: Colors.border,
+    fontSize: FontSize.sm,
+  },
+  timerRow: {
+    alignItems: "center",
+    paddingBottom: Spacing.sm,
+  },
+  timerLabel: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
+    color: Colors.textSecondary,
+  },
+  timerValue: {
+    fontSize: FontSize.xl,
+    fontFamily: FontFamily.bold,
+    color: Colors.orange,
+    marginTop: 2,
+  },
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  priceLabel: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
+    color: Colors.textMuted,
+  },
+  priceValue: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
+  },
+  swipeArea: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+  },
+  confidenceBar: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xxxl,
+    paddingTop: Spacing.md,
+  },
+  confButton: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    alignItems: "center",
+  },
+  confLabel: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.bold,
+  },
+  confDesc: {
+    fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
+    marginTop: 1,
+  },
+
+  // ── Scrollable content (other states) ──
   content: {
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xxxl,
@@ -562,44 +667,6 @@ const styles = StyleSheet.create({
     color: Colors.orange,
     marginTop: Spacing.xs,
   },
-  confidenceSection: {
-    marginBottom: Spacing.md,
-  },
-  confidenceTitle: {
-    fontSize: FontSize.sm,
-    fontFamily: FontFamily.semiBold,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-    textAlign: "center",
-  },
-  confidenceRow: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-  },
-  confidenceButton: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  confidenceButtonActive: {
-    borderWidth: 2,
-    backgroundColor: Colors.cardLight,
-  },
-  confidenceLabel: {
-    fontSize: FontSize.sm,
-    fontFamily: FontFamily.bold,
-    color: Colors.textSecondary,
-    marginBottom: 2,
-  },
-  confidenceDesc: {
-    fontSize: FontSize.xs,
-    fontFamily: FontFamily.regular,
-    color: Colors.textMuted,
-  },
   lockedCard: {
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
@@ -633,13 +700,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontFamily: FontFamily.semiBold,
     color: Colors.textSecondary,
-  },
-  missedText: {
-    fontSize: FontSize.sm,
-    fontFamily: FontFamily.regular,
-    color: Colors.textMuted,
-    textAlign: "center",
-    marginTop: Spacing.sm,
   },
   waitingCard: {
     backgroundColor: Colors.card,

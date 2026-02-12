@@ -10,12 +10,30 @@ interface SpyCandlePoint {
 
 interface SpyChartProps {
   candles: SpyCandlePoint[];
+  openPrice?: number | null;
 }
 
-export default function SpyChart({ candles }: SpyChartProps) {
+export default function SpyChart({ candles, openPrice }: SpyChartProps) {
   const screenWidth = Dimensions.get("window").width - Spacing.xl * 2;
 
   if (!candles || candles.length < 2) {
+    // Show open price if available, even without candle data
+    if (openPrice) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Text style={styles.label}>SPY</Text>
+            <Text style={[styles.price, { color: Colors.text }]}>
+              ${openPrice.toFixed(2)}
+            </Text>
+          </View>
+          <View style={styles.emptyChart}>
+            <Text style={styles.emptyText}>Chart data loading...</Text>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyText}>Waiting for price data...</Text>
@@ -112,6 +130,11 @@ const styles = StyleSheet.create({
     padding: Spacing.xxxl,
     alignItems: "center",
     marginBottom: Spacing.lg,
+  },
+  emptyChart: {
+    height: 80,
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyText: {
     color: Colors.textMuted,

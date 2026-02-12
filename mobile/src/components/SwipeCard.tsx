@@ -4,49 +4,50 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors, FontFamily, FontSize, Spacing, Radius } from "../utils/theme";
 
 interface SwipeCardProps {
-  onSwipeUp: () => void;
-  onSwipeDown: () => void;
+  onSwipeRight: () => void;
+  onSwipeLeft: () => void;
   enabled: boolean;
 }
 
-const CARD_HEIGHT = 200;
-const COMMIT_THRESHOLD = CARD_HEIGHT * 0.4;
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const CARD_WIDTH = SCREEN_WIDTH - Spacing.xl * 2;
+const COMMIT_THRESHOLD = CARD_WIDTH * 0.3;
 const VELOCITY_THRESHOLD = 0.5;
 
-export default function SwipeCard({ onSwipeUp, onSwipeDown, enabled }: SwipeCardProps) {
-  const translateY = useRef(new Animated.Value(0)).current;
+export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled }: SwipeCardProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) =>
-        enabled && Math.abs(gesture.dy) > 10,
+        enabled && Math.abs(gesture.dx) > 10,
       onPanResponderMove: (_, gesture) => {
-        translateY.setValue(gesture.dy);
+        translateX.setValue(gesture.dx);
       },
       onPanResponderRelease: (_, gesture) => {
-        const swipedUp =
-          gesture.dy < -COMMIT_THRESHOLD || gesture.vy < -VELOCITY_THRESHOLD;
-        const swipedDown =
-          gesture.dy > COMMIT_THRESHOLD || gesture.vy > VELOCITY_THRESHOLD;
+        const swipedRight =
+          gesture.dx > COMMIT_THRESHOLD || gesture.vx > VELOCITY_THRESHOLD;
+        const swipedLeft =
+          gesture.dx < -COMMIT_THRESHOLD || gesture.vx < -VELOCITY_THRESHOLD;
 
-        if (swipedUp) {
-          Animated.spring(translateY, {
-            toValue: -CARD_HEIGHT * 1.5,
+        if (swipedRight) {
+          Animated.spring(translateX, {
+            toValue: SCREEN_WIDTH,
             useNativeDriver: true,
           }).start(() => {
-            onSwipeUp();
-            translateY.setValue(0);
+            onSwipeRight();
+            translateX.setValue(0);
           });
-        } else if (swipedDown) {
-          Animated.spring(translateY, {
-            toValue: CARD_HEIGHT * 1.5,
+        } else if (swipedLeft) {
+          Animated.spring(translateX, {
+            toValue: -SCREEN_WIDTH,
             useNativeDriver: true,
           }).start(() => {
-            onSwipeDown();
-            translateY.setValue(0);
+            onSwipeLeft();
+            translateX.setValue(0);
           });
         } else {
-          Animated.spring(translateY, {
+          Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: true,
           }).start();
@@ -55,52 +56,92 @@ export default function SwipeCard({ onSwipeUp, onSwipeDown, enabled }: SwipeCard
     })
   ).current;
 
-  const upOpacity = translateY.interpolate({
-    inputRange: [-COMMIT_THRESHOLD, -20, 0],
+  // Interpolations for visual feedback
+  const rightOpacity = translateX.interpolate({
+    inputRange: [0, 30, COMMIT_THRESHOLD],
+    outputRange: [0, 0.3, 1],
+    extrapolate: "clamp",
+  });
+
+  const leftOpacity = translateX.interpolate({
+    inputRange: [-COMMIT_THRESHOLD, -30, 0],
     outputRange: [1, 0.3, 0],
     extrapolate: "clamp",
   });
 
-  const downOpacity = translateY.interpolate({
-    inputRange: [0, 20, COMMIT_THRESHOLD],
-    outputRange: [0, 0.3, 1],
+  const cardRotation = translateX.interpolate({
+    inputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
+    outputRange: ["-12deg", "0deg", "12deg"],
+    extrapolate: "clamp",
+  });
+
+  const rightBgOpacity = translateX.interpolate({
+    inputRange: [0, COMMIT_THRESHOLD],
+    outputRange: [0, 0.15],
+    extrapolate: "clamp",
+  });
+
+  const leftBgOpacity = translateX.interpolate({
+    inputRange: [-COMMIT_THRESHOLD, 0],
+    outputRange: [0.15, 0],
     extrapolate: "clamp",
   });
 
   if (!enabled) {
     return (
-      <View style={[styles.card, styles.cardDisabled]}>
-        <Ionicons name="lock-closed" size={32} color={Colors.textMuted} />
-        <Text style={styles.lockedText}>Prediction locked</Text>
+      <View style={styles.wrapper}>
+        <View style={[styles.card, styles.cardDisabled]}>
+          <Ionicons name="lock-closed" size={32} color={Colors.textMuted} />
+          <Text style={styles.lockedText}>Submitting...</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.wrapper}>
-      <Animated.View style={[styles.indicator, styles.indicatorUp, { opacity: upOpacity }]}>
-        <Ionicons name="arrow-up" size={24} color={Colors.green} />
-        <Text style={[styles.indicatorText, { color: Colors.green }]}>UP</Text>
+      {/* Left indicator (DOWN) */}
+      <Animated.View style={[styles.sideIndicator, styles.leftIndicator, { opacity: leftOpacity }]}>
+        <Ionicons name="arrow-down" size={32} color={Colors.accent} />
+        <Text style={[styles.sideIndicatorText, { color: Colors.accent }]}>DOWN</Text>
+      </Animated.View>
+
+      {/* Right indicator (UP) */}
+      <Animated.View style={[styles.sideIndicator, styles.rightIndicator, { opacity: rightOpacity }]}>
+        <Ionicons name="arrow-up" size={32} color={Colors.green} />
+        <Text style={[styles.sideIndicatorText, { color: Colors.green }]}>UP</Text>
       </Animated.View>
 
       <Animated.View
-        style={[styles.card, { transform: [{ translateY }] }]}
+        style={[
+          styles.card,
+          {
+            transform: [{ translateX }, { rotate: cardRotation }],
+          },
+        ]}
         {...panResponder.panHandlers}
       >
-        <View style={styles.hintRow}>
-          <Ionicons name="arrow-up" size={20} color={Colors.green} />
-          <Text style={[styles.hintText, { color: Colors.green }]}>SWIPE UP — SPY goes up</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.hintRow}>
-          <Ionicons name="arrow-down" size={20} color={Colors.accent} />
-          <Text style={[styles.hintText, { color: Colors.accent }]}>SWIPE DOWN — SPY goes down</Text>
-        </View>
-      </Animated.View>
+        {/* Green overlay for right swipe */}
+        <Animated.View style={[styles.cardOverlay, { backgroundColor: Colors.green, opacity: rightBgOpacity }]} />
+        {/* Red overlay for left swipe */}
+        <Animated.View style={[styles.cardOverlay, { backgroundColor: Colors.accent, opacity: leftBgOpacity }]} />
 
-      <Animated.View style={[styles.indicator, styles.indicatorDown, { opacity: downOpacity }]}>
-        <Text style={[styles.indicatorText, { color: Colors.accent }]}>DOWN</Text>
-        <Ionicons name="arrow-down" size={24} color={Colors.accent} />
+        <View style={styles.cardContent}>
+          <View style={styles.directionRow}>
+            <View style={styles.directionHint}>
+              <Ionicons name="arrow-back" size={18} color={Colors.accent} />
+              <Text style={[styles.directionLabel, { color: Colors.accent }]}>DOWN</Text>
+            </View>
+            <View style={styles.centerIcon}>
+              <Ionicons name="swap-horizontal" size={28} color={Colors.textMuted} />
+            </View>
+            <View style={styles.directionHint}>
+              <Text style={[styles.directionLabel, { color: Colors.green }]}>UP</Text>
+              <Ionicons name="arrow-forward" size={18} color={Colors.green} />
+            </View>
+          </View>
+          <Text style={styles.swipePrompt}>Swipe to predict</Text>
+        </View>
       </Animated.View>
     </View>
   );
@@ -109,18 +150,27 @@ export default function SwipeCard({ onSwipeUp, onSwipeDown, enabled }: SwipeCard
 const styles = StyleSheet.create({
   wrapper: {
     alignItems: "center",
-    marginVertical: Spacing.lg,
+    justifyContent: "center",
+    height: 180,
   },
   card: {
-    width: Dimensions.get("window").width - Spacing.xl * 2,
-    height: CARD_HEIGHT,
+    width: CARD_WIDTH,
+    height: 160,
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: Spacing.xl,
+    overflow: "hidden",
+  },
+  cardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: Radius.lg,
+  },
+  cardContent: {
+    alignItems: "center",
+    gap: Spacing.md,
   },
   cardDisabled: {
     opacity: 0.5,
@@ -131,35 +181,43 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
     fontSize: FontSize.md,
   },
-  hintRow: {
+  directionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.md,
-    paddingVertical: Spacing.lg,
-  },
-  hintText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.lg,
-  },
-  divider: {
+    justifyContent: "space-between",
     width: "80%",
-    height: 1,
-    backgroundColor: Colors.border,
   },
-  indicator: {
+  directionHint: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    gap: Spacing.xs,
   },
-  indicatorUp: {
-    marginBottom: Spacing.sm,
-  },
-  indicatorDown: {
-    marginTop: Spacing.sm,
-  },
-  indicatorText: {
+  directionLabel: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.lg,
+  },
+  centerIcon: {
+    opacity: 0.4,
+  },
+  swipePrompt: {
+    color: Colors.textMuted,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+  },
+  sideIndicator: {
+    position: "absolute",
+    alignItems: "center",
+    gap: Spacing.xs,
+    zIndex: 10,
+  },
+  leftIndicator: {
+    left: Spacing.md,
+  },
+  rightIndicator: {
+    right: Spacing.md,
+  },
+  sideIndicatorText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.sm,
   },
 });
