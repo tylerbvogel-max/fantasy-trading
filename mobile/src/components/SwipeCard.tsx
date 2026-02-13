@@ -1,8 +1,8 @@
 import React, { useRef } from "react";
-import { View, Text, StyleSheet, Dimensions, Animated, PanResponder, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Dimensions, Animated, PanResponder } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { LineChart } from "react-native-chart-kit";
 import { Colors, FontFamily, FontSize, Spacing, Radius } from "../utils/theme";
+import ProbabilityConeChart from "./ProbabilityConeChart";
 
 interface SpyCandlePoint {
   timestamp: number;
@@ -16,6 +16,7 @@ interface SwipeCardProps {
   candles: SpyCandlePoint[];
   openPrice?: number | null;
   symbol?: string;
+  name?: string;
 }
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -26,7 +27,7 @@ const VELOCITY_THRESHOLD = 0.5;
 const CHART_WIDTH = CARD_WIDTH - Spacing.lg * 2;
 const CHART_HEIGHT = CARD_SIZE - 120; // leave room for header + direction hints
 
-export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles, openPrice, symbol = "SPY" }: SwipeCardProps) {
+export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles, openPrice, symbol = "SPY", name }: SwipeCardProps) {
   const translateX = useRef(new Animated.Value(0)).current;
 
   const hasPrice = (candles && candles.length >= 2) || !!openPrice;
@@ -105,88 +106,6 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
     extrapolate: "clamp",
   });
 
-  // Build chart data
-  const hasCandles = candles && candles.length >= 2;
-  let chartNode: React.ReactNode = null;
-
-  if (hasCandles) {
-    const step = Math.max(1, Math.floor(candles.length / 60));
-    const sampled = candles.filter((_, i) => i % step === 0 || i === candles.length - 1);
-    const prices = sampled.map((c) => c.close);
-    const labels = sampled.map((c) => {
-      const d = new Date(c.timestamp * 1000);
-      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    });
-    const labelStep = Math.max(1, Math.floor(labels.length / 4));
-    const displayLabels = labels.map((l, i) => (i % labelStep === 0 ? l : ""));
-    const priceChange = prices[prices.length - 1] - prices[0];
-    const lineColor = priceChange >= 0 ? Colors.green : Colors.accent;
-    const minPrice = Math.min(...prices) - 2;
-    const maxPrice = Math.max(...prices) + 2;
-
-    chartNode = (
-      <View style={styles.chartArea}>
-        <View style={styles.chartHeader}>
-          <Text style={styles.spyLabel}>{symbol}</Text>
-          <Text style={[styles.spyPrice, { color: lineColor }]}>
-            ${prices[prices.length - 1].toFixed(2)}
-          </Text>
-        </View>
-        <LineChart
-          data={{
-            labels: displayLabels,
-            datasets: [
-              { data: prices },
-              { data: [minPrice, maxPrice], withDots: false, color: () => "transparent" },
-            ],
-          }}
-          width={CHART_WIDTH}
-          height={CHART_HEIGHT}
-          withDots={false}
-          withInnerLines={false}
-          withOuterLines={false}
-          withVerticalLabels={true}
-          withHorizontalLabels={true}
-          chartConfig={{
-            backgroundColor: "transparent",
-            backgroundGradientFrom: Colors.card,
-            backgroundGradientTo: Colors.card,
-            decimalPlaces: 2,
-            color: () => lineColor,
-            labelColor: () => Colors.textMuted,
-            propsForLabels: { fontSize: 10, fontFamily: FontFamily.regular },
-            strokeWidth: 2,
-          }}
-          bezier
-          style={styles.chart}
-        />
-      </View>
-    );
-  } else if (openPrice) {
-    chartNode = (
-      <View style={styles.chartArea}>
-        <View style={styles.chartHeader}>
-          <Text style={styles.spyLabel}>{symbol}</Text>
-          <Text style={[styles.spyPrice, { color: Colors.text }]}>
-            ${openPrice.toFixed(2)}
-          </Text>
-        </View>
-        <View style={styles.chartPlaceholder}>
-          <Text style={styles.chartPlaceholderText}>Chart building...</Text>
-        </View>
-      </View>
-    );
-  } else {
-    chartNode = (
-      <View style={styles.chartArea}>
-        <View style={styles.loadingArea}>
-          <ActivityIndicator size="small" color={Colors.orange} />
-          <Text style={styles.loadingText}>Loading {symbol} data...</Text>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.wrapper}>
       {/* Left indicator (DOWN) */}
@@ -214,7 +133,14 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
         <Animated.View style={[styles.cardOverlay, { backgroundColor: Colors.accent, opacity: leftBgOpacity }]} />
 
         <View style={styles.cardContent}>
-          {chartNode}
+          <ProbabilityConeChart
+            candles={candles}
+            symbol={symbol}
+            name={name}
+            openPrice={openPrice}
+            width={CHART_WIDTH}
+            height={CHART_HEIGHT}
+          />
 
           {/* Direction hints at bottom */}
           <View style={styles.directionRow}>
@@ -258,50 +184,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: Spacing.lg,
     justifyContent: "space-between",
-  },
-  // Chart area inside card
-  chartArea: {
-    flex: 1,
-  },
-  chartHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.xs,
-  },
-  spyLabel: {
-    fontSize: FontSize.lg,
-    fontFamily: FontFamily.bold,
-    color: Colors.text,
-  },
-  spyPrice: {
-    fontSize: FontSize.lg,
-    fontFamily: FontFamily.bold,
-  },
-  chart: {
-    marginLeft: -16,
-    borderRadius: Radius.lg,
-  },
-  chartPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  chartPlaceholderText: {
-    color: Colors.textMuted,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-  },
-  loadingArea: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: Spacing.md,
-  },
-  loadingText: {
-    color: Colors.textMuted,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
   },
 
   // Direction hints

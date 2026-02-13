@@ -65,7 +65,7 @@ export default function BountyHunterScreen() {
   const [confidence, setConfidence] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
   const toastOpacity = useState(() => new RNAnimated.Value(0))[0];
-  const [swipedPicks, setSwipedPicks] = useState<{ symbol: string; prediction: "UP" | "DOWN" }[]>([]);
+  const [swipedPicks, setSwipedPicks] = useState<{ symbol: string; prediction: "UP" | "DOWN"; confidence: number }[]>([]);
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
 
   const showToast = (message: string) => {
@@ -118,7 +118,7 @@ export default function BountyHunterScreen() {
 
     const symbol = currentStock.symbol;
     // Optimistically remove this card so the next one appears instantly
-    setSwipedPicks((prev) => [...prev, { symbol, prediction }]);
+    setSwipedPicks((prev) => [...prev, { symbol, prediction, confidence }]);
 
     submitPrediction.mutate(
       {
@@ -239,6 +239,7 @@ export default function BountyHunterScreen() {
                   candles={nextStock.candles}
                   openPrice={nextStock.open_price}
                   symbol={nextStock.symbol}
+                  name={nextStock.name}
                 />
               </View>
             </View>
@@ -252,6 +253,7 @@ export default function BountyHunterScreen() {
             candles={currentStock.candles}
             openPrice={currentStock.open_price}
             symbol={currentStock.symbol}
+            name={currentStock.name}
           />
         </View>
 
@@ -332,8 +334,10 @@ export default function BountyHunterScreen() {
           <Text style={styles.lockedTitle}>Locked In</Text>
           <View style={styles.lockedPicksGrid}>
             {pickedStocks.map((stock) => {
-              const pred = stock.my_pick?.prediction
-                ?? swipedPicks.find((p) => p.symbol === stock.symbol)?.prediction;
+              const swipedPick = swipedPicks.find((p) => p.symbol === stock.symbol);
+              const pred = stock.my_pick?.prediction ?? swipedPick?.prediction;
+              const conf = stock.my_pick?.confidence ?? swipedPick?.confidence ?? 1;
+              const confOption = CONFIDENCE_OPTIONS.find((o) => o.value === conf) ?? CONFIDENCE_OPTIONS[0];
               const color = pred === "UP" ? Colors.green : pred === "DOWN" ? Colors.accent : Colors.textMuted;
               return (
                 <View
@@ -360,6 +364,9 @@ export default function BountyHunterScreen() {
                       {pred}
                     </Text>
                   )}
+                  <Text style={[styles.lockedPickBounty, { color: confOption.color }]}>
+                    {confOption.label} · {confOption.description}
+                  </Text>
                 </View>
               );
             })}
@@ -654,6 +661,11 @@ const styles = StyleSheet.create({
   lockedPickLabel: {
     fontFamily: FontFamily.semiBold,
     fontSize: FontSize.xs,
+  },
+  lockedPickBounty: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+    marginTop: Spacing.xs,
   },
   prevResultBar: {
     flexDirection: "row",

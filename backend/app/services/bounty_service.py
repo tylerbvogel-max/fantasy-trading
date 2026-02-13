@@ -25,6 +25,18 @@ WINDOW_DURATION_MINUTES = 2
 # Stocks to create per bounty window
 WINDOW_STOCKS = ["SPY", "NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "GOOG", "PLTR", "SNDK"]
 
+STOCK_NAMES = {
+    "SPY": "S&P 500 ETF",
+    "NVDA": "NVIDIA",
+    "AAPL": "Apple",
+    "TSLA": "Tesla",
+    "MSFT": "Microsoft",
+    "AMZN": "Amazon",
+    "GOOG": "Alphabet",
+    "PLTR": "Palantir",
+    "SNDK": "SanDisk",
+}
+
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
 
@@ -461,6 +473,7 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
 
             stocks_status.append({
                 "symbol": stock_row.symbol,
+                "name": STOCK_NAMES.get(stock_row.symbol, stock_row.symbol),
                 "open_price": float(stock_row.open_price) if stock_row.open_price else None,
                 "close_price": float(stock_row.close_price) if stock_row.close_price else None,
                 "result": stock_row.result,

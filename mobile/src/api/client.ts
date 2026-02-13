@@ -454,6 +454,7 @@ export interface SpyCandlePoint {
 
 export interface BountyStockStatus {
   symbol: string;
+  name: string;
   open_price: number | null;
   close_price: number | null;
   result: string | null;

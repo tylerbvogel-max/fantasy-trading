@@ -410,6 +410,7 @@ class BountyStatsResponse(BaseModel):
 
 class BountyStockStatus(BaseModel):
     symbol: str
+    name: str = ""
     open_price: float | None = None
     close_price: float | None = None
     result: str | None = None
