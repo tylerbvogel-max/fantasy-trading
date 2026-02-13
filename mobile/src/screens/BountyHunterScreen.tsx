@@ -11,7 +11,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { useBountyStatus, useSubmitPrediction } from "../hooks/useApi";
-import SpyChart from "../components/SpyChart";
 import SwipeCard from "../components/SwipeCard";
 
 const CONFIDENCE_OPTIONS = [
@@ -60,12 +59,14 @@ function useCountdown(targetTime: string | null) {
   return timeLeft;
 }
 
-export default function TimeAttackScreen() {
+export default function BountyHunterScreen() {
   const { data: status, isLoading, isError, refetch } = useBountyStatus();
   const submitPrediction = useSubmitPrediction();
   const [confidence, setConfidence] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
   const toastOpacity = useState(() => new RNAnimated.Value(0))[0];
+  const [swipedSymbols, setSwipedSymbols] = useState<string[]>([]);
+  const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -85,14 +86,25 @@ export default function TimeAttackScreen() {
   const previousPick = status?.previous_pick;
   const stats = status?.player_stats;
 
-  // Multi-stock: derive unpicked and picked stocks
+  // Reset optimistic swiped list when window changes
+  const windowId = currentWindow?.id;
+  useEffect(() => {
+    setSwipedSymbols([]);
+    setSkippedSymbols([]);
+  }, [windowId]);
+
+  // Multi-stock: derive unpicked, picked, and skipped stocks
   const allStocks = status?.stocks ?? [];
-  const unpickedStocks = allStocks.filter((s) => !s.my_pick);
-  const pickedStocks = allStocks.filter((s) => !!s.my_pick);
+  const unpickedStocks = allStocks.filter(
+    (s) => !s.my_pick && !swipedSymbols.includes(s.symbol) && !skippedSymbols.includes(s.symbol)
+  );
+  const pickedStocks = allStocks.filter((s) => !!s.my_pick || swipedSymbols.includes(s.symbol));
+  const skippedStocks = allStocks.filter((s) => skippedSymbols.includes(s.symbol) && !s.my_pick);
   const currentStock = unpickedStocks.length > 0 ? unpickedStocks[0] : null;
-  const allPicked = allStocks.length > 0 && unpickedStocks.length === 0;
+  const nextStock = unpickedStocks.length > 1 ? unpickedStocks[1] : null;
+  const allExhausted = allStocks.length > 0 && unpickedStocks.length === 0;
   const stockProgress = allStocks.length > 0
-    ? `${pickedStocks.length + 1}/${allStocks.length}`
+    ? `${pickedStocks.length + skippedStocks.length + 1}/${allStocks.length}`
     : "";
 
   const windowEndCountdown = useCountdown(currentWindow?.end_time ?? null);
@@ -103,22 +115,28 @@ export default function TimeAttackScreen() {
   const handleSwipe = (prediction: "UP" | "DOWN") => {
     if (!currentWindow || !currentStock) return;
 
+    const symbol = currentStock.symbol;
+    // Optimistically remove this card so the next one appears instantly
+    setSwipedSymbols((prev) => [...prev, symbol]);
+
     submitPrediction.mutate(
       {
         bounty_window_id: currentWindow.id,
         prediction,
         confidence,
-        symbol: currentStock.symbol,
+        symbol,
       },
       {
         onSuccess: () => {
-          showToast(`${currentStock.symbol} Locked In!`);
+          showToast(`${symbol} Locked In!`);
         },
         onError: (error) => {
           const msg = error.message ?? "";
           if (msg.includes("not currently active") || msg.includes("already made a prediction")) {
             refetch();
           } else {
+            // Restore the card on unexpected failure
+            setSwipedSymbols((prev) => prev.filter((s) => s !== symbol));
             Alert.alert("Error", msg);
           }
         },
@@ -126,11 +144,16 @@ export default function TimeAttackScreen() {
     );
   };
 
+  const handleSkip = () => {
+    if (!currentStock) return;
+    setSkippedSymbols((prev) => [...prev, currentStock.symbol]);
+  };
+
   if (isLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Time Attack</Text>
+          <Text style={styles.title}>Bounty Hunter</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.orange} />
@@ -143,7 +166,7 @@ export default function TimeAttackScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Time Attack</Text>
+          <Text style={styles.title}>Bounty Hunter</Text>
         </View>
         <View style={styles.loadingContainer}>
           <Text style={styles.errorText}>
@@ -172,7 +195,7 @@ export default function TimeAttackScreen() {
       <View style={styles.container}>
         {toastElement}
         <View style={styles.header}>
-          <Text style={styles.title}>Time Attack</Text>
+          <Text style={styles.title}>Bounty Hunter</Text>
         </View>
 
         {/* Compact stats row */}
@@ -203,15 +226,39 @@ export default function TimeAttackScreen() {
 
         {/* Swipe card with chart — centered in remaining space */}
         <View style={styles.swipeArea}>
+          {/* Next card peeking behind */}
+          {nextStock && (
+            <View style={styles.backCardContainer}>
+              <View style={styles.backCardInner}>
+                <SwipeCard
+                  key={nextStock.symbol}
+                  onSwipeRight={() => {}}
+                  onSwipeLeft={() => {}}
+                  enabled={false}
+                  candles={nextStock.candles}
+                  openPrice={nextStock.open_price}
+                  symbol={nextStock.symbol}
+                />
+              </View>
+            </View>
+          )}
+          {/* Current card on top */}
           <SwipeCard
+            key={currentStock.symbol}
             onSwipeRight={() => handleSwipe("UP")}
             onSwipeLeft={() => handleSwipe("DOWN")}
-            enabled={!submitPrediction.isPending}
+            enabled={true}
             candles={currentStock.candles}
             openPrice={currentStock.open_price}
             symbol={currentStock.symbol}
           />
         </View>
+
+        {/* Skip button */}
+        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+          <Ionicons name="play-skip-forward" size={14} color={Colors.orange} />
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
 
         {/* Confidence selector — compact at bottom */}
         <View style={styles.confidenceBar}>
@@ -247,12 +294,12 @@ export default function TimeAttackScreen() {
   }
 
   // Active window, all stocks picked — locked-in state
-  if (hasActiveWindow && allPicked) {
+  if (hasActiveWindow && allExhausted) {
     return (
       <View style={styles.container}>
         {toastElement}
         <View style={styles.header}>
-          <Text style={styles.title}>Time Attack</Text>
+          <Text style={styles.title}>Bounty Hunter</Text>
         </View>
 
         {/* Compact stats row */}
@@ -278,37 +325,60 @@ export default function TimeAttackScreen() {
           <Text style={styles.timerValue}>{windowEndCountdown}</Text>
         </View>
 
-        {/* SPY chart centered */}
-        <View style={styles.lockedChartArea}>
-          <SpyChart candles={status?.spy_candles ?? []} openPrice={currentWindow?.spy_open_price} />
-        </View>
-
-        {/* Compact locked-in bar showing all picks */}
-        <View style={styles.lockedBar}>
-          <Ionicons name="checkmark-circle" size={24} color={Colors.green} />
-          <Text style={styles.lockedBarText}>Locked In</Text>
-          {pickedStocks.map((stock) => (
-            <View
-              key={stock.symbol}
-              style={[
-                styles.lockedBarBadge,
-                { backgroundColor: stock.my_pick!.prediction === "UP" ? Colors.green + "20" : Colors.accent + "20" },
-              ]}
-            >
-              <Text style={{
-                color: stock.my_pick!.prediction === "UP" ? Colors.green : Colors.accent,
-                fontFamily: FontFamily.bold,
-                fontSize: FontSize.xs,
-              }}>
-                {stock.symbol}
-              </Text>
-              <Ionicons
-                name={stock.my_pick!.prediction === "UP" ? "arrow-up" : "arrow-down"}
-                size={14}
-                color={stock.my_pick!.prediction === "UP" ? Colors.green : Colors.accent}
-              />
-            </View>
-          ))}
+        {/* Locked-in picks — centered hero */}
+        <View style={styles.lockedPicksArea}>
+          <Ionicons name="checkmark-circle" size={48} color={Colors.green} />
+          <Text style={styles.lockedTitle}>Locked In</Text>
+          <View style={styles.lockedPicksGrid}>
+            {pickedStocks.map((stock) => {
+              const pred = stock.my_pick?.prediction;
+              const color = pred === "UP" ? Colors.green : pred === "DOWN" ? Colors.accent : Colors.textMuted;
+              return (
+                <View
+                  key={stock.symbol}
+                  style={[
+                    styles.lockedPickCard,
+                    { borderColor: color + "40" },
+                  ]}
+                >
+                  <Text style={[styles.lockedPickSymbol, { color }]}>
+                    {stock.symbol}
+                  </Text>
+                  {pred ? (
+                    <Ionicons
+                      name={pred === "UP" ? "arrow-up-circle" : "arrow-down-circle"}
+                      size={28}
+                      color={color}
+                    />
+                  ) : (
+                    <Ionicons name="checkmark-circle" size={28} color={color} />
+                  )}
+                  {pred && (
+                    <Text style={[styles.lockedPickLabel, { color }]}>
+                      {pred}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+            {skippedStocks.map((stock) => (
+              <View
+                key={stock.symbol}
+                style={[
+                  styles.lockedPickCard,
+                  { borderColor: Colors.orange + "40", opacity: 0.5 },
+                ]}
+              >
+                <Text style={[styles.lockedPickSymbol, { color: Colors.orange }]}>
+                  {stock.symbol}
+                </Text>
+                <Ionicons name="play-skip-forward" size={28} color={Colors.orange} />
+                <Text style={[styles.lockedPickLabel, { color: Colors.orange }]}>
+                  SKIP
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         {/* Previous result inline */}
@@ -331,7 +401,7 @@ export default function TimeAttackScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Time Attack</Text>
+        <Text style={styles.title}>Bounty Hunter</Text>
       </View>
 
       {/* Compact stats row */}
@@ -498,6 +568,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
   },
+  backCardContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+  },
+  backCardInner: {
+    transform: [{ scale: 0.95 }, { translateY: 8 }],
+    opacity: 0.5,
+  },
+  skipButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+  },
+  skipText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semiBold,
+    color: Colors.orange,
+  },
   confidenceBar: {
     flexDirection: "row",
     gap: Spacing.sm,
@@ -523,40 +615,42 @@ const styles = StyleSheet.create({
   },
 
   // ── Locked-in state ──
-  lockedChartArea: {
+  lockedPicksArea: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
-  },
-  lockedBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.card,
-    borderTopWidth: 1,
-    borderTopColor: Colors.green + "30",
   },
-  lockedBarText: {
+  lockedTitle: {
+    fontSize: FontSize.xl,
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.md,
     color: Colors.green,
   },
-  lockedBarBadge: {
+  lockedPicksGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  lockedPickCard: {
     alignItems: "center",
     gap: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    minWidth: 100,
   },
-  lockedBarConfidence: {
+  lockedPickSymbol: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.lg,
+  },
+  lockedPickLabel: {
     fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
   },
   prevResultBar: {
     flexDirection: "row",

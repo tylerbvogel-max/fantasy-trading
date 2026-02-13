@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import * as SecureStore from "expo-secure-store";
 
-export type AppMode = "classroom" | "league" | "arena" | "timeAttack";
+export type AppMode = "classroom" | "league" | "arena" | "bountyHunter";
 
 interface ModeContextValue {
   mode: AppMode | null;
@@ -25,7 +25,12 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     SecureStore.getItemAsync(MODE_KEY).then((stored) => {
-      if (stored) setModeState(stored as AppMode);
+      if (stored) {
+        // Migrate legacy key
+        const mode = stored === "timeAttack" ? "bountyHunter" : stored;
+        setModeState(mode as AppMode);
+        if (stored !== mode) SecureStore.setItemAsync(MODE_KEY, mode);
+      }
       setIsLoading(false);
     });
   }, []);

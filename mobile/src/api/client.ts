@@ -412,7 +412,7 @@ export interface UserKnowledgeScore {
   topics_mastered: number;
 }
 
-// ── Bounty / Time Attack ──
+// ── Bounty ──
 
 export interface BountyWindowResponse {
   id: string;

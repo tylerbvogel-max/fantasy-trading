@@ -23,7 +23,7 @@ CONFIDENCE_LABELS = {1: "Draw", 2: "Quick Draw", 3: "Dead Eye"}
 WINDOW_DURATION_MINUTES = 2
 
 # Stocks to create per bounty window
-WINDOW_STOCKS = ["SPY", "NVDA"]
+WINDOW_STOCKS = ["SPY", "NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "GOOG"]
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 

@@ -74,6 +74,13 @@
 - Earnings announcements based on holdings
 - RSS feed for holdings, sector-specific sessions
 
+## Feedback / Report a Problem
+- **Option A: In-app form + DB table** — `feedback` table with user_id, category (bug/suggestion/other), message text, timestamp. Best UX (stays in-app) but needs backend endpoint and a way to review submissions (admin endpoint or direct DB query).
+- **Option B: Google Form link** — Zero backend work. Profile button opens a Google Form in the browser. Responses go to a Google Sheet with free email notifications. Quick to set up, upgrade to in-app later if needed.
+
+## Bounty Hunter Enhancements
+- **Probability Cone Chart** — extend the stock chart 1 hour into the future with shaded probability cones showing 1σ, 2σ, and 3σ windows of possible price movement. Gives players a visual read on how volatile or stable a stock is so they feel like they're analyzing real data before swiping. Uses historical volatility to compute the cone widths.
+
 ## Data Analytics
 - **Heat Map** — which stocks are most popular in your league
 - **Sentiment Tracker** — bull/bear ratio among players

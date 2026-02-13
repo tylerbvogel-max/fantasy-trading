@@ -21,7 +21,7 @@ const MODE_META: Record<AppMode, { icon: keyof typeof Ionicons.glyphMap; color: 
   classroom: { icon: "school-outline", color: Colors.primary, label: "Classroom" },
   league: { icon: "trophy-outline", color: Colors.yellow, label: "League" },
   arena: { icon: "flash-outline", color: Colors.accent, label: "Arena" },
-  timeAttack: { icon: "timer-outline", color: Colors.orange, label: "Time Attack" },
+  bountyHunter: { icon: "skull-outline", color: Colors.orange, label: "Bounty Hunter" },
 };
 
 function formatDate(dateStr: string): string {

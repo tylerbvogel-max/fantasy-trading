@@ -37,10 +37,10 @@ const MODES: {
       "Chaos and sabotage. Player interactions, forced swaps, strategic disruption.",
   },
   {
-    key: "timeAttack",
-    icon: "timer-outline",
+    key: "bountyHunter",
+    icon: "skull-outline",
     color: Colors.orange,
-    title: "Time Attack",
+    title: "Bounty Hunter",
     description:
       "Predict SPY every 2 hours. Earn double dollars, build your Wanted Level.",
   },

@@ -228,7 +228,7 @@ export function useKnowledgeScore() {
   });
 }
 
-// ── Bounty / Time Attack ──
+// ── Bounty ──
 
 export function useBountyStatus() {
   return useQuery<BountyStatus>({

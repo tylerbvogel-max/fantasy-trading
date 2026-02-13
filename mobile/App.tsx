@@ -33,7 +33,7 @@ import LessonScreen from './src/screens/LessonScreen';
 import SeasonsScreen from './src/screens/SeasonsScreen';
 import SeasonDetailScreen from './src/screens/SeasonDetailScreen';
 import CreateSeasonScreen from './src/screens/CreateSeasonScreen';
-import TimeAttackScreen from './src/screens/TimeAttackScreen';
+import BountyHunterScreen from './src/screens/BountyHunterScreen';
 import BountyBoardScreen from './src/screens/BountyBoardScreen';
 import BountyStatsScreen from './src/screens/BountyStatsScreen';
 import type { LearnStackParamList } from './src/screens/LearnScreen';
@@ -52,7 +52,7 @@ const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocu
   Learn: { focused: 'school', unfocused: 'school-outline' },
   Stocks: { focused: 'bar-chart', unfocused: 'bar-chart-outline' },
   Profile: { focused: 'person', unfocused: 'person-outline' },
-  Bounty: { focused: 'timer', unfocused: 'timer-outline' },
+  Bounty: { focused: 'skull', unfocused: 'skull-outline' },
   Stats: { focused: 'stats-chart', unfocused: 'stats-chart-outline' },
   Board: { focused: 'list', unfocused: 'list-outline' },
 };
@@ -79,7 +79,7 @@ function SeasonsStackNavigator() {
 function MainTabs() {
   const { mode } = useMode();
 
-  const tintColor = mode === 'timeAttack' ? Colors.orange : Colors.primary;
+  const tintColor = mode === 'bountyHunter' ? Colors.orange : Colors.primary;
 
   return (
     <Tab.Navigator
@@ -98,9 +98,9 @@ function MainTabs() {
         },
       })}
     >
-      {mode === 'timeAttack' ? (
+      {mode === 'bountyHunter' ? (
         <>
-          <Tab.Screen name="Bounty" component={TimeAttackScreen} />
+          <Tab.Screen name="Bounty" component={BountyHunterScreen} />
           <Tab.Screen name="Stats" component={BountyStatsScreen} />
           <Tab.Screen name="Board" component={BountyBoardScreen} />
           <Tab.Screen name="Learn" component={LearnStackNavigator} />

@@ -44,8 +44,8 @@ const MODE_SLIDES: Slide[] = [
     color: Colors.accent,
   },
   {
-    icon: "timer-outline",
-    title: "Time Attack",
+    icon: "skull-outline",
+    title: "Bounty Hunter",
     description:
       "Predict whether SPY goes up or down every 2 hours. Earn Double Dollars, build your Wanted Level streak, and climb the Bounty Board. One swipe, instant stakes.",
     color: Colors.orange,

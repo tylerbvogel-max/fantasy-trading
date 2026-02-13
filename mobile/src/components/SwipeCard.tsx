@@ -57,7 +57,6 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
             useNativeDriver: true,
           }).start(() => {
             onSwipeRight();
-            translateX.setValue(0);
           });
         } else if (swipedLeft) {
           Animated.spring(translateX, {
@@ -65,7 +64,6 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
             useNativeDriver: true,
           }).start(() => {
             onSwipeLeft();
-            translateX.setValue(0);
           });
         } else {
           Animated.spring(translateX, {
@@ -189,17 +187,6 @@ export default function SwipeCard({ onSwipeRight, onSwipeLeft, enabled, candles,
     );
   }
 
-  if (!enabled) {
-    return (
-      <View style={styles.wrapper}>
-        <View style={[styles.card, styles.cardDisabled]}>
-          <Ionicons name="lock-closed" size={32} color={Colors.textMuted} />
-          <Text style={styles.lockedText}>Submitting...</Text>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.wrapper}>
       {/* Left indicator (DOWN) */}
@@ -272,20 +259,6 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     justifyContent: "space-between",
   },
-  cardDisabled: {
-    width: CARD_WIDTH,
-    height: CARD_SIZE,
-    justifyContent: "center",
-    alignItems: "center",
-    opacity: 0.5,
-    gap: Spacing.md,
-  },
-  lockedText: {
-    color: Colors.textMuted,
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.md,
-  },
-
   // Chart area inside card
   chartArea: {
     flex: 1,
