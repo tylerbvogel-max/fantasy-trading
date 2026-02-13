@@ -65,7 +65,7 @@ export default function BountyHunterScreen() {
   const [confidence, setConfidence] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
   const toastOpacity = useState(() => new RNAnimated.Value(0))[0];
-  const [swipedSymbols, setSwipedSymbols] = useState<string[]>([]);
+  const [swipedPicks, setSwipedPicks] = useState<{ symbol: string; prediction: "UP" | "DOWN" }[]>([]);
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
 
   const showToast = (message: string) => {
@@ -89,16 +89,17 @@ export default function BountyHunterScreen() {
   // Reset optimistic swiped list when window changes
   const windowId = currentWindow?.id;
   useEffect(() => {
-    setSwipedSymbols([]);
+    setSwipedPicks([]);
     setSkippedSymbols([]);
   }, [windowId]);
 
   // Multi-stock: derive unpicked, picked, and skipped stocks
   const allStocks = status?.stocks ?? [];
+  const swipedSymbolSet = new Set(swipedPicks.map((p) => p.symbol));
   const unpickedStocks = allStocks.filter(
-    (s) => !s.my_pick && !swipedSymbols.includes(s.symbol) && !skippedSymbols.includes(s.symbol)
+    (s) => !s.my_pick && !swipedSymbolSet.has(s.symbol) && !skippedSymbols.includes(s.symbol)
   );
-  const pickedStocks = allStocks.filter((s) => !!s.my_pick || swipedSymbols.includes(s.symbol));
+  const pickedStocks = allStocks.filter((s) => !!s.my_pick || swipedSymbolSet.has(s.symbol));
   const skippedStocks = allStocks.filter((s) => skippedSymbols.includes(s.symbol) && !s.my_pick);
   const currentStock = unpickedStocks.length > 0 ? unpickedStocks[0] : null;
   const nextStock = unpickedStocks.length > 1 ? unpickedStocks[1] : null;
@@ -117,7 +118,7 @@ export default function BountyHunterScreen() {
 
     const symbol = currentStock.symbol;
     // Optimistically remove this card so the next one appears instantly
-    setSwipedSymbols((prev) => [...prev, symbol]);
+    setSwipedPicks((prev) => [...prev, { symbol, prediction }]);
 
     submitPrediction.mutate(
       {
@@ -136,7 +137,7 @@ export default function BountyHunterScreen() {
             refetch();
           } else {
             // Restore the card on unexpected failure
-            setSwipedSymbols((prev) => prev.filter((s) => s !== symbol));
+            setSwipedPicks((prev) => prev.filter((p) => p.symbol !== symbol));
             Alert.alert("Error", msg);
           }
         },
@@ -331,7 +332,8 @@ export default function BountyHunterScreen() {
           <Text style={styles.lockedTitle}>Locked In</Text>
           <View style={styles.lockedPicksGrid}>
             {pickedStocks.map((stock) => {
-              const pred = stock.my_pick?.prediction;
+              const pred = stock.my_pick?.prediction
+                ?? swipedPicks.find((p) => p.symbol === stock.symbol)?.prediction;
               const color = pred === "UP" ? Colors.green : pred === "DOWN" ? Colors.accent : Colors.textMuted;
               return (
                 <View
@@ -632,6 +634,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "center",
     gap: Spacing.md,
+    paddingBottom: Spacing.xl,
     marginTop: Spacing.md,
   },
   lockedPickCard: {
