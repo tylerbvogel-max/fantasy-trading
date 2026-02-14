@@ -79,7 +79,10 @@
 - **Option B: Google Form link** — Zero backend work. Profile button opens a Google Form in the browser. Responses go to a Google Sheet with free email notifications. Quick to set up, upgrade to in-app later if needed.
 
 ## Bounty Hunter Enhancements
-- **Probability Cone Chart** — extend the stock chart 1 hour into the future with shaded probability cones showing 1σ, 2σ, and 3σ windows of possible price movement. Gives players a visual read on how volatile or stable a stock is so they feel like they're analyzing real data before swiping. Uses historical volatility to compute the cone widths.
+- **Progression System** — see `bounty-progression.md` for full design (run badges, iron tiers, run score, titles)
+- **Probability Cone Chart** ✅ — extend the stock chart 1 hour into the future with shaded probability cones showing 1σ, 2σ, and 3σ windows of possible price movement. Gives players a visual read on how volatile or stable a stock is so they feel like they're analyzing real data before swiping. Uses historical volatility to compute the cone widths.
+- **Respect the Player's Time** — core design principle for launch messaging. Make it explicitly clear that we respect the player's time. No FOMO mechanics, no punishment for missing rounds. Someone interested in stocks and this game deserves that. Missed rounds = neutral effect (no DD change, no wanted level change, no streak break). All time-based effects (Iron scaling, streaks, etc.) are tied to rounds played, not calendar time. This is a competitive advantage over most mobile games that weaponize player guilt.
+- **Design North Star** — Bounty Hunter should be optimized for combinatorics of power-ups and strategies, scaling math, and emergent build synergies. Polish should be focused on a clear UI, fast feedback, and addictive number escalation. Success factors: mechanically coherent design, exponential scaling tension.
 
 ## Data Analytics
 - **Heat Map** — which stocks are most popular in your league
