@@ -714,10 +714,8 @@ async def _bust_player(db: AsyncSession, stats: BountyPlayerStats) -> None:
 
 
 async def reset_player(db: AsyncSession, user_id: uuid.UUID) -> dict:
-    """Reset a busted player to start fresh."""
+    """Reset a player to start fresh (works whether busted or not)."""
     stats = await get_or_create_player_stats(db, user_id)
-    if not stats.is_busted:
-        raise BountyError("You're not busted!")
 
     stats.double_dollars = STARTING_DOUBLE_DOLLARS
     stats.wanted_level = 1
