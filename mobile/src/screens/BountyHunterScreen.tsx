@@ -958,6 +958,18 @@ export default function BountyHunterScreen() {
             <Ionicons name="refresh" size={18} color={Colors.text} />
             <Text style={styles.nextRoundButtonText}>Next Round</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.resetScoreButton}
+            onPress={() =>
+              Alert.alert("Reset Score", "This will reset your balance, wanted level, and irons. Continue?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Reset", style: "destructive", onPress: handleReset },
+              ])
+            }
+          >
+            <Ionicons name="trash-outline" size={16} color={Colors.accent} />
+            <Text style={styles.resetScoreText}>Reset Score</Text>
+          </TouchableOpacity>
         </ScrollView>
 
         {previousWindow && previousWindow.is_settled && previousPick && (
@@ -1059,6 +1071,18 @@ export default function BountyHunterScreen() {
         <Text style={styles.waitingSubtext}>
           New bounty every 2 minutes.{"\n"}Ante: $${anteCost} per window.
         </Text>
+        <TouchableOpacity
+          style={[styles.resetScoreButton, { marginTop: Spacing.xl }]}
+          onPress={() =>
+            Alert.alert("Reset Score", "This will reset your balance, wanted level, and irons. Continue?", [
+              { text: "Cancel", style: "cancel" },
+              { text: "Reset", style: "destructive", onPress: handleReset },
+            ])
+          }
+        >
+          <Ionicons name="trash-outline" size={16} color={Colors.accent} />
+          <Text style={styles.resetScoreText}>Reset Score</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1395,6 +1419,18 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: FontSize.md,
     color: Colors.text,
+  },
+  resetScoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  resetScoreText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.sm,
+    color: Colors.accent,
   },
 
   // ── Waiting / no active window ──
