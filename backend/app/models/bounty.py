@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date, timezone
 from decimal import Decimal
-from sqlalchemy import String, Boolean, Integer, Date, DateTime, Numeric, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Boolean, Integer, Float, Date, DateTime, Numeric, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -60,6 +60,11 @@ class BountyPrediction(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # New columns for sim mechanics
+    action_type: Mapped[str] = mapped_column(String(20), default="directional")
+    insurance_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
+    base_points: Mapped[int] = mapped_column(Integer, default=0)
+    wanted_multiplier_used: Mapped[int] = mapped_column(Integer, default=1)
 
 
 class SpyPriceLog(Base):
@@ -85,4 +90,37 @@ class BountyPlayerStats(Base):
     best_streak: Mapped[int] = mapped_column(Integer, default=0)
     last_prediction_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # New columns for sim mechanics
+    notoriety: Mapped[float] = mapped_column(Float, default=0.0)
+    chambers: Mapped[int] = mapped_column(Integer, default=2)
+    skip_count_this_window: Mapped[int] = mapped_column(Integer, default=0)
+    is_busted: Mapped[bool] = mapped_column(Boolean, default=False)
+    bust_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class BountyPlayerIron(Base):
+    """Player's equipped irons."""
+    __tablename__ = "bounty_player_irons"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    iron_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    slot_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    equipped_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class BountyIronOffering(Base):
+    """Pending iron choices after a window settles."""
+    __tablename__ = "bounty_iron_offerings"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    bounty_window_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bounty_windows.id"), nullable=False)
+    offered_iron_ids: Mapped[str] = mapped_column(String(500), nullable=False)  # JSON array string
+    chosen_iron_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

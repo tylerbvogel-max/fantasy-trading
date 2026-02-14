@@ -22,6 +22,10 @@ import type {
   BountyPickResponse,
   BountySubmitResponse,
   BountyDetailedStats,
+  BountyEquippedIron,
+  BountyIronOffering,
+  BountyResetResponse,
+  BountySkipResponse,
 } from "../api/client";
 
 // ── Seasons ──
@@ -270,6 +274,61 @@ export function useSubmitPrediction() {
     mutationFn: (data) => bounty.predict(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+    },
+  });
+}
+
+export function useBountySkip() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    BountySkipResponse,
+    Error,
+    { bounty_window_id: string; symbol: string }
+  >({
+    mutationFn: (data) => bounty.skip(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+    },
+  });
+}
+
+export function useBountyIrons() {
+  return useQuery<BountyEquippedIron[]>({
+    queryKey: ["bountyIrons"],
+    queryFn: () => bounty.irons(),
+  });
+}
+
+export function useBountyIronOffering() {
+  return useQuery<BountyIronOffering>({
+    queryKey: ["bountyIronOffering"],
+    queryFn: () => bounty.ironOffering(),
+  });
+}
+
+export function usePickIron() {
+  const queryClient = useQueryClient();
+
+  return useMutation<BountyEquippedIron, Error, string>({
+    mutationFn: (ironId) => bounty.pickIron(ironId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyIrons"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyIronOffering"] });
+    },
+  });
+}
+
+export function useBountyReset() {
+  const queryClient = useQueryClient();
+
+  return useMutation<BountyResetResponse, Error, void>({
+    mutationFn: () => bounty.reset(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyIrons"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyIronOffering"] });
     },
   });
 }

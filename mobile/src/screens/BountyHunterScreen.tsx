@@ -6,18 +6,37 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  ScrollView,
   Animated as RNAnimated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
-import { useBountyStatus, useSubmitPrediction } from "../hooks/useApi";
+import {
+  useBountyStatus,
+  useSubmitPrediction,
+  useBountySkip,
+  useBountyIronOffering,
+  usePickIron,
+  useBountyReset,
+} from "../hooks/useApi";
 import SwipeCard from "../components/SwipeCard";
+import IronOfferingModal from "../components/IronOfferingModal";
 
-const CONFIDENCE_OPTIONS = [
-  { value: 1, label: "Draw", description: "$$100", color: Colors.text, bgColor: Colors.surface },
-  { value: 2, label: "Quick Draw", description: "$$200", color: Colors.yellow, bgColor: Colors.yellow + "20" },
-  { value: 3, label: "Dead Eye", description: "$$300", color: Colors.orange, bgColor: Colors.orange + "20" },
-];
+// Scoring tables from bounty_config (for display only)
+const DIR_SCORING: Record<number, { win: number; lose: number }> = {
+  1: { win: 13, lose: 11 },
+  2: { win: 31, lose: 28 },
+  3: { win: 57, lose: 70 },
+};
+
+const WANTED_MULT: Record<number, number> = {
+  1: 1, 2: 2, 3: 4, 4: 8, 5: 18,
+  6: 42, 7: 100, 8: 230, 9: 530, 10: 1200,
+};
+
+function getWantedMult(level: number): number {
+  return WANTED_MULT[level] ?? Math.round(1200 * Math.pow(2.3, level - 10));
+}
 
 function useCountdown(targetTime: string | null) {
   const [timeLeft, setTimeLeft] = useState("");
@@ -62,11 +81,16 @@ function useCountdown(targetTime: string | null) {
 export default function BountyHunterScreen() {
   const { data: status, isLoading, isError, refetch } = useBountyStatus();
   const submitPrediction = useSubmitPrediction();
+  const submitSkip = useBountySkip();
+  const { data: ironOffering, refetch: refetchOffering } = useBountyIronOffering();
+  const pickIronMutation = usePickIron();
+  const resetMutation = useBountyReset();
   const [confidence, setConfidence] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
   const toastOpacity = useState(() => new RNAnimated.Value(0))[0];
-  const [swipedPicks, setSwipedPicks] = useState<{ symbol: string; prediction: "UP" | "DOWN"; confidence: number }[]>([]);
+  const [swipedPicks, setSwipedPicks] = useState<{ symbol: string; prediction: "UP" | "DOWN" | "HOLD"; confidence: number }[]>([]);
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
+  const [showIronModal, setShowIronModal] = useState(false);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -85,6 +109,15 @@ export default function BountyHunterScreen() {
   const myPick = status?.my_pick;
   const previousPick = status?.previous_pick;
   const stats = status?.player_stats;
+  const anteCost = status?.ante_cost ?? 75;
+  const skipCost = status?.skip_cost ?? 25;
+
+  // Check for pending iron offering
+  useEffect(() => {
+    if (stats?.pending_offering && ironOffering?.offering_id) {
+      setShowIronModal(true);
+    }
+  }, [stats?.pending_offering, ironOffering?.offering_id]);
 
   // Reset optimistic swiped list when window changes
   const windowId = currentWindow?.id;
@@ -113,11 +146,37 @@ export default function BountyHunterScreen() {
     !currentWindow ? status?.next_window_time ?? null : null
   );
 
+  const wantedLevel = stats?.wanted_level ?? 1;
+  const mult = getWantedMult(Math.max(wantedLevel, 1));
+
+  const CONFIDENCE_OPTIONS = [
+    {
+      value: 1,
+      label: "Draw",
+      description: `+${DIR_SCORING[1].win}x${mult}`,
+      color: Colors.text,
+      bgColor: Colors.surface,
+    },
+    {
+      value: 2,
+      label: "Quick Draw",
+      description: `+${DIR_SCORING[2].win}x${mult}`,
+      color: Colors.yellow,
+      bgColor: Colors.yellow + "20",
+    },
+    {
+      value: 3,
+      label: "Dead Eye",
+      description: `+${DIR_SCORING[3].win}x${mult}`,
+      color: Colors.orange,
+      bgColor: Colors.orange + "20",
+    },
+  ];
+
   const handleSwipe = (prediction: "UP" | "DOWN") => {
     if (!currentWindow || !currentStock) return;
 
     const symbol = currentStock.symbol;
-    // Optimistically remove this card so the next one appears instantly
     setSwipedPicks((prev) => [...prev, { symbol, prediction, confidence }]);
 
     submitPrediction.mutate(
@@ -135,8 +194,12 @@ export default function BountyHunterScreen() {
           const msg = error.message ?? "";
           if (msg.includes("not currently active") || msg.includes("already made a prediction")) {
             refetch();
+          } else if (msg.includes("busted")) {
+            refetch();
+          } else if (msg.includes("ante")) {
+            showToast(msg);
+            setSwipedPicks((prev) => prev.filter((p) => p.symbol !== symbol));
           } else {
-            // Restore the card on unexpected failure
             setSwipedPicks((prev) => prev.filter((p) => p.symbol !== symbol));
             Alert.alert("Error", msg);
           }
@@ -145,9 +208,89 @@ export default function BountyHunterScreen() {
     );
   };
 
+  const handleHold = () => {
+    if (!currentWindow || !currentStock) return;
+
+    const symbol = currentStock.symbol;
+    setSwipedPicks((prev) => [...prev, { symbol, prediction: "HOLD", confidence }]);
+
+    submitPrediction.mutate(
+      {
+        bounty_window_id: currentWindow.id,
+        prediction: "HOLD",
+        confidence,
+        symbol,
+      },
+      {
+        onSuccess: () => {
+          showToast(`${symbol} HOLD Locked In!`);
+        },
+        onError: (error) => {
+          const msg = error.message ?? "";
+          setSwipedPicks((prev) => prev.filter((p) => p.symbol !== symbol));
+          if (msg.includes("not currently active") || msg.includes("already made a prediction")) {
+            refetch();
+          } else {
+            Alert.alert("Error", msg);
+          }
+        },
+      }
+    );
+  };
+
   const handleSkip = () => {
-    if (!currentStock) return;
+    if (!currentStock || !currentWindow) return;
+    const canAfford = (stats?.double_dollars ?? 0) >= skipCost;
+    if (!canAfford) {
+      showToast("Can't afford skip!");
+      return;
+    }
+
     setSkippedSymbols((prev) => [...prev, currentStock.symbol]);
+
+    submitSkip.mutate(
+      {
+        bounty_window_id: currentWindow.id,
+        symbol: currentStock.symbol,
+      },
+      {
+        onSuccess: (data) => {
+          showToast(`Skipped (-$$${data.skip_cost})`);
+          if (data.is_busted) {
+            refetch();
+          }
+        },
+        onError: (error) => {
+          setSkippedSymbols((prev) => prev.filter((s) => s !== currentStock.symbol));
+          showToast(error.message ?? "Skip failed");
+        },
+      }
+    );
+  };
+
+  const handlePickIron = (ironId: string) => {
+    pickIronMutation.mutate(ironId, {
+      onSuccess: () => {
+        setShowIronModal(false);
+        showToast("Iron equipped!");
+        refetchOffering();
+      },
+      onError: (error) => {
+        Alert.alert("Error", error.message);
+      },
+    });
+  };
+
+  const handleReset = () => {
+    resetMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        showToast(data.message);
+        refetch();
+      },
+      onError: (error) => {
+        Alert.alert("Error", error.message);
+      },
+    });
   };
 
   if (isLoading) {
@@ -181,6 +324,18 @@ export default function BountyHunterScreen() {
     );
   }
 
+  // Iron offering modal
+  const ironModal = (
+    <IronOfferingModal
+      visible={showIronModal}
+      irons={ironOffering?.irons ?? []}
+      onPick={handlePickIron}
+      isPicking={pickIronMutation.isPending}
+      chambersUsed={stats?.equipped_irons?.length ?? 0}
+      maxChambers={stats?.chambers ?? 2}
+    />
+  );
+
   const toastElement = toast ? (
     <RNAnimated.View style={[styles.toast, { opacity: toastOpacity }]}>
       <Ionicons name="checkmark-circle" size={20} color={Colors.green} />
@@ -188,13 +343,69 @@ export default function BountyHunterScreen() {
     </RNAnimated.View>
   ) : null;
 
+  // ── BUST STATE ──
+  if (stats?.is_busted) {
+    return (
+      <View style={styles.container}>
+        {toastElement}
+        <View style={styles.bustContainer}>
+          <Text style={styles.bustTitle}>BUSTED</Text>
+          <Ionicons name="skull-outline" size={64} color={Colors.accent} />
+          <Text style={styles.bustSubtext}>Your run has ended.</Text>
+          <View style={styles.bustStats}>
+            <View style={styles.bustStatRow}>
+              <Text style={styles.bustStatLabel}>Peak Wanted</Text>
+              <Text style={styles.bustStatValue}>Lv.{stats.best_streak}</Text>
+            </View>
+            <View style={styles.bustStatRow}>
+              <Text style={styles.bustStatLabel}>Total Picks</Text>
+              <Text style={styles.bustStatValue}>{stats.total_predictions}</Text>
+            </View>
+            <View style={styles.bustStatRow}>
+              <Text style={styles.bustStatLabel}>Times Busted</Text>
+              <Text style={styles.bustStatValue}>{stats.bust_count}</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPress={handleReset}
+            disabled={resetMutation.isPending}
+          >
+            {resetMutation.isPending ? (
+              <ActivityIndicator size="small" color={Colors.text} />
+            ) : (
+              <Text style={styles.resetButtonText}>Start Over</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   const hasActiveWindow = !!currentWindow;
+
+  // Equipped irons row
+  const equippedIronsRow = stats?.equipped_irons && stats.equipped_irons.length > 0 ? (
+    <View style={styles.ironsRow}>
+      {stats.equipped_irons.map((iron) => {
+        const rarityColor = iron.rarity === "rare" ? Colors.yellow : iron.rarity === "uncommon" ? Colors.primary : Colors.textMuted;
+        return (
+          <View key={iron.slot_number} style={[styles.ironPill, { borderColor: rarityColor + "60" }]}>
+            <Text style={[styles.ironPillText, { color: rarityColor }]}>
+              {iron.name.split(" ").map(w => w[0]).join("")}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  ) : null;
 
   // Active window, stocks still to pick
   if (hasActiveWindow && currentStock) {
     return (
       <View style={styles.container}>
         {toastElement}
+        {ironModal}
         <View style={styles.header}>
           <Text style={styles.title}>Bounty Hunter</Text>
         </View>
@@ -208,11 +419,15 @@ export default function BountyHunterScreen() {
             <Text style={styles.compactStatDivider}>|</Text>
             <Text style={styles.compactStat}>
               <Text style={{ color: Colors.orange }}>Lv.{stats.wanted_level}</Text>
+              <Text style={{ color: Colors.textMuted, fontSize: FontSize.xs }}> ({"\u00D7"}{mult})</Text>
             </Text>
             <Text style={styles.compactStatDivider}>|</Text>
             <Text style={styles.compactStat}>{stats.accuracy_pct}%</Text>
           </View>
         )}
+
+        {/* Equipped irons */}
+        {equippedIronsRow}
 
         {/* Timer + progress */}
         <View style={styles.timerRow}>
@@ -257,11 +472,25 @@ export default function BountyHunterScreen() {
           />
         </View>
 
-        {/* Skip button */}
-        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-          <Ionicons name="play-skip-forward" size={14} color={Colors.orange} />
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+        {/* HOLD + Skip row */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[
+              styles.skipButton,
+              (stats?.double_dollars ?? 0) < skipCost && styles.skipButtonDisabled,
+            ]}
+            onPress={handleSkip}
+            disabled={(stats?.double_dollars ?? 0) < skipCost}
+          >
+            <Ionicons name="play-skip-forward" size={14} color={Colors.orange} />
+            <Text style={styles.skipText}>Skip ($${ skipCost })</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.holdButton} onPress={handleHold}>
+            <Ionicons name="pause-circle" size={16} color={Colors.primary} />
+            <Text style={styles.holdText}>HOLD</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Confidence selector — compact at bottom */}
         <View style={styles.confidenceBar}>
@@ -301,6 +530,7 @@ export default function BountyHunterScreen() {
     return (
       <View style={styles.container}>
         {toastElement}
+        {ironModal}
         <View style={styles.header}>
           <Text style={styles.title}>Bounty Hunter</Text>
         </View>
@@ -314,11 +544,15 @@ export default function BountyHunterScreen() {
             <Text style={styles.compactStatDivider}>|</Text>
             <Text style={styles.compactStat}>
               <Text style={{ color: Colors.orange }}>Lv.{stats.wanted_level}</Text>
+              <Text style={{ color: Colors.textMuted, fontSize: FontSize.xs }}> ({"\u00D7"}{mult})</Text>
             </Text>
             <Text style={styles.compactStatDivider}>|</Text>
             <Text style={styles.compactStat}>{stats.accuracy_pct}%</Text>
           </View>
         )}
+
+        {/* Equipped irons */}
+        {equippedIronsRow}
 
         {/* Timer */}
         <View style={styles.timerRow}>
@@ -329,7 +563,7 @@ export default function BountyHunterScreen() {
         </View>
 
         {/* Locked-in picks — centered hero */}
-        <View style={styles.lockedPicksArea}>
+        <ScrollView contentContainerStyle={styles.lockedPicksArea}>
           <Ionicons name="checkmark-circle" size={48} color={Colors.green} />
           <Text style={styles.lockedTitle}>Locked In</Text>
           <View style={styles.lockedPicksGrid}>
@@ -337,8 +571,15 @@ export default function BountyHunterScreen() {
               const swipedPick = swipedPicks.find((p) => p.symbol === stock.symbol);
               const pred = stock.my_pick?.prediction ?? swipedPick?.prediction;
               const conf = stock.my_pick?.confidence ?? swipedPick?.confidence ?? 1;
-              const confOption = CONFIDENCE_OPTIONS.find((o) => o.value === conf) ?? CONFIDENCE_OPTIONS[0];
-              const color = pred === "UP" ? Colors.green : pred === "DOWN" ? Colors.accent : Colors.textMuted;
+              const color = pred === "UP" ? Colors.green
+                : pred === "DOWN" ? Colors.accent
+                : pred === "HOLD" ? Colors.primary
+                : Colors.textMuted;
+              const icon = pred === "UP" ? "arrow-up-circle"
+                : pred === "DOWN" ? "arrow-down-circle"
+                : pred === "HOLD" ? "pause-circle"
+                : "checkmark-circle";
+              const confOpt = CONFIDENCE_OPTIONS.find((o) => o.value === conf) ?? CONFIDENCE_OPTIONS[0];
               return (
                 <View
                   key={stock.symbol}
@@ -350,22 +591,14 @@ export default function BountyHunterScreen() {
                   <Text style={[styles.lockedPickSymbol, { color }]}>
                     {stock.symbol}
                   </Text>
-                  {pred ? (
-                    <Ionicons
-                      name={pred === "UP" ? "arrow-up-circle" : "arrow-down-circle"}
-                      size={28}
-                      color={color}
-                    />
-                  ) : (
-                    <Ionicons name="checkmark-circle" size={28} color={color} />
-                  )}
+                  <Ionicons name={icon as any} size={22} color={color} />
                   {pred && (
                     <Text style={[styles.lockedPickLabel, { color }]}>
                       {pred}
                     </Text>
                   )}
-                  <Text style={[styles.lockedPickBounty, { color: confOption.color }]}>
-                    {confOption.label} · {confOption.description}
+                  <Text style={[styles.lockedPickBounty, { color: confOpt.color }]}>
+                    {confOpt.label}
                   </Text>
                 </View>
               );
@@ -381,14 +614,14 @@ export default function BountyHunterScreen() {
                 <Text style={[styles.lockedPickSymbol, { color: Colors.orange }]}>
                   {stock.symbol}
                 </Text>
-                <Ionicons name="play-skip-forward" size={28} color={Colors.orange} />
+                <Ionicons name="play-skip-forward" size={22} color={Colors.orange} />
                 <Text style={[styles.lockedPickLabel, { color: Colors.orange }]}>
                   SKIP
                 </Text>
               </View>
             ))}
           </View>
-        </View>
+        </ScrollView>
 
         {/* Previous result inline */}
         {previousWindow && previousWindow.is_settled && previousPick && (
@@ -409,6 +642,7 @@ export default function BountyHunterScreen() {
   // No active window — no scroll
   return (
     <View style={styles.container}>
+      {ironModal}
       <View style={styles.header}>
         <Text style={styles.title}>Bounty Hunter</Text>
       </View>
@@ -422,11 +656,15 @@ export default function BountyHunterScreen() {
           <Text style={styles.compactStatDivider}>|</Text>
           <Text style={styles.compactStat}>
             <Text style={{ color: Colors.orange }}>Lv.{stats.wanted_level}</Text>
+            <Text style={{ color: Colors.textMuted, fontSize: FontSize.xs }}> ({"\u00D7"}{mult})</Text>
           </Text>
           <Text style={styles.compactStatDivider}>|</Text>
           <Text style={styles.compactStat}>{stats.accuracy_pct}%</Text>
         </View>
       )}
+
+      {/* Equipped irons */}
+      {equippedIronsRow}
 
       {/* Previous result card */}
       {previousWindow && previousWindow.is_settled && (
@@ -466,7 +704,7 @@ export default function BountyHunterScreen() {
         <Text style={styles.waitingTitle}>Next Bounty</Text>
         <Text style={styles.waitingCountdown}>{nextWindowCountdown || "Calculating..."}</Text>
         <Text style={styles.waitingSubtext}>
-          New bounty every 2 minutes. Predict SPY direction!
+          New bounty every 2 minutes.{"\n"}Ante: $${anteCost} per window.
         </Text>
       </View>
     </View>
@@ -538,7 +776,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.xs,
     gap: Spacing.sm,
   },
   compactStat: {
@@ -549,6 +787,23 @@ const styles = StyleSheet.create({
   compactStatDivider: {
     color: Colors.border,
     fontSize: FontSize.sm,
+  },
+  ironsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingBottom: Spacing.sm,
+  },
+  ironPill: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  ironPillText: {
+    fontSize: FontSize.xs,
+    fontFamily: FontFamily.bold,
   },
   timerRow: {
     alignItems: "center",
@@ -587,17 +842,42 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.95 }, { translateY: 8 }],
     opacity: 0.5,
   },
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: Spacing.xl,
+    paddingVertical: Spacing.sm,
+  },
   skipButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
+  },
+  skipButtonDisabled: {
+    opacity: 0.3,
   },
   skipText: {
     fontSize: FontSize.sm,
     fontFamily: FontFamily.semiBold,
     color: Colors.orange,
+  },
+  holdButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    backgroundColor: Colors.primary + "20",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.primary + "40",
+  },
+  holdText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.bold,
+    color: Colors.primary,
   },
   confidenceBar: {
     flexDirection: "row",
@@ -625,7 +905,7 @@ const styles = StyleSheet.create({
 
   // ── Locked-in state ──
   lockedPicksArea: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
@@ -640,23 +920,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: Spacing.md,
-    paddingBottom: Spacing.xl,
-    marginTop: Spacing.md,
+    gap: Spacing.sm,
+    paddingBottom: Spacing.lg,
+    marginTop: Spacing.sm,
   },
   lockedPickCard: {
     alignItems: "center",
-    gap: Spacing.xs,
+    gap: 2,
     backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    minWidth: 100,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    minWidth: 80,
   },
   lockedPickSymbol: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
   },
   lockedPickLabel: {
     fontFamily: FontFamily.semiBold,
@@ -665,7 +945,7 @@ const styles = StyleSheet.create({
   lockedPickBounty: {
     fontFamily: FontFamily.medium,
     fontSize: FontSize.xs,
-    marginTop: Spacing.xs,
+    marginTop: 2,
   },
   prevResultBar: {
     flexDirection: "row",
@@ -741,5 +1021,59 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: Spacing.lg,
     lineHeight: 20,
+  },
+
+  // ── Bust state ──
+  bustContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  bustTitle: {
+    fontSize: FontSize.hero,
+    fontFamily: FontFamily.bold,
+    color: Colors.accent,
+    letterSpacing: 6,
+  },
+  bustSubtext: {
+    fontSize: FontSize.lg,
+    fontFamily: FontFamily.regular,
+    color: Colors.textSecondary,
+  },
+  bustStats: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    width: "100%",
+    gap: Spacing.md,
+  },
+  bustStatRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  bustStatLabel: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+  },
+  bustStatValue: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.md,
+    color: Colors.text,
+  },
+  resetButton: {
+    backgroundColor: Colors.orange,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.lg,
+    width: "100%",
+    alignItems: "center",
+  },
+  resetButtonText: {
+    fontSize: FontSize.lg,
+    fontFamily: FontFamily.bold,
+    color: Colors.text,
   },
 });

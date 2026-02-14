@@ -397,6 +397,18 @@ class BountyPickResponse(BaseModel):
     payout: int = 0
     wanted_level_at_pick: int = 0
     created_at: datetime
+    action_type: str = "directional"
+    insurance_triggered: bool = False
+    base_points: int = 0
+    wanted_multiplier_used: int = 1
+
+
+class BountyEquippedIron(BaseModel):
+    iron_id: str
+    name: str
+    rarity: str
+    description: str
+    slot_number: int
 
 
 class BountyStatsResponse(BaseModel):
@@ -406,6 +418,12 @@ class BountyStatsResponse(BaseModel):
     correct_predictions: int = 0
     accuracy_pct: float = 0.0
     best_streak: int = 0
+    notoriety: float = 0.0
+    chambers: int = 2
+    is_busted: bool = False
+    bust_count: int = 0
+    equipped_irons: list[BountyEquippedIron] = []
+    pending_offering: bool = False
 
 
 class BountyStockStatus(BaseModel):
@@ -428,11 +446,13 @@ class BountyStatusResponse(BaseModel):
     next_window_time: datetime | None = None
     spy_candles: list[SpyCandlePoint] = []
     stocks: list[BountyStockStatus] = []
+    ante_cost: int = 75
+    skip_cost: int = 25
 
 
 class BountySubmitRequest(BaseModel):
     bounty_window_id: UUID
-    prediction: str = Field(..., pattern="^(UP|DOWN)$")
+    prediction: str = Field(..., pattern="^(UP|DOWN|HOLD)$")
     confidence: int = Field(..., ge=1, le=3)
     symbol: str = "SPY"
 
@@ -442,6 +462,37 @@ class BountySubmitResponse(BaseModel):
     confidence_label: str
     message: str
     symbol: str = "SPY"
+
+
+class BountyIronDef(BaseModel):
+    id: str
+    name: str
+    rarity: str
+    description: str
+
+
+class BountyIronOfferingResponse(BaseModel):
+    offering_id: UUID
+    irons: list[BountyIronDef]
+
+
+class BountyIronPickRequest(BaseModel):
+    iron_id: str
+
+
+class BountySkipRequest(BaseModel):
+    bounty_window_id: UUID
+    symbol: str
+
+class BountySkipResponse(BaseModel):
+    skip_cost: int
+    new_balance: int
+    is_busted: bool = False
+
+
+class BountyResetResponse(BaseModel):
+    double_dollars: int
+    message: str
 
 
 class ConfidenceStatEntry(BaseModel):

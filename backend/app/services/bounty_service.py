@@ -1,23 +1,30 @@
+import json
+import random
 import uuid
 import httpx
 from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from sqlalchemy import select, func, and_, Integer, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.bounty import BountyWindow, BountyWindowStock, BountyPrediction, BountyPlayerStats, SpyPriceLog
+from app.models.bounty import (
+    BountyWindow, BountyWindowStock, BountyPrediction, BountyPlayerStats,
+    SpyPriceLog, BountyPlayerIron, BountyIronOffering,
+)
 from app.models.user import User
 from app.services.finnhub_service import get_stock_price, fetch_quote
+from app.services.bounty_config import (
+    DIR_SCORING, HOL_SCORING, WANTED_MULT, WANTED_LEVEL_CAP,
+    NOTORIETY_WEIGHT, NOTORIETY_UP_THRESHOLD, NOTORIETY_DOWN_THRESHOLD,
+    ANTE_BASE, STARTING_DOUBLE_DOLLARS, STARTING_CHAMBERS, MAX_CHAMBERS,
+    HOLD_THRESHOLD, CONFIDENCE_LABELS,
+    wanted_multiplier, skip_cost as calc_skip_cost,
+    IRON_DEFS, IRON_DEFS_BY_ID, RARITY_WEIGHTS,
+)
 from app.config import get_settings
 
 settings = get_settings()
 
 ET = ZoneInfo("America/New_York")
-
-# Scoring
-BASE_PAYOUT = {1: 100, 2: 200, 3: 300}
-BASE_PENALTY = {1: -50, 2: -100, 3: -150}
-WANTED_LEVEL_CAP = 10
-CONFIDENCE_LABELS = {1: "Draw", 2: "Quick Draw", 3: "Dead Eye"}
 
 # Rolling window duration (set to 2 for rapid testing, 120 for production)
 WINDOW_DURATION_MINUTES = 2
@@ -44,6 +51,192 @@ class BountyError(Exception):
     def __init__(self, message: str):
         self.message = message
 
+
+# ── Iron effects aggregation ──
+
+async def get_player_iron_effects(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """Query equipped irons and aggregate effects (mirrors sim's getIronEffects)."""
+    result = await db.execute(
+        select(BountyPlayerIron)
+        .where(BountyPlayerIron.user_id == user_id)
+        .order_by(BountyPlayerIron.slot_number)
+    )
+    equipped = list(result.scalars().all())
+
+    fx = {
+        "draw_win_bonus": 0,
+        "all_lose_reduction": 0,
+        "insurance_chance": 0.0,
+        "ante_reduction": 0,
+        "skip_discount": 0.0,
+        "holster_win_bonus": 0,
+        "qd_win_bonus": 0,
+        "snake_oil": False,
+        "de_insurance_chance": 0.0,
+        "flat_cash_per_correct": 0,
+        "notoriety_bonus": 0.0,
+        "per_level_win_bonus": 0,
+        "de_win_multiplier": 1,
+        "ghost_chance": 0.0,
+        "score_multiplier": 1.0,
+    }
+
+    for iron_row in equipped:
+        iron_def = IRON_DEFS_BY_ID.get(iron_row.iron_id)
+        if not iron_def:
+            continue
+        effects = iron_def["effects"]
+        for key, val in effects.items():
+            if key == "snake_oil":
+                fx["snake_oil"] = True
+            elif key == "de_win_multiplier":
+                fx["de_win_multiplier"] *= val
+            elif key == "score_multiplier":
+                fx["score_multiplier"] *= val
+            elif key == "ghost_chance":
+                fx["ghost_chance"] = min(1.0, fx["ghost_chance"] + val)
+            elif key in fx:
+                fx[key] += val
+
+    return fx
+
+
+async def get_equipped_irons(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+    """Return list of equipped iron defs with slot numbers."""
+    result = await db.execute(
+        select(BountyPlayerIron)
+        .where(BountyPlayerIron.user_id == user_id)
+        .order_by(BountyPlayerIron.slot_number)
+    )
+    irons = []
+    for row in result.scalars().all():
+        iron_def = IRON_DEFS_BY_ID.get(row.iron_id)
+        if iron_def:
+            irons.append({
+                "iron_id": iron_def["id"],
+                "name": iron_def["name"],
+                "rarity": iron_def["rarity"],
+                "description": iron_def["description"],
+                "slot_number": row.slot_number,
+            })
+    return irons
+
+
+# ── Iron offering ──
+
+def roll_iron_offering(equipped_ids: set[str]) -> list[dict]:
+    """Roll 3 unique irons not already equipped, rarity-weighted."""
+    available = [i for i in IRON_DEFS if i["id"] not in equipped_ids]
+    if len(available) <= 3:
+        return available[:3]
+
+    pool = []
+    for iron in available:
+        weight = RARITY_WEIGHTS.get(iron["rarity"], 10)
+        pool.extend([iron] * weight)
+
+    picked = []
+    picked_ids = set()
+    while len(picked) < 3:
+        iron = random.choice(pool)
+        if iron["id"] not in picked_ids:
+            picked.append(iron)
+            picked_ids.add(iron["id"])
+    return picked
+
+
+async def create_iron_offering(
+    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID
+) -> BountyIronOffering | None:
+    """Create an iron offering for a player after window settlement."""
+    equipped_result = await db.execute(
+        select(BountyPlayerIron.iron_id).where(BountyPlayerIron.user_id == user_id)
+    )
+    equipped_ids = {row for row in equipped_result.scalars().all()}
+
+    offerings = roll_iron_offering(equipped_ids)
+    if not offerings:
+        return None
+
+    offering = BountyIronOffering(
+        user_id=user_id,
+        bounty_window_id=window_id,
+        offered_iron_ids=json.dumps([i["id"] for i in offerings]),
+    )
+    db.add(offering)
+    return offering
+
+
+async def get_pending_offering(db: AsyncSession, user_id: uuid.UUID) -> BountyIronOffering | None:
+    """Get the most recent unconsumed iron offering."""
+    result = await db.execute(
+        select(BountyIronOffering)
+        .where(
+            BountyIronOffering.user_id == user_id,
+            BountyIronOffering.chosen_iron_id.is_(None),
+        )
+        .order_by(BountyIronOffering.created_at.desc())
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+async def pick_iron(
+    db: AsyncSession, user_id: uuid.UUID, iron_id: str
+) -> dict:
+    """Equip a chosen iron from the current offering."""
+    offering = await get_pending_offering(db, user_id)
+    if not offering:
+        raise BountyError("No pending iron offering")
+
+    offered_ids = json.loads(offering.offered_iron_ids)
+    if iron_id not in offered_ids:
+        raise BountyError("Iron not in current offering")
+
+    iron_def = IRON_DEFS_BY_ID.get(iron_id)
+    if not iron_def:
+        raise BountyError("Unknown iron")
+
+    # Mark offering as consumed
+    offering.chosen_iron_id = iron_id
+
+    # Get player stats for chamber count
+    stats = await get_or_create_player_stats(db, user_id)
+
+    # Get current equipped irons
+    result = await db.execute(
+        select(BountyPlayerIron)
+        .where(BountyPlayerIron.user_id == user_id)
+        .order_by(BountyPlayerIron.slot_number)
+    )
+    equipped = list(result.scalars().all())
+
+    if len(equipped) >= stats.chambers:
+        # Replace oldest (lowest slot number)
+        oldest = equipped[0]
+        await db.delete(oldest)
+        await db.flush()
+
+    # Find next slot number
+    max_slot = max((i.slot_number for i in equipped), default=0)
+    new_iron = BountyPlayerIron(
+        user_id=user_id,
+        iron_id=iron_id,
+        slot_number=max_slot + 1,
+    )
+    db.add(new_iron)
+    await db.commit()
+
+    return {
+        "iron_id": iron_def["id"],
+        "name": iron_def["name"],
+        "rarity": iron_def["rarity"],
+        "description": iron_def["description"],
+        "slot_number": new_iron.slot_number,
+    }
+
+
+# ── Window management ──
 
 async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
     """Ensure a current rolling window exists. Auto-settle any expired unsettled windows."""
@@ -161,18 +354,25 @@ def get_next_window_time() -> datetime | None:
 
 
 async def get_or_create_player_stats(db: AsyncSession, user_id: uuid.UUID) -> BountyPlayerStats:
-    """Get existing stats or create a new record."""
+    """Get existing stats or create a new record with starting balance."""
     result = await db.execute(
         select(BountyPlayerStats).where(BountyPlayerStats.user_id == user_id)
     )
     stats = result.scalars().first()
     if not stats:
-        stats = BountyPlayerStats(user_id=user_id)
+        stats = BountyPlayerStats(
+            user_id=user_id,
+            double_dollars=STARTING_DOUBLE_DOLLARS,
+            wanted_level=1,
+            chambers=STARTING_CHAMBERS,
+        )
         db.add(stats)
         await db.commit()
         await db.refresh(stats)
     return stats
 
+
+# ── Prediction submission ──
 
 async def submit_prediction(
     db: AsyncSession,
@@ -210,12 +410,42 @@ async def submit_prediction(
     if result.scalars().first():
         raise BountyError(f"You've already made a prediction for {symbol} in this window")
 
-    if prediction not in ("UP", "DOWN"):
-        raise BountyError("Prediction must be UP or DOWN")
+    if prediction not in ("UP", "DOWN", "HOLD"):
+        raise BountyError("Prediction must be UP, DOWN, or HOLD")
     if confidence not in (1, 2, 3):
         raise BountyError("Confidence must be 1, 2, or 3")
 
     stats = await get_or_create_player_stats(db, user_id)
+
+    # Check bust state
+    if stats.is_busted:
+        raise BountyError("You're busted! Reset to start over.")
+
+    # Determine action type
+    action_type = "holster" if prediction == "HOLD" else "directional"
+
+    # Ante: deducted on first prediction in this window
+    existing_preds = await db.execute(
+        select(func.count(BountyPrediction.id)).where(
+            BountyPrediction.user_id == user_id,
+            BountyPrediction.bounty_window_id == window_id,
+        )
+    )
+    is_first_in_window = (existing_preds.scalar() or 0) == 0
+
+    fx = await get_player_iron_effects(db, user_id)
+    ante_cost = 0
+    if is_first_in_window:
+        ante_cost = max(0, ANTE_BASE - fx["ante_reduction"])
+        if stats.double_dollars < ante_cost:
+            raise BountyError(f"Can't afford ante ($${ ante_cost }). You need $${ ante_cost - stats.double_dollars } more.")
+        stats.double_dollars -= ante_cost
+        # Reset skip count for this window
+        stats.skip_count_this_window = 0
+        # Reset notoriety for this window
+        stats.notoriety = 0.0
+
+    mult = wanted_multiplier(max(stats.wanted_level, 1))
 
     pred = BountyPrediction(
         user_id=user_id,
@@ -224,6 +454,8 @@ async def submit_prediction(
         prediction=prediction,
         confidence=confidence,
         wanted_level_at_pick=stats.wanted_level,
+        action_type=action_type,
+        wanted_multiplier_used=mult,
     )
     db.add(pred)
 
@@ -234,6 +466,40 @@ async def submit_prediction(
     await db.refresh(pred)
     return pred
 
+
+# ── Skip ──
+
+async def submit_skip(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    window_id: uuid.UUID,
+    symbol: str,
+) -> dict:
+    """Process a skip — deduct cost from balance."""
+    stats = await get_or_create_player_stats(db, user_id)
+
+    if stats.is_busted:
+        raise BountyError("You're busted! Reset to start over.")
+
+    fx = await get_player_iron_effects(db, user_id)
+    raw_cost = calc_skip_cost(stats.skip_count_this_window + 1, stats.double_dollars)
+    cost = max(1, round(raw_cost * (1 - fx["skip_discount"])))
+
+    if stats.double_dollars < cost:
+        raise BountyError(f"Can't afford skip ($${ cost })")
+
+    stats.double_dollars -= cost
+    stats.skip_count_this_window += 1
+
+    # Check bust
+    if stats.double_dollars <= 0:
+        await _bust_player(db, stats)
+
+    await db.commit()
+    return {"skip_cost": cost, "new_balance": stats.double_dollars, "is_busted": stats.is_busted}
+
+
+# ── Settlement ──
 
 async def record_window_open_price(db: AsyncSession, window_id: uuid.UUID) -> None:
     """Fetch current SPY price and save as spy_open_price. Also set per-stock open prices."""
@@ -261,7 +527,7 @@ async def record_window_open_price(db: AsyncSession, window_id: uuid.UUID) -> No
 
 
 async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
-    """Settle a bounty window: fetch closing prices per stock, determine results, score predictions."""
+    """Settle a bounty window: fetch closing prices, determine results, score with sim mechanics."""
     window = await db.get(BountyWindow, window_id)
     if not window or window.is_settled:
         return
@@ -272,8 +538,9 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
     )
     stock_rows = list(stock_result.scalars().all())
 
-    # Build symbol → result map for scoring predictions
+    # Build symbol → result map and price change map
     stock_results: dict[str, str] = {}
+    stock_changes: dict[str, float] = {}  # symbol → abs(pct_change)
 
     for stock_row in stock_rows:
         if stock_row.is_settled:
@@ -287,7 +554,16 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
 
         stock_row.close_price = price
         if stock_row.open_price is not None:
-            stock_row.result = "UP" if price >= float(stock_row.open_price) else "DOWN"
+            open_f = float(stock_row.open_price)
+            pct_change = (price - open_f) / open_f if open_f != 0 else 0
+            stock_changes[stock_row.symbol] = abs(pct_change)
+
+            if abs(pct_change) < HOLD_THRESHOLD:
+                stock_row.result = "HOLD"
+            elif price >= open_f:
+                stock_row.result = "UP"
+            else:
+                stock_row.result = "DOWN"
         else:
             stock_row.result = "UP"
         stock_row.is_settled = True
@@ -306,37 +582,175 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
 
     window.is_settled = True
 
-    # Score all predictions by matching symbol
-    result = await db.execute(
+    # Score all predictions by matching symbol — using sim mechanics
+    pred_result = await db.execute(
         select(BountyPrediction).where(BountyPrediction.bounty_window_id == window_id)
     )
-    predictions = list(result.scalars().all())
+    predictions = list(pred_result.scalars().all())
 
+    # Group predictions by user for notoriety/iron tracking
+    user_predictions: dict[uuid.UUID, list[BountyPrediction]] = {}
     for pred in predictions:
-        stock_result_value = stock_results.get(pred.symbol, window.result)
-        is_correct = pred.prediction == stock_result_value
-        pred.is_correct = is_correct
+        user_predictions.setdefault(pred.user_id, []).append(pred)
 
-        if is_correct:
-            payout = BASE_PAYOUT[pred.confidence] * max(pred.wanted_level_at_pick, 1)
+    for user_id, user_preds in user_predictions.items():
+        stats = await get_or_create_player_stats(db, user_id)
+        fx = await get_player_iron_effects(db, user_id)
+
+        window_notoriety = 0.0
+
+        for pred in user_preds:
+            stock_result_value = stock_results.get(pred.symbol, window.result)
+            is_holster = pred.action_type == "holster"
+
+            # Determine correctness
+            if is_holster:
+                # HOLD is correct if result is HOLD (price barely moved)
+                is_correct = stock_result_value == "HOLD"
+            else:
+                is_correct = pred.prediction == stock_result_value
+
+            # Ghost Rider: miss → correct flip
+            ghost_triggered = False
+            if not is_correct and fx["ghost_chance"] > 0 and random.random() < fx["ghost_chance"]:
+                is_correct = True
+                ghost_triggered = True
+
+            # Insurance check (Lucky Horseshoe / Deadeye Scope)
+            insurance_triggered = False
+            if not is_correct:
+                chance = fx["insurance_chance"]
+                if pred.confidence == 3:
+                    chance += fx["de_insurance_chance"]
+                if chance > 0 and random.random() < chance:
+                    insurance_triggered = True
+
+            pred.is_correct = is_correct
+            pred.insurance_triggered = insurance_triggered
+
+            # Calculate scoring
+            scoring_table = HOL_SCORING if is_holster else DIR_SCORING
+            conf = pred.confidence
+
+            if insurance_triggered:
+                # Insurance forgives the loss — 0 points
+                base = 0
+            elif is_correct:
+                win_val = scoring_table[conf]["win"]
+                # Apply iron win bonuses
+                if conf == 1:
+                    win_val += fx["draw_win_bonus"]
+                if conf == 2:
+                    win_val += fx["qd_win_bonus"]
+                if is_holster:
+                    win_val += fx["holster_win_bonus"]
+                win_val += fx["per_level_win_bonus"] * stats.wanted_level
+                # DE Double Barrel
+                if conf == 3 and not is_holster and fx["de_win_multiplier"] > 1:
+                    win_val = round(win_val * fx["de_win_multiplier"])
+                base = win_val
+            else:
+                lose_val = scoring_table[conf]["lose"]
+                # Apply iron loss reduction
+                lose_val = max(0, lose_val - fx["all_lose_reduction"])
+                # Snake Oil: Draw holster losses = 0
+                if fx["snake_oil"] and is_holster and conf == 1:
+                    lose_val = 0
+                base = -lose_val
+
+            pred.base_points = base
+            mult = wanted_multiplier(max(stats.wanted_level, 1))
+            pred.wanted_multiplier_used = mult
+
+            payout = round(base * mult * fx["score_multiplier"])
+
+            # Flat cash bonus (unscaled)
+            if is_correct and fx["flat_cash_per_correct"] > 0:
+                payout += fx["flat_cash_per_correct"]
+
             pred.payout = payout
-        else:
-            payout = BASE_PENALTY[pred.confidence]
-            pred.payout = payout
+            stats.double_dollars += payout
 
-        # Update player stats
-        stats = await get_or_create_player_stats(db, pred.user_id)
-        stats.double_dollars = max(0, stats.double_dollars + payout)
+            if is_correct:
+                stats.correct_predictions += 1
 
-        if is_correct:
-            stats.correct_predictions += 1
-            stats.wanted_level = min(stats.wanted_level + 1, WANTED_LEVEL_CAP)
-            stats.best_streak = max(stats.best_streak, stats.wanted_level)
+            # Notoriety accumulation
+            notoriety_delta = NOTORIETY_WEIGHT[conf] * (1 if is_correct else -1)
+            if is_correct and fx["notoriety_bonus"] > 0:
+                notoriety_delta += fx["notoriety_bonus"]
+            window_notoriety += notoriety_delta
+
+        # End of window for this user: evaluate notoriety → wanted level
+        if window_notoriety >= NOTORIETY_UP_THRESHOLD:
+            stats.wanted_level = max(1, stats.wanted_level + 1)
+        elif window_notoriety <= NOTORIETY_DOWN_THRESHOLD:
+            stats.wanted_level = max(1, stats.wanted_level - 1)
+
+        stats.best_streak = max(stats.best_streak, stats.wanted_level)
+        stats.notoriety = window_notoriety
+
+        # Check bust
+        if stats.double_dollars <= 0:
+            await _bust_player(db, stats)
         else:
-            stats.wanted_level = 0
+            # Alive — create iron offering
+            await create_iron_offering(db, user_id, window_id)
 
     await db.commit()
 
+
+async def _bust_player(db: AsyncSession, stats: BountyPlayerStats) -> None:
+    """Mark player as busted, clear irons."""
+    stats.is_busted = True
+    stats.bust_count += 1
+    stats.double_dollars = 0
+
+    # Clear equipped irons
+    result = await db.execute(
+        select(BountyPlayerIron).where(BountyPlayerIron.user_id == stats.user_id)
+    )
+    for iron in result.scalars().all():
+        await db.delete(iron)
+
+
+async def reset_player(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """Reset a busted player to start fresh."""
+    stats = await get_or_create_player_stats(db, user_id)
+    if not stats.is_busted:
+        raise BountyError("You're not busted!")
+
+    stats.double_dollars = STARTING_DOUBLE_DOLLARS
+    stats.wanted_level = 1
+    stats.is_busted = False
+    stats.notoriety = 0.0
+    stats.skip_count_this_window = 0
+    stats.chambers = STARTING_CHAMBERS
+
+    # Clear irons (should already be empty but just in case)
+    result = await db.execute(
+        select(BountyPlayerIron).where(BountyPlayerIron.user_id == user_id)
+    )
+    for iron in result.scalars().all():
+        await db.delete(iron)
+
+    # Clear any pending offerings
+    off_result = await db.execute(
+        select(BountyIronOffering).where(
+            BountyIronOffering.user_id == user_id,
+            BountyIronOffering.chosen_iron_id.is_(None),
+        )
+    )
+    for off in off_result.scalars().all():
+        off.chosen_iron_id = "__reset__"
+
+    await db.commit()
+    return {
+        "double_dollars": stats.double_dollars,
+        "message": "Fresh start! You're back in the game.",
+    }
+
+
+# ── Query helpers ──
 
 async def get_user_prediction(
     db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID
@@ -362,6 +776,10 @@ def _pick_to_response(pred: BountyPrediction) -> dict:
         "payout": pred.payout,
         "wanted_level_at_pick": pred.wanted_level_at_pick,
         "created_at": pred.created_at,
+        "action_type": pred.action_type,
+        "insurance_triggered": pred.insurance_triggered,
+        "base_points": pred.base_points,
+        "wanted_multiplier_used": pred.wanted_multiplier_used,
     }
 
 
@@ -394,6 +812,11 @@ def _stats_to_response(stats: BountyPlayerStats) -> dict:
         "correct_predictions": stats.correct_predictions,
         "accuracy_pct": accuracy,
         "best_streak": stats.best_streak,
+        "notoriety": stats.notoriety,
+        "chambers": stats.chambers,
+        "is_busted": stats.is_busted,
+        "bust_count": stats.bust_count,
+        "pending_offering": False,  # Set by caller
     }
 
 
@@ -410,6 +833,7 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         await db.refresh(current)
     previous = await get_previous_window(db)
     stats = await get_or_create_player_stats(db, user_id)
+    fx = await get_player_iron_effects(db, user_id)
 
     my_pick = None
     if current:
@@ -422,6 +846,9 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         pred = await get_user_prediction(db, user_id, previous.id)
         if pred:
             previous_pick = _pick_to_response(pred)
+
+    # Check for pending iron offering
+    pending = await get_pending_offering(db, user_id)
 
     # Fetch SPY chart: Yahoo Finance (2h of 1-min data), fallback to self-logged prices
     candles = []
@@ -482,15 +909,29 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
                 "my_pick": _pick_to_response(stock_pick) if stock_pick else None,
             })
 
+    # Compute ante cost and skip cost for client display
+    ante_cost = max(0, ANTE_BASE - fx["ante_reduction"])
+    raw_skip = calc_skip_cost(stats.skip_count_this_window + 1, stats.double_dollars)
+    next_skip_cost = max(1, round(raw_skip * (1 - fx["skip_discount"])))
+
+    # Get equipped irons
+    equipped_irons = await get_equipped_irons(db, user_id)
+
+    stats_response = _stats_to_response(stats)
+    stats_response["pending_offering"] = pending is not None
+    stats_response["equipped_irons"] = equipped_irons
+
     return {
         "current_window": _window_to_response(current) if current else None,
         "previous_window": _window_to_response(previous) if previous else None,
         "my_pick": my_pick,
         "previous_pick": previous_pick,
-        "player_stats": _stats_to_response(stats),
+        "player_stats": stats_response,
         "next_window_time": get_next_window_time(),
         "spy_candles": candles,
         "stocks": stocks_status,
+        "ante_cost": ante_cost,
+        "skip_cost": next_skip_cost,
     }
 
 

@@ -33,6 +33,39 @@ async def lifespan(app: FastAPI):
             await conn.execute(text(
                 "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id)"
             ))
+            # Bounty sim mechanics columns
+            await conn.execute(text(
+                "ALTER TABLE bounty_player_stats ADD COLUMN IF NOT EXISTS notoriety FLOAT DEFAULT 0.0"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_player_stats ADD COLUMN IF NOT EXISTS chambers INTEGER DEFAULT 2"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_player_stats ADD COLUMN IF NOT EXISTS skip_count_this_window INTEGER DEFAULT 0"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_player_stats ADD COLUMN IF NOT EXISTS is_busted BOOLEAN DEFAULT FALSE"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_player_stats ADD COLUMN IF NOT EXISTS bust_count INTEGER DEFAULT 0"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_predictions ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'directional'"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_predictions ADD COLUMN IF NOT EXISTS insurance_triggered BOOLEAN DEFAULT FALSE"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_predictions ADD COLUMN IF NOT EXISTS base_points INTEGER DEFAULT 0"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_predictions ADD COLUMN IF NOT EXISTS wanted_multiplier_used INTEGER DEFAULT 1"
+            ))
+            # Migrate existing players: set starting balance for those with 0
+            await conn.execute(text(
+                "UPDATE bounty_player_stats SET double_dollars = 5000, wanted_level = 1 "
+                "WHERE double_dollars = 0 AND total_predictions = 0"
+            ))
         logging.info("Database migrations completed successfully")
     except Exception as e:
         logging.error(f"Startup migration error (non-fatal): {e}")

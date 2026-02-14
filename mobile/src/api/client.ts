@@ -436,6 +436,18 @@ export interface BountyPickResponse {
   payout: number;
   wanted_level_at_pick: number;
   created_at: string;
+  action_type: string;
+  insurance_triggered: boolean;
+  base_points: number;
+  wanted_multiplier_used: number;
+}
+
+export interface BountyEquippedIron {
+  iron_id: string;
+  name: string;
+  rarity: string;
+  description: string;
+  slot_number: number;
 }
 
 export interface BountyStatsResponse {
@@ -445,6 +457,12 @@ export interface BountyStatsResponse {
   correct_predictions: number;
   accuracy_pct: number;
   best_streak: number;
+  notoriety: number;
+  chambers: number;
+  is_busted: boolean;
+  bust_count: number;
+  equipped_irons: BountyEquippedIron[];
+  pending_offering: boolean;
 }
 
 export interface SpyCandlePoint {
@@ -472,6 +490,31 @@ export interface BountyStatus {
   next_window_time: string | null;
   spy_candles: SpyCandlePoint[];
   stocks: BountyStockStatus[];
+  ante_cost: number;
+  skip_cost: number;
+}
+
+export interface BountyIronDef {
+  id: string;
+  name: string;
+  rarity: string;
+  description: string;
+}
+
+export interface BountyIronOffering {
+  offering_id: string | null;
+  irons: BountyIronDef[];
+}
+
+export interface BountyResetResponse {
+  double_dollars: number;
+  message: string;
+}
+
+export interface BountySkipResponse {
+  skip_cost: number;
+  new_balance: number;
+  is_busted: boolean;
 }
 
 export interface BountySubmitResponse {
@@ -549,6 +592,12 @@ export const bounty = {
       body: JSON.stringify(data),
     }),
 
+  skip: (data: { bounty_window_id: string; symbol: string }) =>
+    request<BountySkipResponse>("/bounty/skip", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   board: (period: "weekly" | "alltime") =>
     request<BountyBoardEntry[]>(`/bounty/board?period=${period}`),
 
@@ -556,6 +605,21 @@ export const bounty = {
     request<BountyPickResponse[]>(`/bounty/history?limit=${limit ?? 20}`),
 
   stats: () => request<BountyDetailedStats>("/bounty/stats"),
+
+  irons: () => request<BountyEquippedIron[]>("/bounty/irons"),
+
+  ironOffering: () => request<BountyIronOffering>("/bounty/irons/offering"),
+
+  pickIron: (ironId: string) =>
+    request<BountyEquippedIron>("/bounty/irons/pick", {
+      method: "POST",
+      body: JSON.stringify({ iron_id: ironId }),
+    }),
+
+  reset: () =>
+    request<BountyResetResponse>("/bounty/reset", {
+      method: "POST",
+    }),
 };
 
 export const education = {
