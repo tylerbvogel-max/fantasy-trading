@@ -121,7 +121,8 @@ export default function BountyHunterScreen() {
   const [ignoreServerPicks, setIgnoreServerPicks] = useState(false);
 
   // ── Test mode: random outcomes for each stock (1/3 each) ──
-  const testOutcomes = useRef(new Map<string, "RISE" | "FALL" | "HOLD">()).current;
+  const TEST_CHOICES: ("RISE" | "FALL" | "HOLD")[] = ["RISE", "FALL", "HOLD"];
+  const [testOutcomes, setTestOutcomes] = useState<Record<string, "RISE" | "FALL" | "HOLD">>({});
 
   // ── Swipe animation values ──
   const translateX = useRef(new Animated.Value(0)).current;
@@ -149,14 +150,6 @@ export default function BountyHunterScreen() {
   const skippedStocks = allStocks.filter(
     (s) => skippedSymbols.includes(s.symbol) && !s.my_pick
   );
-  // Assign stable random test outcomes per symbol
-  allStocks.forEach((s) => {
-    if (!testOutcomes.has(s.symbol)) {
-      const r = Math.random();
-      testOutcomes.set(s.symbol, r < 0.333 ? "RISE" : r < 0.667 ? "FALL" : "HOLD");
-    }
-  });
-
   const currentStock = unpickedStocks.length > 0 ? unpickedStocks[0] : null;
   const nextStock = unpickedStocks.length > 1 ? unpickedStocks[1] : null;
   const allExhausted = allStocks.length > 0 && unpickedStocks.length === 0;
@@ -351,6 +344,23 @@ export default function BountyHunterScreen() {
     }
   }, [stats?.pending_offering, ironOffering?.offering_id]);
 
+  // Assign random test outcomes when stock list changes
+  const stockSymbols = allStocks.map((s) => s.symbol).join(",");
+  useEffect(() => {
+    if (!stockSymbols) return;
+    setTestOutcomes((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const sym of stockSymbols.split(",")) {
+        if (!next[sym]) {
+          next[sym] = TEST_CHOICES[Math.floor(Math.random() * 3)];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [stockSymbols]);
+
   // ── Handlers ──
 
   const handleSwipe = (prediction: "UP" | "DOWN") => {
@@ -476,7 +486,7 @@ export default function BountyHunterScreen() {
     setSwipedPicks([]);
     setSkippedSymbols([]);
     setIgnoreServerPicks(true);
-    testOutcomes.clear();
+    setTestOutcomes({});
     refetch();
   };
 
@@ -786,7 +796,7 @@ export default function BountyHunterScreen() {
 
               {/* Test outcome indicator */}
               {(() => {
-                const outcome = testOutcomes.get(currentStock.symbol);
+                const outcome = testOutcomes[currentStock.symbol];
                 const oColor =
                   outcome === "RISE" ? Colors.green : outcome === "FALL" ? Colors.accent : HOLSTER_COLOR;
                 return (
@@ -902,7 +912,7 @@ export default function BountyHunterScreen() {
                       : "checkmark-circle";
               const confOpt =
                 CONFIDENCE_OPTIONS.find((o) => o.value === conf) ?? CONFIDENCE_OPTIONS[0];
-              const testAnswer = testOutcomes.get(stock.symbol);
+              const testAnswer = testOutcomes[stock.symbol];
               const predLabel = pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred;
               const isWin = testAnswer === predLabel;
               return (
