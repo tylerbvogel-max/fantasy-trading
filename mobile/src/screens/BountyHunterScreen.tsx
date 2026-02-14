@@ -795,7 +795,7 @@ export default function BountyHunterScreen() {
               />
 
               {/* Test outcome indicator */}
-              {(() => {
+              {testOutcomes[currentStock.symbol] && (() => {
                 const outcome = testOutcomes[currentStock.symbol];
                 const oColor =
                   outcome === "RISE" ? Colors.green : outcome === "FALL" ? Colors.accent : HOLSTER_COLOR;
