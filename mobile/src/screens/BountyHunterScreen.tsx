@@ -120,6 +120,9 @@ export default function BountyHunterScreen() {
   const [showIronModal, setShowIronModal] = useState(false);
   const [ignoreServerPicks, setIgnoreServerPicks] = useState(false);
 
+  // ── Test mode: random outcomes for each stock (1/3 each) ──
+  const testOutcomes = useRef(new Map<string, "RISE" | "FALL" | "HOLD">()).current;
+
   // ── Swipe animation values ──
   const translateX = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
@@ -146,6 +149,14 @@ export default function BountyHunterScreen() {
   const skippedStocks = allStocks.filter(
     (s) => skippedSymbols.includes(s.symbol) && !s.my_pick
   );
+  // Assign stable random test outcomes per symbol
+  allStocks.forEach((s) => {
+    if (!testOutcomes.has(s.symbol)) {
+      const r = Math.random();
+      testOutcomes.set(s.symbol, r < 0.333 ? "RISE" : r < 0.667 ? "FALL" : "HOLD");
+    }
+  });
+
   const currentStock = unpickedStocks.length > 0 ? unpickedStocks[0] : null;
   const nextStock = unpickedStocks.length > 1 ? unpickedStocks[1] : null;
   const allExhausted = allStocks.length > 0 && unpickedStocks.length === 0;
@@ -465,6 +476,7 @@ export default function BountyHunterScreen() {
     setSwipedPicks([]);
     setSkippedSymbols([]);
     setIgnoreServerPicks(true);
+    testOutcomes.clear();
     refetch();
   };
 
@@ -592,6 +604,8 @@ export default function BountyHunterScreen() {
   }
 
   // Equipped irons row
+  const rarityIcon = (r: string) =>
+    r === "rare" ? "star" : r === "uncommon" ? "diamond" : "ellipse";
   const equippedIronsRow =
     stats?.equipped_irons && stats.equipped_irons.length > 0 ? (
       <View style={styles.ironsRow}>
@@ -607,11 +621,9 @@ export default function BountyHunterScreen() {
               key={iron.slot_number}
               style={[styles.ironPill, { borderColor: rarityColor + "60" }]}
             >
+              <Ionicons name={rarityIcon(iron.rarity) as any} size={10} color={rarityColor} />
               <Text style={[styles.ironPillText, { color: rarityColor }]}>
-                {iron.name
-                  .split(" ")
-                  .map((w) => w[0])
-                  .join("")}
+                {iron.name}
               </Text>
             </View>
           );
@@ -641,38 +653,9 @@ export default function BountyHunterScreen() {
           </Text>
         </View>
 
-        {/* Pick counter + confidence selector */}
+        {/* Pick counter */}
         <View style={styles.statusRow}>
           <Text style={styles.pickCounter}>Card {stockProgress}</Text>
-          <View style={styles.confRow}>
-            {CONFIDENCE_OPTIONS.map((opt) => (
-              <TouchableOpacity
-                key={opt.value}
-                style={[
-                  styles.confPill,
-                  {
-                    backgroundColor:
-                      confidence === opt.value ? opt.bgColor : Colors.card,
-                    borderColor:
-                      confidence === opt.value ? opt.color : Colors.border,
-                  },
-                ]}
-                onPress={() => setConfidence(opt.value)}
-              >
-                <Text
-                  style={[
-                    styles.confPillText,
-                    {
-                      color:
-                        confidence === opt.value ? opt.color : Colors.textMuted,
-                    },
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
 
         {equippedIronsRow}
@@ -801,6 +784,20 @@ export default function BountyHunterScreen() {
                 height={CHART_HEIGHT}
               />
 
+              {/* Test outcome indicator */}
+              {(() => {
+                const outcome = testOutcomes.get(currentStock.symbol);
+                const oColor =
+                  outcome === "RISE" ? Colors.green : outcome === "FALL" ? Colors.accent : HOLSTER_COLOR;
+                return (
+                  <View style={styles.testOutcomeTag}>
+                    <Text style={[styles.testOutcomeText, { color: oColor }]}>
+                      Answer: {outcome}
+                    </Text>
+                  </View>
+                );
+              })()}
+
               {/* Cardinal direction labels */}
               <View style={[styles.cardLabelWrap, { top: 4, left: 0, right: 0 }]}>
                 <Text style={[styles.cardLabel, { color: Colors.orange }]}>SKIP ↑</Text>
@@ -818,6 +815,39 @@ export default function BountyHunterScreen() {
           </Animated.View>
         </View>
 
+        {/* Confidence buttons at bottom */}
+        <View style={styles.bottomConfBar}>
+          {CONFIDENCE_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[
+                styles.bottomConfButton,
+                {
+                  backgroundColor: confidence === opt.value ? opt.bgColor : Colors.card,
+                  borderColor: confidence === opt.value ? opt.color : Colors.border,
+                },
+              ]}
+              onPress={() => setConfidence(opt.value)}
+            >
+              <Text
+                style={[
+                  styles.bottomConfLabel,
+                  { color: confidence === opt.value ? opt.color : Colors.textMuted },
+                ]}
+              >
+                {opt.label}
+              </Text>
+              <Text
+                style={[
+                  styles.bottomConfScore,
+                  { color: confidence === opt.value ? opt.color : Colors.textMuted },
+                ]}
+              >
+                {opt.description}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
     );
   }
@@ -872,6 +902,9 @@ export default function BountyHunterScreen() {
                       : "checkmark-circle";
               const confOpt =
                 CONFIDENCE_OPTIONS.find((o) => o.value === conf) ?? CONFIDENCE_OPTIONS[0];
+              const testAnswer = testOutcomes.get(stock.symbol);
+              const predLabel = pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred;
+              const isWin = testAnswer === predLabel;
               return (
                 <View
                   key={stock.symbol}
@@ -883,12 +916,22 @@ export default function BountyHunterScreen() {
                   <Ionicons name={icon as any} size={22} color={color} />
                   {pred && (
                     <Text style={[styles.lockedPickLabel, { color }]}>
-                      {pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred}
+                      {predLabel}
                     </Text>
                   )}
                   <Text style={[styles.lockedPickBounty, { color: confOpt.color }]}>
                     {confOpt.label}
                   </Text>
+                  {testAnswer && (
+                    <Text
+                      style={[
+                        styles.testResultTag,
+                        { color: isWin ? Colors.green : Colors.accent },
+                      ]}
+                    >
+                      {isWin ? "WIN" : "LOSE"} ({testAnswer})
+                    </Text>
+                  )}
                 </View>
               );
             })}
@@ -1113,29 +1156,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.text,
   },
-  confRow: {
-    flex: 1,
-    flexDirection: "row",
-    gap: Spacing.xs,
-  },
-  confPill: {
-    flex: 1,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  confPillText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.xs,
-  },
   ironsRow: {
     flexDirection: "row",
     justifyContent: "center",
+    flexWrap: "wrap",
     gap: Spacing.xs,
+    paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.sm,
   },
   ironPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: Radius.full,
@@ -1145,6 +1177,52 @@ const styles = StyleSheet.create({
   ironPillText: {
     fontSize: FontSize.xs,
     fontFamily: FontFamily.bold,
+  },
+
+  // ── Bottom confidence bar ──
+  bottomConfBar: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xxxl,
+    paddingTop: Spacing.sm,
+  },
+  bottomConfButton: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  bottomConfLabel: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.sm,
+  },
+  bottomConfScore: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+    marginTop: 2,
+  },
+
+  // ── Test mode ──
+  testOutcomeTag: {
+    position: "absolute",
+    bottom: Spacing.lg + 20,
+    alignSelf: "center",
+    backgroundColor: Colors.background + "CC",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    zIndex: 6,
+  },
+  testOutcomeText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.xs,
+  },
+  testResultTag: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.xs,
+    marginTop: 4,
   },
 
   // ── 4-direction swipe area ──
