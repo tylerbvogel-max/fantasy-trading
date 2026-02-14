@@ -27,6 +27,7 @@ import IronOfferingModal from "../components/IronOfferingModal";
 // ── Card & gesture constants ──
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
 const CARD_WIDTH = SCREEN_WIDTH - Spacing.xl * 2;
 const CARD_SIZE = CARD_WIDTH;
 const COMMIT_THRESHOLD = CARD_WIDTH * 0.3;
@@ -117,6 +118,7 @@ export default function BountyHunterScreen() {
   >([]);
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
   const [showIronModal, setShowIronModal] = useState(false);
+  const [ignoreServerPicks, setIgnoreServerPicks] = useState(false);
 
   // ── Swipe animation values ──
   const translateX = useRef(new Animated.Value(0)).current;
@@ -133,10 +135,13 @@ export default function BountyHunterScreen() {
   const allStocks = (status?.stocks ?? []).slice(0, 5);
   const swipedSymbolSet = new Set(swipedPicks.map((p) => p.symbol));
   const unpickedStocks = allStocks.filter(
-    (s) => !s.my_pick && !swipedSymbolSet.has(s.symbol) && !skippedSymbols.includes(s.symbol)
+    (s) =>
+      (ignoreServerPicks || !s.my_pick) &&
+      !swipedSymbolSet.has(s.symbol) &&
+      !skippedSymbols.includes(s.symbol)
   );
   const pickedStocks = allStocks.filter(
-    (s) => !!s.my_pick || swipedSymbolSet.has(s.symbol)
+    (s) => (!ignoreServerPicks && !!s.my_pick) || swipedSymbolSet.has(s.symbol)
   );
   const skippedStocks = allStocks.filter(
     (s) => skippedSymbols.includes(s.symbol) && !s.my_pick
@@ -162,16 +167,24 @@ export default function BountyHunterScreen() {
     ((currentStock.candles?.length ?? 0) >= 2 || !!currentStock.open_price);
 
   // ── Toast ──
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (message: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastOpacity.stopAnimation();
     setToast(message);
-    toastOpacity.setValue(1);
-    setTimeout(() => {
+    toastOpacity.setValue(0);
+    Animated.timing(toastOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+    toastTimer.current = setTimeout(() => {
       Animated.timing(toastOpacity, {
         toValue: 0,
-        duration: 500,
+        duration: 400,
         useNativeDriver: true,
       }).start(() => setToast(null));
-    }, 4500);
+    }, 1500);
   };
 
   // ── Refs for PanResponder (avoid stale closures) ──
@@ -199,9 +212,13 @@ export default function BountyHunterScreen() {
         }
       },
       onPanResponderRelease: (_, g) => {
-        if (!enabledRef.current) {
+        const snapBack = () => {
           Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
           Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        };
+
+        if (!enabledRef.current) {
+          snapBack();
           return;
         }
 
@@ -215,20 +232,19 @@ export default function BountyHunterScreen() {
             (Math.abs(g.vx) > VELOCITY_THRESHOLD && absDx > 20);
           if (committed) {
             const dir = g.dx > 0 ? "rise" : "fall";
-            Animated.spring(translateX, {
-              toValue: g.dx > 0 ? SCREEN_WIDTH : -SCREEN_WIDTH,
+            Animated.timing(translateX, {
+              toValue: g.dx > 0 ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5,
+              duration: 180,
               useNativeDriver: true,
             }).start(() => onCommitRef.current(dir));
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+            Animated.timing(translateY, { toValue: 0, duration: 180, useNativeDriver: true }).start();
           } else {
-            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+            snapBack();
           }
         } else {
           // Block upward commit when can't afford skip
           if (g.dy < 0 && !canSkipRef.current) {
-            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+            snapBack();
             return;
           }
           const committed =
@@ -236,14 +252,14 @@ export default function BountyHunterScreen() {
             (Math.abs(g.vy) > VELOCITY_THRESHOLD && absDy > 20);
           if (committed) {
             const dir = g.dy < 0 ? "skip" : "holster";
-            Animated.spring(translateY, {
-              toValue: g.dy < 0 ? -SCREEN_WIDTH : SCREEN_WIDTH,
+            Animated.timing(translateY, {
+              toValue: g.dy < 0 ? -SCREEN_HEIGHT : SCREEN_HEIGHT,
+              duration: 180,
               useNativeDriver: true,
             }).start(() => onCommitRef.current(dir));
-            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+            Animated.timing(translateX, { toValue: 0, duration: 180, useNativeDriver: true }).start();
           } else {
-            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+            snapBack();
           }
         }
       },
@@ -443,6 +459,13 @@ export default function BountyHunterScreen() {
       },
       onError: (error) => Alert.alert("Error", error.message),
     });
+  };
+
+  const handleNextRound = () => {
+    setSwipedPicks([]);
+    setSkippedSymbols([]);
+    setIgnoreServerPicks(true);
+    refetch();
   };
 
   // ── Scoring display values ──
@@ -887,6 +910,11 @@ export default function BountyHunterScreen() {
               </View>
             ))}
           </View>
+
+          <TouchableOpacity style={styles.nextRoundButton} onPress={handleNextRound}>
+            <Ionicons name="refresh" size={18} color={Colors.text} />
+            <Text style={styles.nextRoundButtonText}>Next Round</Text>
+          </TouchableOpacity>
         </ScrollView>
 
         {previousWindow && previousWindow.is_settled && previousPick && (
@@ -1000,12 +1028,12 @@ const styles = StyleSheet.create({
   },
   toast: {
     position: "absolute",
-    top: Spacing.statusBar + 50,
+    bottom: Spacing.xxxl + 20,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.card + "DD",
     borderWidth: 1,
     borderColor: Colors.green + "40",
     borderRadius: Radius.full,
@@ -1272,6 +1300,23 @@ const styles = StyleSheet.create({
   prevResultPayout: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.sm,
+  },
+  nextRoundButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  nextRoundButtonText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.md,
+    color: Colors.text,
   },
 
   // ── Waiting / no active window ──
