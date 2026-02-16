@@ -332,6 +332,10 @@ export function generateDashboardHTML() {
             <button id="animOff" class="active">Off</button>
             <button id="animOn">On</button>
           </div>
+          <div class="range-inputs" id="animSpeedInputs" style="display:none;">
+            <input type="number" id="animSpeed" value="0.5" min="0.1" max="5" step="0.1" style="width:50px;">
+            <span>s/round</span>
+          </div>
           <span class="chart-hint">Scale: </span>
           <div class="scale-toggle">
             <button id="scaleLinear" class="active">Linear</button>
@@ -497,6 +501,7 @@ export function generateDashboardHTML() {
       animateEnabled = on;
       document.getElementById('animOff').classList.toggle('active', !on);
       document.getElementById('animOn').classList.toggle('active', on);
+      document.getElementById('animSpeedInputs').style.display = on ? 'flex' : 'none';
       if (!on && animTimer) {
         clearInterval(animTimer);
         animTimer = null;
@@ -505,21 +510,29 @@ export function generateDashboardHTML() {
       }
     }
 
+    function getAnimInterval() {
+      const val = parseFloat(document.getElementById('animSpeed').value);
+      return Math.max(100, Math.round((isNaN(val) ? 0.5 : val) * 1000));
+    }
+
     function animateChart(chartData) {
       if (animTimer) { clearInterval(animTimer); animTimer = null; }
       fullChartData = chartData;
       const numRounds = parseInt(document.getElementById('g-rounds').value);
-      const totalPoints = numRounds + 1; // Start + rounds
+      const totalPoints = numRounds + 1;
       const allLabels = Array.from({length: totalPoints}, (_, i) => i === 0 ? 'Start' : 'R'+i);
 
-      // Build full datasets once
-      const fullDatasets = [];
+      // Build full data arrays
+      const fullData = [];
+      const datasets = [];
       for (const arch of ARCHETYPES) {
         const runs = chartData[arch.id] || [];
         runs.forEach((run, idx) => {
-          fullDatasets.push({
+          const history = run.balanceHistory.slice(0, totalPoints);
+          fullData.push(history);
+          datasets.push({
             label: idx === 0 ? arch.label : '',
-            fullData: run.balanceHistory.slice(0, totalPoints),
+            data: [history[0]],
             borderColor: arch.color,
             backgroundColor: 'transparent',
             borderWidth: idx === 0 ? 2.5 : 1,
@@ -530,23 +543,17 @@ export function generateDashboardHTML() {
         });
       }
 
-      let revealed = 1; // Start with just the first point
+      // Initialize chart with first point
+      const interval = getAnimInterval();
+      chart.data.labels = [allLabels[0]];
+      chart.data.datasets = datasets;
+      chart.options.animation = { duration: Math.round(interval * 0.8), easing: 'easeInOutCubic' };
+      chart.update('none');
 
-      function showFrame() {
-        chart.data.labels = allLabels.slice(0, revealed);
-        chart.data.datasets = fullDatasets.map(ds => ({
-          ...ds,
-          data: ds.fullData.slice(0, revealed),
-        }));
-        chart.options.animation = { duration: 800, easing: 'easeInOutCubic' };
-        chart.update();
-      }
-
-      showFrame();
+      let revealed = 1;
 
       animTimer = setInterval(() => {
-        revealed++;
-        if (revealed > totalPoints) {
+        if (revealed >= totalPoints) {
           clearInterval(animTimer);
           animTimer = null;
           chart.options.animation = { duration: 300 };
@@ -554,8 +561,14 @@ export function generateDashboardHTML() {
           document.getElementById('status').style.color = '#4CAF50';
           return;
         }
-        showFrame();
-      }, 1000);
+        // Push next point onto each dataset
+        chart.data.labels.push(allLabels[revealed]);
+        for (let i = 0; i < datasets.length; i++) {
+          datasets[i].data.push(fullData[i][revealed]);
+        }
+        chart.update();
+        revealed++;
+      }, interval);
     }
 
     function setScale(type) {
