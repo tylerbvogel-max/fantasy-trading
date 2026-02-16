@@ -327,6 +327,11 @@ export function generateDashboardHTML() {
       <div class="chart-toolbar">
         <p class="elapsed" id="elapsed"></p>
         <div class="chart-controls">
+          <span class="chart-hint">Animate: </span>
+          <div class="scale-toggle">
+            <button id="animOff" class="active">Off</button>
+            <button id="animOn">On</button>
+          </div>
           <span class="chart-hint">Scale: </span>
           <div class="scale-toggle">
             <button id="scaleLinear" class="active">Linear</button>
@@ -479,6 +484,76 @@ export function generateDashboardHTML() {
     function applyXRange() {
       if (!fullChartData) return;
       updateChart(fullChartData);
+    }
+
+    // ── Animate toggle ──
+    let animateEnabled = false;
+    let animTimer = null;
+
+    document.getElementById('animOff').addEventListener('click', () => setAnimate(false));
+    document.getElementById('animOn').addEventListener('click', () => setAnimate(true));
+
+    function setAnimate(on) {
+      animateEnabled = on;
+      document.getElementById('animOff').classList.toggle('active', !on);
+      document.getElementById('animOn').classList.toggle('active', on);
+      if (!on && animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+        // Show full chart
+        if (fullChartData) updateChart(fullChartData);
+      }
+    }
+
+    function animateChart(chartData) {
+      if (animTimer) { clearInterval(animTimer); animTimer = null; }
+      fullChartData = chartData;
+      const numRounds = parseInt(document.getElementById('g-rounds').value);
+      const totalPoints = numRounds + 1; // Start + rounds
+      const allLabels = Array.from({length: totalPoints}, (_, i) => i === 0 ? 'Start' : 'R'+i);
+
+      // Build full datasets once
+      const fullDatasets = [];
+      for (const arch of ARCHETYPES) {
+        const runs = chartData[arch.id] || [];
+        runs.forEach((run, idx) => {
+          fullDatasets.push({
+            label: idx === 0 ? arch.label : '',
+            fullData: run.balanceHistory.slice(0, totalPoints),
+            borderColor: arch.color,
+            backgroundColor: 'transparent',
+            borderWidth: idx === 0 ? 2.5 : 1,
+            borderDash: idx === 0 ? [] : [4, 3],
+            pointRadius: 0,
+            tension: 0.2,
+          });
+        });
+      }
+
+      let revealed = 1; // Start with just the first point
+
+      function showFrame() {
+        chart.data.labels = allLabels.slice(0, revealed);
+        chart.data.datasets = fullDatasets.map(ds => ({
+          ...ds,
+          data: ds.fullData.slice(0, revealed),
+        }));
+        chart.update('none');
+      }
+
+      showFrame();
+
+      animTimer = setInterval(() => {
+        revealed++;
+        if (revealed > totalPoints) {
+          clearInterval(animTimer);
+          animTimer = null;
+          document.getElementById('status').textContent = 'Done';
+          document.getElementById('status').style.color = '#4CAF50';
+          return;
+        }
+        showFrame();
+      }, 1000);
     }
 
     function setScale(type) {
@@ -681,12 +756,18 @@ export function generateDashboardHTML() {
 
         lastStats = data.stats;
         lastHistogram = data.histogram || null;
-        updateChart(data.chartData);
+        if (animateEnabled) {
+          animateChart(data.chartData);
+          status.textContent = 'Animating…';
+          status.style.color = '#FAD009';
+        } else {
+          updateChart(data.chartData);
+          status.textContent = 'Done (' + elapsed + 's)';
+          status.style.color = '#4CAF50';
+        }
         updateStats(data.stats);
         if (data.histogram) updateHistogram(data.histogram);
         document.getElementById('elapsed').textContent = elapsed + 's';
-        status.textContent = 'Done (' + elapsed + 's)';
-        status.style.color = '#4CAF50';
       } catch (err) {
         status.textContent = 'Error: ' + err.message;
         status.style.color = '#F44336';
