@@ -176,6 +176,8 @@ export default function BountyHunterScreen() {
 
   // ── Test mode: random outcomes for each stock (1/3 each) ──
   const [testOutcomes, setTestOutcomes] = useState<Record<string, "RISE" | "FALL" | "HOLD">>({});
+  const [testBalanceOffset, setTestBalanceOffset] = useState(0);
+  const lastRoundTotal = useRef(0);
 
   // ── Swipe animation values ──
   const translateX = useRef(new Animated.Value(0)).current;
@@ -213,6 +215,7 @@ export default function BountyHunterScreen() {
   const hasActiveWindow = !!currentWindow;
   const wantedLevel = stats?.wanted_level ?? 1;
   const mult = getWantedMult(Math.max(wantedLevel, 1));
+  const displayBalance = (stats?.double_dollars ?? 0) + testBalanceOffset;
 
   const windowEndCountdown = useCountdown(currentWindow?.end_time ?? null);
   const nextWindowCountdown = useCountdown(
@@ -542,6 +545,8 @@ export default function BountyHunterScreen() {
   const handleReset = () => {
     resetMutation.mutate(undefined, {
       onSuccess: (data) => {
+        setTestBalanceOffset(0);
+        setIgnoreServerPicks(false);
         showToast(data.message);
         refetch();
       },
@@ -550,6 +555,7 @@ export default function BountyHunterScreen() {
   };
 
   const handleNextRound = () => {
+    setTestBalanceOffset((prev) => prev + lastRoundTotal.current);
     setSwipedPicks([]);
     setSkippedSymbols([]);
     setIgnoreServerPicks(true);
@@ -720,10 +726,10 @@ export default function BountyHunterScreen() {
           <Text
             style={[
               styles.balanceText,
-              (stats?.double_dollars ?? 0) <= 0 && { color: Colors.accent },
+              displayBalance <= 0 && { color: Colors.accent },
             ]}
           >
-            $${(stats?.double_dollars ?? 0).toLocaleString()}
+            $${displayBalance.toLocaleString()}
           </Text>
           <Text style={styles.wantedText}>
             Lv.{wantedLevel} ({mult}x)
@@ -941,10 +947,10 @@ export default function BountyHunterScreen() {
           <Text
             style={[
               styles.balanceText,
-              (stats?.double_dollars ?? 0) <= 0 && { color: Colors.accent },
+              displayBalance <= 0 && { color: Colors.accent },
             ]}
           >
-            $${(stats?.double_dollars ?? 0).toLocaleString()}
+            $${displayBalance.toLocaleString()}
           </Text>
           <Text style={styles.wantedText}>
             Lv.{wantedLevel} ({mult}x)
@@ -966,8 +972,13 @@ export default function BountyHunterScreen() {
 
             const scoredPicks = pickedStocks.map((stock) => {
               const swipedPick = swipedPicks.find((p) => p.symbol === stock.symbol);
-              const pred = stock.my_pick?.prediction ?? swipedPick?.prediction;
-              const conf = stock.my_pick?.confidence ?? swipedPick?.confidence ?? 1;
+              // In test rounds, always prefer local swipe over server pick
+              const pred = ignoreServerPicks
+                ? (swipedPick?.prediction ?? stock.my_pick?.prediction)
+                : (stock.my_pick?.prediction ?? swipedPick?.prediction);
+              const conf = ignoreServerPicks
+                ? (swipedPick?.confidence ?? stock.my_pick?.confidence ?? 1)
+                : (stock.my_pick?.confidence ?? swipedPick?.confidence ?? 1);
               const testAnswer = testOutcomes[stock.symbol];
               const predLabel = pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred;
               const isHold = pred === "HOLD";
@@ -1011,12 +1022,15 @@ export default function BountyHunterScreen() {
               return { stock, pred, predLabel, conf, testAnswer, isWin, isHold, basePoints, scaledPoints, notorietyDelta, color, icon, confOpt };
             });
 
+            // Store for handleNextRound to accumulate
+            lastRoundTotal.current = roundTotal;
+
             const levelChange = roundNotoriety >= NOTORIETY_UP_THRESHOLD ? 1 : roundNotoriety <= NOTORIETY_DOWN_THRESHOLD ? -1 : 0;
             const levelLabel = levelChange > 0 ? "LEVEL UP!" : levelChange < 0 ? "Level down" : "Level holds";
             const levelColor = levelChange > 0 ? Colors.green : levelChange < 0 ? Colors.accent : Colors.textMuted;
             const newLevel = Math.max(1, wantedLevel + levelChange);
             const newMult = getWantedMult(newLevel);
-            const currentBalance = stats?.double_dollars ?? 0;
+            const currentBalance = displayBalance;
             const projectedBalance = currentBalance + roundTotal;
             const isBusted = projectedBalance <= 0;
 
@@ -1197,10 +1211,10 @@ export default function BountyHunterScreen() {
         <Text
           style={[
             styles.balanceText,
-            (stats?.double_dollars ?? 0) <= 0 && { color: Colors.accent },
+            displayBalance <= 0 && { color: Colors.accent },
           ]}
         >
-          $${(stats?.double_dollars ?? 0).toLocaleString()}
+          $${displayBalance.toLocaleString()}
         </Text>
         <Text style={styles.wantedText}>
           Lv.{wantedLevel} ({mult}x)
