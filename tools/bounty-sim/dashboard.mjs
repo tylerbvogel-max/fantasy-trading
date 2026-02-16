@@ -500,7 +500,7 @@ export function generateDashboardHTML() {
       if (!on && animTimer) {
         clearInterval(animTimer);
         animTimer = null;
-        // Show full chart
+        chart.options.animation = { duration: 300 };
         if (fullChartData) updateChart(fullChartData);
       }
     }
@@ -538,7 +538,8 @@ export function generateDashboardHTML() {
           ...ds,
           data: ds.fullData.slice(0, revealed),
         }));
-        chart.update('none');
+        chart.options.animation = { duration: 800, easing: 'easeInOutCubic' };
+        chart.update();
       }
 
       showFrame();
@@ -548,6 +549,7 @@ export function generateDashboardHTML() {
         if (revealed > totalPoints) {
           clearInterval(animTimer);
           animTimer = null;
+          chart.options.animation = { duration: 300 };
           document.getElementById('status').textContent = 'Done';
           document.getElementById('status').style.color = '#4CAF50';
           return;
