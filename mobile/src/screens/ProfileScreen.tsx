@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useProfile, useKnowledgeScore } from "../hooks/useApi";
@@ -15,6 +16,7 @@ import { signOut } from "../api/client";
 import { useMode, type AppMode } from "../contexts/ModeContext";
 import { useSeason } from "../contexts/SeasonContext";
 import { useWalkthrough } from "../contexts/WalkthroughContext";
+import { useAudio } from "../contexts/AudioContext";
 import ModeGuideScreen from "./ModeGuideScreen";
 
 const MODE_META: Record<AppMode, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }> = {
@@ -35,6 +37,7 @@ export default function ProfileScreen() {
   const { selectedSeasonId } = useSeason();
   const { resetWalkthrough } = useWalkthrough();
   const { data: knowledgeScore } = useKnowledgeScore();
+  const { musicEnabled, toggleMusic } = useAudio();
   const [showModeGuide, setShowModeGuide] = useState(false);
   const activeSeasons = profile?.active_seasons ?? [];
   const modeSeasons = activeSeasons.filter((s) => s.mode === mode);
@@ -146,6 +149,22 @@ export default function ProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.listContent}>
         <ListHeader />
+
+        {/* Music toggle */}
+        <View style={styles.musicCard}>
+          <View style={styles.modeCardLeft}>
+            <View style={[styles.modeIconCircle, { backgroundColor: Colors.accent + "20" }]}>
+              <Ionicons name="musical-notes-outline" size={20} color={Colors.accent} />
+            </View>
+            <Text style={styles.musicLabel}>Theme Music</Text>
+          </View>
+          <Switch
+            value={musicEnabled}
+            onValueChange={toggleMusic}
+            trackColor={{ false: Colors.surface, true: Colors.accent + "60" }}
+            thumbColor={musicEnabled ? Colors.accent : Colors.textMuted}
+          />
+        </View>
 
         <TouchableOpacity style={styles.replayButton} onPress={() => setShowModeGuide(true)}>
           <Ionicons name="game-controller-outline" size={20} color={Colors.primary} />
@@ -302,6 +321,22 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: FontFamily.semiBold,
     color: Colors.textSecondary,
+  },
+  musicCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.card,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    marginTop: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  musicLabel: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.bold,
+    color: Colors.accent,
   },
   knowledgeScoreCard: {
     flexDirection: "row",

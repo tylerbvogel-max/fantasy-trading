@@ -17,7 +17,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-audio"
     ],
     "extra": {
       "apiUrl": "https://fantasy-trading-api.onrender.com",

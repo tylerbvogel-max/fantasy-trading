@@ -20,6 +20,7 @@ import { loadStoredToken, registerSignOutHandler } from './src/api/client';
 import { ModeProvider, useMode } from './src/contexts/ModeContext';
 import { SeasonProvider } from './src/contexts/SeasonContext';
 import { WalkthroughProvider, useWalkthrough } from './src/contexts/WalkthroughContext';
+import { AudioProvider } from './src/contexts/AudioContext';
 import WalkthroughScreen from './src/screens/WalkthroughScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import ModeSelectScreen from './src/screens/ModeSelectScreen';
@@ -192,8 +193,10 @@ export default function App() {
         <ModeProvider>
           <SeasonProvider>
             <WalkthroughProvider>
-              <StatusBar style="light" />
-              <AppContent />
+              <AudioProvider>
+                <StatusBar style="light" />
+                <AppContent />
+              </AudioProvider>
             </WalkthroughProvider>
           </SeasonProvider>
         </ModeProvider>
