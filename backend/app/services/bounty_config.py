@@ -43,8 +43,20 @@ ANTE_BASE = 75
 
 # ── Starting values ──
 STARTING_DOUBLE_DOLLARS = 5000
-STARTING_CHAMBERS = 2
+STARTING_CHAMBERS = 1
 MAX_CHAMBERS = 6
+
+# Wanted level → max chambers unlocked (high-water mark)
+CHAMBER_MILESTONES = {1: 1, 3: 2, 5: 3, 7: 4, 9: 5, 10: 6}
+
+
+def chambers_for_level(level: int) -> int:
+    """Return the max chambers earned at a given wanted level."""
+    result = 1
+    for milestone, chambers in CHAMBER_MILESTONES.items():
+        if level >= milestone:
+            result = max(result, chambers)
+    return result
 
 # ── Hold threshold ──
 # Price change < 0.05% is considered "flat" (HOLD wins)

@@ -19,6 +19,7 @@ from app.services.bounty_config import (
     HOLD_THRESHOLD, CONFIDENCE_LABELS,
     wanted_multiplier, skip_cost as calc_skip_cost,
     IRON_DEFS, IRON_DEFS_BY_ID, RARITY_WEIGHTS,
+    chambers_for_level,
 )
 from app.config import get_settings
 
@@ -687,6 +688,7 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             stats.wanted_level = max(1, stats.wanted_level - 1)
 
         stats.best_streak = max(stats.best_streak, stats.wanted_level)
+        stats.chambers = max(stats.chambers, chambers_for_level(stats.wanted_level))
         stats.notoriety = window_notoriety
 
         # Check bust
@@ -722,7 +724,7 @@ async def reset_player(db: AsyncSession, user_id: uuid.UUID) -> dict:
     stats.is_busted = False
     stats.notoriety = 0.0
     stats.skip_count_this_window = 0
-    stats.chambers = STARTING_CHAMBERS
+    # Chambers persist across resets (high-water mark)
 
     # Clear irons (should already be empty but just in case)
     result = await db.execute(
