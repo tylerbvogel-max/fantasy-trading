@@ -713,7 +713,7 @@ export default function BountyHunterScreen() {
         const isExpanded = expandedIron === iron.iron_id;
         return (
           <TouchableOpacity
-            key={iron.slot_number}
+            key={i}
             style={[styles.ironPill, { borderColor: rarityColor + "60" }]}
             onPress={() => setExpandedIron(isExpanded ? null : iron.iron_id)}
             activeOpacity={0.7}
