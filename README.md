@@ -204,6 +204,3 @@ The schema includes placeholder tables for future features:
 - **Formal Auth**: JWT + OAuth (Google, Apple)
 - **Push Notifications**: Trade confirmations, interaction alerts
 - **Character Classes**: Investor archetypes with unique perks
-- **Profile Titles/Ranks**: Knowledge score thresholds unlock titles displayed on profile (Rookie → Analyst → Trader → Fund Manager → Oracle)
-- **Leaderboard Badges**: Visible knowledge tier icon next to player names on the leaderboard, showing others you earned your rank through learning
-- **Advanced Quiz Content**: Use SIE exam questions as inspiration for harder difficulty tiers (black diamond+). Reference: https://quizlet.com/826371084/comprehensive-sie-practice-exam-flash-cards/

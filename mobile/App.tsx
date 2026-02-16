@@ -36,6 +36,7 @@ import CreateSeasonScreen from './src/screens/CreateSeasonScreen';
 import BountyHunterScreen from './src/screens/BountyHunterScreen';
 import BountyBoardScreen from './src/screens/BountyBoardScreen';
 import BountyStatsScreen from './src/screens/BountyStatsScreen';
+import SwipeTestScreen from './src/screens/SwipeTestScreen';
 import type { LearnStackParamList } from './src/screens/LearnScreen';
 import type { SeasonsStackParamList } from './src/screens/SeasonsScreen';
 
@@ -55,6 +56,7 @@ const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocu
   Bounty: { focused: 'skull', unfocused: 'skull-outline' },
   Stats: { focused: 'stats-chart', unfocused: 'stats-chart-outline' },
   Board: { focused: 'list', unfocused: 'list-outline' },
+  Lab: { focused: 'flask', unfocused: 'flask-outline' },
 };
 
 function LearnStackNavigator() {
@@ -103,7 +105,7 @@ function MainTabs() {
           <Tab.Screen name="Bounty" component={BountyHunterScreen} />
           <Tab.Screen name="Stats" component={BountyStatsScreen} />
           <Tab.Screen name="Board" component={BountyBoardScreen} />
-          <Tab.Screen name="Learn" component={LearnStackNavigator} />
+          <Tab.Screen name="Lab" component={SwipeTestScreen} />
           <Tab.Screen name="Profile" component={ProfileScreen} />
         </>
       ) : (

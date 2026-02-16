@@ -20,5 +20,8 @@ Thumbs.db
 # Secrets
 invite-codes.txt
 
+# Simulation output
+tools/bounty-sim/output/
+
 # Claude Code
 .claude/
