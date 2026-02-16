@@ -342,6 +342,16 @@ export function generateDashboardHTML() {
             <span>to $</span><input type="number" id="yMax" value="20000" placeholder="Max">
             <button id="rangeApply" style="background:#FAD009;color:#0a0a0a;border:none;padding:3px 10px;font-family:inherit;font-size:11px;cursor:pointer;border-radius:3px;font-weight:bold;">Apply</button>
           </div>
+          <span class="chart-hint">X-axis: </span>
+          <div class="scale-toggle">
+            <button id="xAll" class="active">All</button>
+            <button id="xCustom">Custom</button>
+          </div>
+          <div class="range-inputs" id="xRangeInputs">
+            <span>R</span><input type="number" id="xMin" value="0" min="0" placeholder="Start">
+            <span>to R</span><input type="number" id="xMax" value="${defaults.game.numRounds}" min="1" placeholder="End">
+            <button id="xRangeApply" style="background:#FAD009;color:#0a0a0a;border:none;padding:3px 10px;font-family:inherit;font-size:11px;cursor:pointer;border-radius:3px;font-weight:bold;">Apply</button>
+          </div>
         </div>
       </div>
       <div class="chart-container">
@@ -448,6 +458,29 @@ export function generateDashboardHTML() {
     document.getElementById('yMin').addEventListener('keydown', e => { if (e.key === 'Enter') applyRange(); });
     document.getElementById('yMax').addEventListener('keydown', e => { if (e.key === 'Enter') applyRange(); });
 
+    // X-axis range
+    let xCustom = false;
+    let fullChartData = null;
+
+    document.getElementById('xAll').addEventListener('click', () => setXRange(false));
+    document.getElementById('xCustom').addEventListener('click', () => setXRange(true));
+    document.getElementById('xRangeApply').addEventListener('click', applyXRange);
+    document.getElementById('xMin').addEventListener('keydown', e => { if (e.key === 'Enter') applyXRange(); });
+    document.getElementById('xMax').addEventListener('keydown', e => { if (e.key === 'Enter') applyXRange(); });
+
+    function setXRange(custom) {
+      xCustom = custom;
+      document.getElementById('xAll').classList.toggle('active', !custom);
+      document.getElementById('xCustom').classList.toggle('active', custom);
+      document.getElementById('xRangeInputs').classList.toggle('visible', custom);
+      if (!custom && fullChartData) updateChart(fullChartData);
+    }
+
+    function applyXRange() {
+      if (!fullChartData) return;
+      updateChart(fullChartData);
+    }
+
     function setScale(type) {
       currentScale = type;
       chart.options.scales.y.type = type;
@@ -517,14 +550,25 @@ export function generateDashboardHTML() {
 
     // ── Update chart with API response ──
     function updateChart(chartData) {
+      fullChartData = chartData;
       const numRounds = parseInt(document.getElementById('g-rounds').value);
+
+      let sliceStart = 0;
+      let sliceEnd = numRounds + 1;
+      if (xCustom) {
+        const xMin = parseInt(document.getElementById('xMin').value) || 0;
+        const xMax = parseInt(document.getElementById('xMax').value) || numRounds;
+        sliceStart = Math.max(0, xMin);
+        sliceEnd = Math.min(numRounds + 1, xMax + 1);
+      }
+
       const datasets = [];
       for (const arch of ARCHETYPES) {
         const runs = chartData[arch.id] || [];
         runs.forEach((run, idx) => {
           datasets.push({
             label: idx === 0 ? arch.label : '',
-            data: run.balanceHistory,
+            data: run.balanceHistory.slice(sliceStart, sliceEnd),
             borderColor: arch.color,
             backgroundColor: 'transparent',
             borderWidth: idx === 0 ? 2.5 : 1,
@@ -534,7 +578,8 @@ export function generateDashboardHTML() {
           });
         });
       }
-      chart.data.labels = Array.from({length: numRounds + 1}, (_, i) => i === 0 ? 'Start' : 'R'+i);
+      const allLabels = Array.from({length: numRounds + 1}, (_, i) => i === 0 ? 'Start' : 'R'+i);
+      chart.data.labels = allLabels.slice(sliceStart, sliceEnd);
       chart.data.datasets = datasets;
       chart.update();
     }
