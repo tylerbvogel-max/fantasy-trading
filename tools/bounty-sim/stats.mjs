@@ -5,7 +5,7 @@ import {
   ARCHETYPES, ARCHETYPE_LABELS,
 } from './config.mjs';
 import { IRONS } from './irons.mjs';
-import { ironPriority } from './archetypes.mjs';
+import { topIronPreferences } from './archetypes.mjs';
 
 // ── Statistical helpers ──
 export function percentile(arr, p) {
@@ -97,8 +97,8 @@ export function printSummaryTable(allResults, { numRuns = NUM_RUNS } = {}) {
   console.log('MOST POPULAR IRONS BY ARCHETYPE (top 3 preference):');
   console.log('─'.repeat(110));
   for (const type of ARCHETYPES) {
-    const prio = ironPriority(type);
-    const top3 = prio ? prio.slice(0, 3).map(id => IRONS.find(i => i.id === id).name).join(', ') : 'Random';
+    const top = topIronPreferences(type, 3);
+    const top3 = top ? top.map(i => i.name).join(', ') : 'Random';
     console.log(`  ${ARCHETYPE_LABELS[type].padEnd(22)} → ${top3}`);
   }
   console.log('');

@@ -1,4 +1,4 @@
-// ── Bounty Hunter Simulation — 10 Archetype Behaviors ──
+// ── Bounty Hunter Simulation — 10 Archetype Behaviors (75-Iron Edition) ──
 
 import { STARTING_BALANCE, NUM_ROUNDS } from './config.mjs';
 import { IRONS } from './irons.mjs';
@@ -92,61 +92,188 @@ export function getAccuracy(player, state) {
   }
 }
 
-// ── Iron preferences per archetype ──
-export function ironPriority(playerType) {
-  switch (playerType) {
-    case 'random_monkey':
-      return null; // picks randomly
-    case 'cautious_turtle':
-      return ['snake_oil', 'thick_skin', 'leather_holster', 'trail_rations', 'lucky_horseshoe',
-              'golden_revolver', 'sheriffs_badge', 'ghost_rider', 'steady_hand', 'gold_tooth',
-              'bandolier', 'bounty_poster', 'iron_sights', 'deadeye_scope', 'double_barrel'];
-    case 'aggro_gambler':
-      return ['double_barrel', 'deadeye_scope', 'golden_revolver', 'ghost_rider', 'sheriffs_badge',
-              'bounty_poster', 'gold_tooth', 'thick_skin', 'iron_sights', 'lucky_horseshoe',
-              'steady_hand', 'leather_holster', 'trail_rations', 'bandolier', 'snake_oil'];
-    case 'newbie':
-      return ['lucky_horseshoe', 'thick_skin', 'steady_hand', 'trail_rations', 'ghost_rider',
-              'gold_tooth', 'leather_holster', 'snake_oil', 'golden_revolver', 'iron_sights',
-              'bandolier', 'sheriffs_badge', 'bounty_poster', 'deadeye_scope', 'double_barrel'];
-    case 'hot_tilt':
-      return ['double_barrel', 'deadeye_scope', 'golden_revolver', 'sheriffs_badge', 'ghost_rider',
-              'bounty_poster', 'iron_sights', 'gold_tooth', 'lucky_horseshoe', 'thick_skin',
-              'steady_hand', 'leather_holster', 'trail_rations', 'bandolier', 'snake_oil'];
-    case 'comeback_grinder':
-      return ['thick_skin', 'trail_rations', 'snake_oil', 'leather_holster', 'lucky_horseshoe',
-              'ghost_rider', 'gold_tooth', 'golden_revolver', 'sheriffs_badge', 'steady_hand',
-              'bandolier', 'iron_sights', 'bounty_poster', 'deadeye_scope', 'double_barrel'];
-    case 'optimizer':
-      return ['golden_revolver', 'sheriffs_badge', 'ghost_rider', 'double_barrel', 'deadeye_scope',
-              'bounty_poster', 'gold_tooth', 'lucky_horseshoe', 'thick_skin', 'iron_sights',
-              'trail_rations', 'steady_hand', 'leather_holster', 'bandolier', 'snake_oil'];
-    case 'skip_burner':
-      return ['bandolier', 'trail_rations', 'gold_tooth', 'lucky_horseshoe', 'thick_skin',
-              'golden_revolver', 'ghost_rider', 'iron_sights', 'sheriffs_badge', 'steady_hand',
-              'leather_holster', 'bounty_poster', 'deadeye_scope', 'double_barrel', 'snake_oil'];
-    case 'streaky_pro':
-      return ['golden_revolver', 'ghost_rider', 'sheriffs_badge', 'iron_sights', 'bounty_poster',
-              'gold_tooth', 'lucky_horseshoe', 'thick_skin', 'double_barrel', 'deadeye_scope',
-              'trail_rations', 'steady_hand', 'leather_holster', 'bandolier', 'snake_oil'];
-    case 'conservative_climber':
-      return ['sheriffs_badge', 'golden_revolver', 'lucky_horseshoe', 'thick_skin', 'ghost_rider',
-              'trail_rations', 'gold_tooth', 'steady_hand', 'leather_holster', 'snake_oil',
-              'iron_sights', 'bounty_poster', 'bandolier', 'deadeye_scope', 'double_barrel'];
-    default:
-      return null;
+// ── Iron category tags ──
+// Each iron is tagged with categories that archetypes can weight.
+const IRON_TAGS = {
+  // Common
+  steady_hand:     ['offense', 'draw'],
+  thick_skin:      ['defense'],
+  lucky_horseshoe: ['accuracy'],
+  trail_rations:   ['economy'],
+  bandolier:       ['skip', 'economy'],
+  leather_holster: ['offense', 'holster'],
+  tin_star:        ['offense', 'directional'],
+  pocket_watch:    ['offense', 'quickdraw'],
+  canteen:         ['economy', 'income'],
+  worn_boots:      ['offense', 'scaling'],
+  rusty_spurs:     ['offense', 'conditional'],
+  campfire:        ['defense', 'holster'],
+  whiskey_flask:   ['offense', 'conditional'],
+  rope_lasso:      ['accuracy', 'holster'],
+  chaps:           ['defense', 'directional'],
+  six_shooter:     ['economy', 'conditional'],
+  cowbell:         ['notoriety'],
+  hay_bale:        ['economy', 'holster'],
+  branding_iron:   ['offense', 'directional'],
+  cattle_prod:     ['offense', 'directional'],
+  scouts_compass:  ['accuracy', 'conditional'],
+  rattlesnake_skin:['skip', 'economy'],
+  saddlebag:       ['economy', 'income'],
+  dust_devil:      ['offense', 'skip'],
+  water_trough:    ['defense', 'safety'],
+  copper_ring:     ['notoriety', 'directional'],
+  horseshoe_nail:  ['accuracy', 'scaling'],
+  tenderfoot:      ['offense', 'conditional'],
+  // Uncommon
+  iron_sights:     ['offense', 'quickdraw'],
+  snake_oil:       ['defense', 'holster'],
+  deadeye_scope:   ['accuracy', 'deadeye'],
+  gold_tooth:      ['economy', 'income'],
+  bounty_poster:   ['notoriety'],
+  silver_bullet:   ['offense', 'scaling'],
+  saloon_door:     ['safety'],
+  fools_gold:      ['economy', 'risky'],
+  war_paint:       ['offense', 'conditional'],
+  smoke_bomb:      ['defense'],
+  panning_kit:     ['economy', 'scaling'],
+  horse_thief:     ['economy'],
+  moonshine:       ['multiplier', 'risky'],
+  telegraph:       ['accuracy', 'directional'],
+  prospectors_pick:['economy', 'scaling'],
+  twin_revolvers:  ['offense', 'quickdraw'],
+  dynamite:        ['offense', 'risky'],
+  medicine_bag:    ['economy', 'safety'],
+  war_drum:        ['offense', 'conditional'],
+  coyote_howl:     ['notoriety', 'scaling'],
+  marked_cards:    ['accuracy', 'conditional'],
+  rattlesnake_venom:['notoriety'],  // PvP — low value in sim
+  // Rare
+  sheriffs_badge:  ['offense', 'scaling'],
+  double_barrel:   ['offense', 'deadeye', 'multiplier'],
+  ghost_rider:     ['accuracy', 'flip'],
+  golden_revolver: ['multiplier'],
+  blood_oath:      ['multiplier', 'risky'],
+  bounty_mark:     ['economy', 'scaling'],
+  gatling_gun:     ['offense', 'deadeye', 'multiplier'],
+  stagecoach:      ['structural'],
+  phoenix_feather: ['safety'],
+  outlaws_legacy:  ['notoriety', 'scaling'],
+  diamond_spurs:   ['multiplier', 'holster'],
+  midnight_oil:    ['structural'],
+  platinum_tooth:  ['economy', 'income'],
+  tombstone_ace:   ['accuracy', 'deadeye', 'flip'],
+  thunderclap:     ['economy', 'notoriety'],
+  // Legendary
+  peacemaker:      ['offense', 'multiplier'],
+  wanted_doa:      ['notoriety', 'risky'],
+  gold_rush:       ['multiplier', 'risky'],
+  ace_of_spades:   ['accuracy', 'flip'],
+  manifest_destiny:['multiplier', 'scaling'],
+  lone_ranger:     ['multiplier', 'structural'],
+  lady_luck:       ['accuracy', 'flip'],
+  el_dorado:       ['economy', 'scaling'],
+  dead_mans_hand:  ['safety'],
+  high_noon:       ['flip', 'conditional'],
+};
+
+// ── Archetype category weights ──
+// Higher weight = stronger preference. Missing categories default to 1.
+const ARCHETYPE_WEIGHTS = {
+  random_monkey: null, // picks randomly
+
+  cautious_turtle: {
+    defense: 10, holster: 8, safety: 9, economy: 6, accuracy: 5,
+    income: 5, offense: 2, multiplier: 3, risky: 0, skip: 1,
+    deadeye: 1, notoriety: 3, scaling: 4,
+  },
+
+  aggro_gambler: {
+    offense: 9, deadeye: 10, multiplier: 10, risky: 7, flip: 8,
+    accuracy: 4, defense: 1, safety: 1, economy: 2, holster: 1,
+    notoriety: 5, scaling: 6,
+  },
+
+  newbie: {
+    accuracy: 10, defense: 8, safety: 7, economy: 6, income: 5,
+    offense: 3, holster: 4, flip: 6, multiplier: 3, risky: 0,
+    scaling: 3, notoriety: 3,
+  },
+
+  hot_tilt: {
+    offense: 9, deadeye: 10, multiplier: 9, risky: 6, flip: 7,
+    accuracy: 5, notoriety: 6, scaling: 7, defense: 2, safety: 3,
+    economy: 3, holster: 1,
+  },
+
+  comeback_grinder: {
+    defense: 9, safety: 10, economy: 8, income: 7, holster: 6,
+    accuracy: 6, offense: 3, multiplier: 4, risky: 1, scaling: 5,
+    notoriety: 3, flip: 4,
+  },
+
+  optimizer: {
+    multiplier: 10, scaling: 9, offense: 7, accuracy: 6, flip: 8,
+    notoriety: 7, economy: 5, deadeye: 6, defense: 3, safety: 4,
+    structural: 7, risky: 4,
+  },
+
+  skip_burner: {
+    skip: 10, economy: 9, income: 8, defense: 5, safety: 6,
+    accuracy: 4, offense: 2, multiplier: 3, risky: 1, holster: 2,
+    scaling: 3, notoriety: 2,
+  },
+
+  streaky_pro: {
+    multiplier: 10, flip: 9, offense: 8, accuracy: 6, scaling: 7,
+    notoriety: 5, economy: 4, deadeye: 5, defense: 3, safety: 3,
+    conditional: 6, risky: 5,
+  },
+
+  conservative_climber: {
+    scaling: 10, accuracy: 8, offense: 6, multiplier: 7, economy: 6,
+    notoriety: 7, defense: 5, safety: 5, flip: 5, holster: 4,
+    structural: 6, risky: 2,
+  },
+};
+
+// ── Rarity value bonus (prefer rarer irons slightly) ──
+const RARITY_BONUS = { common: 0, uncommon: 2, rare: 5, legendary: 8 };
+
+// ── Score an iron for a given archetype ──
+function scoreIron(playerType, iron) {
+  const weights = ARCHETYPE_WEIGHTS[playerType];
+  if (!weights) return Math.random(); // random for monkey
+
+  const tags = IRON_TAGS[iron.id] || [];
+  let score = RARITY_BONUS[iron.rarity] || 0;
+  for (const tag of tags) {
+    score += weights[tag] || 1;
   }
+  // Add small random jitter to break ties
+  score += Math.random() * 0.5;
+  return score;
+}
+
+// ── Get top N preferred irons for display (replaces old ironPriority) ──
+export function topIronPreferences(playerType, n = 3) {
+  if (!ARCHETYPE_WEIGHTS[playerType]) return null;
+  const scored = IRONS.map(iron => ({ iron, score: scoreIron(playerType, iron) }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, n).map(s => s.iron);
 }
 
 // ── Pick the best Iron from offerings based on archetype preference ──
 export function pickIron(playerType, offerings, equipped) {
-  const priority = ironPriority(playerType);
-  if (!priority) {
+  if (!ARCHETYPE_WEIGHTS[playerType]) {
+    // Random monkey
     return offerings[Math.floor(Math.random() * offerings.length)];
   }
-  for (const id of priority) {
-    const match = offerings.find(o => o.id === id);
-    if (match) return match;
+
+  let bestIron = offerings[0];
+  let bestScore = -1;
+  for (const iron of offerings) {
+    const s = scoreIron(playerType, iron);
+    if (s > bestScore) { bestScore = s; bestIron = iron; }
   }
-  return offerings[0];
+  return bestIron;
 }

@@ -149,7 +149,6 @@ function buildArchetypesMod(profiles) {
       return p.accuracy / 100;
     },
     pickIron: defaultArchetypesMod.pickIron,
-    ironPriority: defaultArchetypesMod.ironPriority,
   };
 }
 
@@ -160,6 +159,7 @@ function buildConfigMod(cfg) {
     PICKS_PER_ROUND: cfg.game.picksPerRound,
     NUM_ROUNDS: cfg.game.numRounds,
     STARTING_CHAMBERS: cfg.game.startingChambers,
+    MAX_CHAMBERS: cfg.game.maxChambers || 6,
     DIR_SCORING: cfg.scoring.dir,
     HOL_SCORING: cfg.scoring.hol,
     NOTORIETY_WEIGHT: cfg.notoriety.weight,
