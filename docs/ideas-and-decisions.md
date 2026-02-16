@@ -84,6 +84,7 @@
 - **Respect the Player's Time** — core design principle for launch messaging. Make it explicitly clear that we respect the player's time. No FOMO mechanics, no punishment for missing rounds. Someone interested in stocks and this game deserves that. Missed rounds = neutral effect (no DD change, no wanted level change, no streak break). All time-based effects (Iron scaling, streaks, etc.) are tied to rounds played, not calendar time. This is a competitive advantage over most mobile games that weaponize player guilt.
 - **Design North Star** — Bounty Hunter should be optimized for combinatorics of power-ups and strategies, scaling math, and emergent build synergies. Polish should be focused on a clear UI, fast feedback, and addictive number escalation. Success factors: mechanically coherent design, exponential scaling tension.
 - **8-bit SFX on Swipe** — play retro sound effects on each committed swipe direction (rise/fall/hold/skip). Code is written in AudioContext (`playSfx`), BountyHunterScreen (`onCommitRef`), and ProfileScreen (SFX toggle) but changes are uncommitted. Still need to generate 4 WAV files via [sfxr.me](https://sfxr.me/) and place them in `mobile/assets/audio/` as `sfx-rise.wav`, `sfx-fall.wav`, `sfx-hold.wav`, `sfx-skip.wav`. Then commit and test.
+- **More Soundtrack Music** — if we want more than one song, get a subscription to [Envato Elements](https://elements.envato.com/) and download tracks from there. No development needed yet.
 
 ## Data Analytics
 - **Heat Map** — which stocks are most popular in your league
