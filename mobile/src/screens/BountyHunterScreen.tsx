@@ -173,6 +173,7 @@ export default function BountyHunterScreen() {
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
   const [showIronModal, setShowIronModal] = useState(false);
   const [ignoreServerPicks, setIgnoreServerPicks] = useState(false);
+  const [expandedIron, setExpandedIron] = useState<string | null>(null);
 
   // ── Test mode: random outcomes for each stock (1/3 each) ──
   const [testOutcomes, setTestOutcomes] = useState<Record<string, "RISE" | "FALL" | "HOLD">>({});
@@ -689,30 +690,60 @@ export default function BountyHunterScreen() {
   // Equipped irons row
   const rarityIcon = (r: string) =>
     r === "rare" ? "star" : r === "uncommon" ? "diamond" : "ellipse";
-  const equippedIronsRow =
-    stats?.equipped_irons && stats.equipped_irons.length > 0 ? (
-      <View style={styles.ironsRow}>
-        {stats.equipped_irons.map((iron) => {
-          const rarityColor =
-            iron.rarity === "rare"
-              ? Colors.yellow
-              : iron.rarity === "uncommon"
-                ? Colors.primary
-                : Colors.textMuted;
+  const chambers = stats?.chambers ?? 2;
+  const equipped = stats?.equipped_irons ?? [];
+  const equippedIronsRow = (
+    <View style={styles.ironsRow}>
+      {Array.from({ length: chambers }, (_, i) => {
+        const iron = equipped.find((ir) => ir.slot_number === i + 1);
+        if (!iron) {
           return (
-            <View
-              key={iron.slot_number}
-              style={[styles.ironPill, { borderColor: rarityColor + "60" }]}
-            >
-              <Ionicons name={rarityIcon(iron.rarity) as any} size={10} color={rarityColor} />
-              <Text style={[styles.ironPillText, { color: rarityColor }]}>
-                {iron.name}
-              </Text>
+            <View key={i} style={[styles.ironPill, { borderColor: Colors.border }]}>
+              <Ionicons name="ellipse-outline" size={10} color={Colors.textMuted} />
+              <Text style={[styles.ironPillText, { color: Colors.textMuted }]}>Empty</Text>
             </View>
           );
-        })}
-      </View>
-    ) : null;
+        }
+        const rarityColor =
+          iron.rarity === "rare"
+            ? Colors.yellow
+            : iron.rarity === "uncommon"
+              ? Colors.primary
+              : Colors.textMuted;
+        const isExpanded = expandedIron === iron.iron_id;
+        return (
+          <TouchableOpacity
+            key={iron.slot_number}
+            style={[styles.ironPill, { borderColor: rarityColor + "60" }]}
+            onPress={() => setExpandedIron(isExpanded ? null : iron.iron_id)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={rarityIcon(iron.rarity) as any} size={10} color={rarityColor} />
+            <Text style={[styles.ironPillText, { color: rarityColor }]}>
+              {iron.name}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+      {(() => {
+        const iron = equipped.find((ir) => ir.iron_id === expandedIron);
+        if (!iron) return null;
+        const rarityColor =
+          iron.rarity === "rare"
+            ? Colors.yellow
+            : iron.rarity === "uncommon"
+              ? Colors.primary
+              : Colors.textMuted;
+        return (
+          <View style={[styles.ironDescription, { borderColor: rarityColor + "40" }]}>
+            <Text style={[styles.ironDescriptionText, { color: rarityColor }]}>
+              {iron.description}
+            </Text>
+          </View>
+        );
+      })()}
+    </View>
+  );
 
 
   // ── Active window + current stock — 4-direction swipe card ──
@@ -1410,6 +1441,19 @@ const styles = StyleSheet.create({
   ironPillText: {
     fontSize: FontSize.xs,
     fontFamily: FontFamily.bold,
+  },
+  ironDescription: {
+    width: "100%",
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  ironDescriptionText: {
+    fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
+    textAlign: "center",
   },
 
   // ── Bottom confidence bar ──
