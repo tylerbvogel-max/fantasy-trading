@@ -37,6 +37,8 @@ The full backend scaffold is complete and the mobile app has two working screens
 3. **Themed seasons** — `seasons.allowed_stocks` (JSONB) filters which stocks are tradeable. NULL = all stocks.
 4. **Players can be in multiple seasons simultaneously** — each with independent portfolios via `player_seasons` junction table
 5. **Phase 2 tables exist but are unused** — `interaction_types` and `player_interactions` are in the schema for future social mechanics (forced trades, sabotage, etc.)
+6. **Bounty Hunter uses 1-hour prediction windows, 30 rounds per season week** — chosen over 2-hour windows to maximize daily touchpoints (4-6 vs 2-3), create stronger habit loops, and make predictions feel more skill-testable. After-hours windows provide schedule flexibility. See `docs/game-modes.md` for full Bounty Hunter design.
+7. **Four season modes** — Classroom, League, Arena, and Bounty Hunter. Each gates different features. Mode is set per-season at creation time.
 
 ## Database Schema (Key Relationships)
 ```
@@ -54,6 +56,10 @@ stocks_master — full universe of tradeable stocks with sector/tier metadata
 - `backend/app/seed.py` — Database seeder (run once after creating DB)
 - `mobile/src/api/client.ts` — All API types and functions
 - `mobile/src/hooks/useApi.ts` — React Query hooks wrapping the API client
+- `tools/bounty-sim/irons.mjs` — 75 Iron definitions, rarity weights, and effect calculations
+- `tools/bounty-sim/config.mjs` — All Bounty Hunter tunable constants (30 rounds, scoring, wanted levels)
+- `tools/bounty-sim/sim.mjs` — Bounty Hunter simulation CLI + web dashboard server
+- `docs/game-modes.md` — Season mode definitions (Classroom, League, Arena, Bounty Hunter)
 
 ## Environment
 - Finnhub API key is in `.env` (not committed to git)
@@ -79,6 +85,10 @@ python -m app.seed
 
 # Force price refresh
 curl -X POST http://localhost:8000/admin/stocks/refresh -H "Authorization: Bearer ADMIN_TOKEN"
+
+# Bounty Hunter simulation dashboard
+node tools/bounty-sim/sim.mjs --serve
+# Opens at http://localhost:8080 — adjust all parameters, toggle irons, run simulations
 ```
 
 ## Next Priority

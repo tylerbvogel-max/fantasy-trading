@@ -245,7 +245,7 @@ export function generateDashboardHTML() {
         <summary>Game Setup</summary>
         <div class="field"><label>Starting Balance ($)</label><input type="number" id="g-balance" value="${defaults.game.startingBalance}"></div>
         <div class="field"><label>Picks / Round</label><input type="number" id="g-picks" value="${defaults.game.picksPerRound}" min="1" max="20"></div>
-        <div class="field"><label>Rounds</label><input type="number" id="g-rounds" value="${defaults.game.numRounds}" min="1" max="15"></div>
+        <div class="field"><label>Rounds</label><input type="number" id="g-rounds" value="${defaults.game.numRounds}" min="1" max="30"></div>
         <div class="field"><label>Ante ($)</label><input type="number" id="g-ante" value="${defaults.game.anteBase}"></div>
         <div class="field"><label>Starting Chambers</label><input type="number" id="g-chambers" value="${defaults.game.startingChambers}" min="1" max="6"></div>
       </details>

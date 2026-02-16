@@ -96,6 +96,17 @@ season_archives (Phase 2 — end-of-season records)
 interaction_types + player_interactions (Phase 2 — social mechanics)
 ```
 
+## Bounty Hunter Mode
+
+A standalone prediction game mode where players make directional stock predictions on 1-hour price windows. Unlike the portfolio-based modes (Classroom, League, Arena), Bounty Hunter replaces buy/sell with rise/fall/holster picks.
+
+**Key parameters** (defined in `tools/bounty-sim/config.mjs`):
+- 30 rounds per season week (1-hour real-time prediction windows)
+- 5 picks per round, 3 confidence levels
+- Wanted level system with exponential multipliers (levels 1-10+)
+- 75 collectible Irons across 4 rarity tiers that modify scoring, accuracy, and economy
+- Tuning dashboard at `tools/bounty-sim/sim.mjs --serve`
+
 ## Accounts & Credentials
 
 - **Admin token**: Used for `/admin/*` endpoints (invite codes, season management, price refresh)

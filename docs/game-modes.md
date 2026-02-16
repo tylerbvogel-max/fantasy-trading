@@ -88,23 +88,68 @@ Fantasy Trading supports three distinct season modes. Each mode shares the same 
 
 The season mode is set at creation time and determines feature availability. This should be clearly communicated to players when they join a season so expectations are set upfront.
 
-| Feature | Classroom | League | Arena |
-|---|---|---|---|
-| Trading | Yes | Yes | Yes |
-| Leaderboard | Yes | Yes | Yes |
-| Portfolio analytics | Yes | Yes | Yes |
-| Educational content | Yes | Optional | Yes |
-| Quizzes | Yes | Optional | Yes |
-| XP from quizzes | No | No | Yes |
-| Player interactions | No | No | Yes |
-| Defensive XP spending | No | No | Yes |
-| Anti-gang-up caps | N/A | N/A | Yes |
+| Feature | Classroom | League | Arena | Bounty Hunter |
+|---|---|---|---|---|
+| Trading | Yes | Yes | Yes | No |
+| Leaderboard | Yes | Yes | Yes | Yes |
+| Portfolio analytics | Yes | Yes | Yes | No |
+| Educational content | Yes | Optional | Yes | No |
+| Quizzes | Yes | Optional | Yes | No |
+| XP from quizzes | No | No | Yes | No |
+| Player interactions | No | No | Yes | No |
+| Defensive XP spending | No | No | Yes | No |
+| Anti-gang-up caps | N/A | N/A | Yes | N/A |
+| Directional predictions | No | No | No | Yes |
+| Wanted level system | No | No | No | Yes |
+| Iron collectibles | No | No | No | Yes |
+| Bust/revival mechanics | No | No | No | Yes |
+
+---
+
+## Mode 4: Bounty Hunter
+
+**Purpose**: A high-stakes prediction game layered on top of stock price movements. Players make directional predictions (rise/fall) or defensive plays (holster) on 1-hour price windows, earning score multiplied by a "wanted level" that escalates with aggressive play. Inspired by roguelike deckbuilders — simple base mechanics with layered modifiers (Irons) that create emergent strategy.
+
+**Target audience**: Gamers, prediction market enthusiasts, players who enjoy risk/reward escalation and build-crafting.
+
+### Core Design Decisions
+
+**Round timing — 1-hour prediction windows, 30 rounds per season week.**
+Each round corresponds to a 1-hour real-time window. During standard US market hours (9:30 AM - 4:00 PM ET, Mon-Fri), this yields ~32.5 potential windows per week. With after-hours trading windows available, players can complete their 30 rounds on a flexible schedule — they don't need to play every hour, but the cadence encourages multiple daily check-ins (similar to Duolingo streaks or sports betting micro-sessions). The 1-hour window was chosen over 2-hour windows because:
+- More frequent decision points create stronger habit loops (4-6 daily touchpoints vs 2-3)
+- Shorter prediction windows feel more skill-testable and actionable
+- 30 rounds provides enough progression for meaningful iron builds and wanted level arcs
+- After-hours flexibility means players aren't punished for missing market hours
+
+**What's enabled**:
+- 5 picks per round: rise, fall, or holster on stock price direction within the 1-hour window
+- Confidence levels (1-3) that multiply both wins and losses
+- Wanted level system — escalates with aggressive play, multiplies all scoring
+- Notoriety tracking — determines wanted level changes based on play style
+- Iron system: 75 collectible modifiers across 4 rarity tiers (Common, Uncommon, Rare, Legendary) that alter scoring, accuracy, economy, and special mechanics
+- Chamber slots (2-6) that limit how many Irons can be equipped simultaneously
+- Skip mechanic with escalating costs
+- Ante system (flat cost per round to stay in)
+
+**What's disabled**:
+- Direct player-vs-player interactions (competition is leaderboard-based)
+- Traditional portfolio trading (this mode replaces buy/sell with prediction mechanics)
+
+**Design considerations**:
+- The wanted level creates natural drama arcs — conservative players plateau safely, aggressive players risk bust for exponential returns
+- Iron builds create replayability and strategic diversity (75 irons, ~30 equipped per run)
+- Bust mechanics (balance reaching $0) add real stakes without real money
+- The mode is designed so that skilled + lucky players can reach ludicrous balance levels ($10M+), which makes leaderboard competition exciting
+- Balancing is done via the bounty-sim dashboard (`tools/bounty-sim/sim.mjs --serve`)
 
 ---
 
 ## Implementation Notes
 
-- The `Season` model should include a `mode` field (`classroom`, `league`, `arena`) that gates feature availability.
+- The `Season` model should include a `mode` field (`classroom`, `league`, `arena`, `bounty`) that gates feature availability.
 - Player interaction types, costs, cooldowns, and targeting caps should be stored in configuration (database or config file), not hardcoded, to allow tuning.
 - The existing `interaction_types` and `player_interactions` tables (Phase 2 models already in the schema) will be activated for Arena mode.
 - The UI should adapt its tone and presentation based on the season mode — not just toggling features on/off, but adjusting how the app feels.
+- Bounty Hunter rounds are tied to 1-hour real-time price windows. The backend must track round availability based on market hours and after-hours windows. 30 rounds per season week.
+- Iron definitions, rarity weights, and effect values live in `tools/bounty-sim/irons.mjs` and should be mirrored to backend config when the mode is implemented.
+- Bounty Hunter balance tuning is done via the simulation dashboard (`node tools/bounty-sim/sim.mjs --serve`) — all scoring, economy, and iron parameters are adjustable there.
