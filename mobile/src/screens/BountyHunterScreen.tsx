@@ -178,7 +178,9 @@ export default function BountyHunterScreen() {
   // ── Test mode: random outcomes for each stock (1/3 each) ──
   const [testOutcomes, setTestOutcomes] = useState<Record<string, "RISE" | "FALL" | "HOLD">>({});
   const [testBalanceOffset, setTestBalanceOffset] = useState(0);
+  const [testLevelOffset, setTestLevelOffset] = useState(0);
   const lastRoundTotal = useRef(0);
+  const lastLevelChange = useRef(0);
 
   // ── Swipe animation values ──
   const translateX = useRef(new Animated.Value(0)).current;
@@ -214,7 +216,7 @@ export default function BountyHunterScreen() {
     : "";
 
   const hasActiveWindow = !!currentWindow;
-  const wantedLevel = stats?.wanted_level ?? 1;
+  const wantedLevel = Math.max(1, (stats?.wanted_level ?? 1) + testLevelOffset);
   const mult = getWantedMult(Math.max(wantedLevel, 1));
   const displayBalance = (stats?.double_dollars ?? 0) + testBalanceOffset;
 
@@ -547,6 +549,7 @@ export default function BountyHunterScreen() {
     resetMutation.mutate(undefined, {
       onSuccess: (data) => {
         setTestBalanceOffset(0);
+        setTestLevelOffset(0);
         setIgnoreServerPicks(false);
         showToast(data.message);
         refetch();
@@ -557,6 +560,7 @@ export default function BountyHunterScreen() {
 
   const handleNextRound = () => {
     setTestBalanceOffset((prev) => prev + lastRoundTotal.current);
+    setTestLevelOffset((prev) => prev + lastLevelChange.current);
     setSwipedPicks([]);
     setSkippedSymbols([]);
     setIgnoreServerPicks(true);
@@ -1055,8 +1059,8 @@ export default function BountyHunterScreen() {
 
             // Store for handleNextRound to accumulate
             lastRoundTotal.current = roundTotal;
-
             const levelChange = roundNotoriety >= NOTORIETY_UP_THRESHOLD ? 1 : roundNotoriety <= NOTORIETY_DOWN_THRESHOLD ? -1 : 0;
+            lastLevelChange.current = levelChange;
             const levelLabel = levelChange > 0 ? "LEVEL UP!" : levelChange < 0 ? "Level down" : "Level holds";
             const levelColor = levelChange > 0 ? Colors.green : levelChange < 0 ? Colors.accent : Colors.textMuted;
             const newLevel = Math.max(1, wantedLevel + levelChange);
