@@ -142,7 +142,15 @@ const HIST_BUCKETS = [
   { label: '$10-25k',   max: 25000 },
   { label: '$25-50k',   max: 50000 },
   { label: '$50-100k',  max: 100000 },
-  { label: '$100k+',    max: Infinity },
+  { label: '$100-500k', max: 500000 },
+  { label: '$500k-1M',  max: 1000000 },
+  { label: '$1-2M',     max: 2000000 },
+  { label: '$2-5M',     max: 5000000 },
+  { label: '$5-10M',    max: 10000000 },
+  { label: '$10-20M',   max: 20000000 },
+  { label: '$20-50M',   max: 50000000 },
+  { label: '$50-100M',  max: 100000000 },
+  { label: '$100M+',    max: Infinity },
 ];
 
 export function computeHistogram(allResults, { numRuns = NUM_RUNS, archetypes = ARCHETYPES } = {}) {
