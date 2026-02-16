@@ -3,7 +3,7 @@
 
 // ── Run parameters ──
 export const NUM_RUNS = 200;
-export const NUM_ROUNDS = 30;
+export const NUM_ROUNDS = 15;
 export const PICKS_PER_ROUND = 5;
 export const STARTING_BALANCE = 5000;
 
