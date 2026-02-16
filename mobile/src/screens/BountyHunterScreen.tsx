@@ -61,6 +61,55 @@ const NOTORIETY_DOWN_THRESHOLD = -2;
 const ANTE_BASE = 75;
 const HOLSTER_COLOR = Colors.primary;
 
+// ── Iron effects (mirrors tools/bounty-sim/irons.mjs getIronEffects) ──
+interface IronEffects {
+  drawWinBonus: number;
+  allLoseReduction: number;
+  accuracyBonus: number;
+  anteReduction: number;
+  skipDiscount: number;
+  holsterWinBonus: number;
+  qdWinBonus: number;
+  snakeOil: boolean;
+  deAccuracyBonus: number;
+  flatCashPerCorrect: number;
+  notorietyBonus: number;
+  perLevelWinBonus: number;
+  deWinMultiplier: number;
+  ghostChance: number;
+  scoreMultiplier: number;
+}
+
+function getIronEffects(equipped: { iron_id: string }[]): IronEffects {
+  const fx: IronEffects = {
+    drawWinBonus: 0, allLoseReduction: 0, accuracyBonus: 0,
+    anteReduction: 0, skipDiscount: 0, holsterWinBonus: 0,
+    qdWinBonus: 0, snakeOil: false, deAccuracyBonus: 0,
+    flatCashPerCorrect: 0, notorietyBonus: 0, perLevelWinBonus: 0,
+    deWinMultiplier: 1, ghostChance: 0, scoreMultiplier: 1,
+  };
+  for (const iron of equipped) {
+    switch (iron.iron_id) {
+      case 'steady_hand':     fx.drawWinBonus += 3; break;
+      case 'thick_skin':      fx.allLoseReduction += 3; break;
+      case 'lucky_horseshoe': fx.accuracyBonus += 0.05; break;
+      case 'trail_rations':   fx.anteReduction += 20; break;
+      case 'bandolier':       fx.skipDiscount += 0.30; break;
+      case 'leather_holster': fx.holsterWinBonus += 4; break;
+      case 'iron_sights':     fx.qdWinBonus += 5; break;
+      case 'snake_oil':       fx.snakeOil = true; break;
+      case 'deadeye_scope':   fx.deAccuracyBonus += 0.10; break;
+      case 'gold_tooth':      fx.flatCashPerCorrect += 50; break;
+      case 'bounty_poster':   fx.notorietyBonus += 0.5; break;
+      case 'sheriffs_badge':  fx.perLevelWinBonus += 1; break;
+      case 'double_barrel':   fx.deWinMultiplier *= 2; break;
+      case 'ghost_rider':     fx.ghostChance = Math.min(1, fx.ghostChance + 0.20); break;
+      case 'golden_revolver': fx.scoreMultiplier *= 1.5; break;
+    }
+  }
+  return fx;
+}
+
 function getWantedMult(level: number): number {
   return WANTED_MULT[level] ?? Math.round(1200 * Math.pow(2.3, level - 10));
 }
@@ -910,7 +959,9 @@ export default function BountyHunterScreen() {
 
           {/* Scored picks grid */}
           {(() => {
-            let roundTotal = -ANTE_BASE; // ante deducted at round start
+            const fx = getIronEffects(stats?.equipped_irons ?? []);
+            const effectiveAnte = Math.max(0, ANTE_BASE - fx.anteReduction);
+            let roundTotal = -effectiveAnte; // ante deducted at round start
             let roundNotoriety = 0;
 
             const scoredPicks = pickedStocks.map((stock) => {
@@ -920,11 +971,35 @@ export default function BountyHunterScreen() {
               const testAnswer = testOutcomes[stock.symbol];
               const predLabel = pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred;
               const isHold = pred === "HOLD";
-              const isWin = testAnswer === predLabel;
+              const isDE = conf === 3;
+
+              // Ghost Rider: random miss→correct flip
+              let isWin = testAnswer === predLabel;
+              if (!isWin && fx.ghostChance > 0 && Math.random() < fx.ghostChance) isWin = true;
+
               const scoring = isHold ? HOL_SCORING[conf] : DIR_SCORING[conf];
-              const basePoints = isWin ? scoring.win : -scoring.lose;
-              const scaledPoints = Math.round(basePoints * mult);
-              const notorietyDelta = (NOTORIETY_WEIGHT[conf] ?? 1) * (isWin ? 1 : -1);
+              let winVal = scoring.win;
+              let loseVal = scoring.lose;
+
+              // Iron win bonuses (matches engine.mjs)
+              if (conf === 1) winVal += fx.drawWinBonus;
+              if (conf === 2) winVal += fx.qdWinBonus;
+              if (isHold) winVal += fx.holsterWinBonus;
+              winVal += fx.perLevelWinBonus * wantedLevel;
+              if (isDE && !isHold && fx.deWinMultiplier > 1) winVal = Math.round(winVal * fx.deWinMultiplier);
+
+              // Iron loss reduction
+              loseVal = Math.max(0, loseVal - fx.allLoseReduction);
+              // Snake Oil: Draw holster losses = 0
+              if (fx.snakeOil && isHold && conf === 1) loseVal = 0;
+
+              const basePoints = isWin ? winVal : -loseVal;
+              let scaledPoints = Math.round(basePoints * mult * fx.scoreMultiplier);
+              // Flat cash bonus (unscaled)
+              if (isWin && fx.flatCashPerCorrect > 0) scaledPoints += fx.flatCashPerCorrect;
+
+              let notorietyDelta = (NOTORIETY_WEIGHT[conf] ?? 1) * (isWin ? 1 : -1);
+              if (isWin && fx.notorietyBonus > 0) notorietyDelta += fx.notorietyBonus;
 
               roundTotal += scaledPoints;
               roundNotoriety += notorietyDelta;
@@ -1012,9 +1087,9 @@ export default function BountyHunterScreen() {
                 {/* Round summary */}
                 <View style={styles.roundSummary}>
                   <View style={styles.roundSummaryRow}>
-                    <Text style={styles.roundSummaryLabel}>Ante</Text>
+                    <Text style={styles.roundSummaryLabel}>Ante{fx.anteReduction > 0 ? ` (-${fx.anteReduction} Iron)` : ""}</Text>
                     <Text style={[styles.roundSummaryValue, { color: Colors.accent }]}>
-                      -$${ANTE_BASE}
+                      -$${effectiveAnte}
                     </Text>
                   </View>
                   <View style={styles.roundSummaryRow}>
@@ -1022,10 +1097,10 @@ export default function BountyHunterScreen() {
                     <Text
                       style={[
                         styles.roundSummaryValue,
-                        { color: (roundTotal + ANTE_BASE) >= 0 ? Colors.green : Colors.accent },
+                        { color: (roundTotal + effectiveAnte) >= 0 ? Colors.green : Colors.accent },
                       ]}
                     >
-                      {(roundTotal + ANTE_BASE) >= 0 ? "+" : ""}$${Math.abs(roundTotal + ANTE_BASE).toLocaleString()}
+                      {(roundTotal + effectiveAnte) >= 0 ? "+" : ""}$${Math.abs(roundTotal + effectiveAnte).toLocaleString()}
                     </Text>
                   </View>
                   <View style={[styles.roundSummaryRow, { borderTopWidth: 1, borderTopColor: Colors.surface, paddingTop: Spacing.sm, marginTop: Spacing.xs }]}>
