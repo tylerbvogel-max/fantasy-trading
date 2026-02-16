@@ -7,6 +7,7 @@ import {
   NOTORIETY_WEIGHT, NOTORIETY_UP_THRESHOLD, NOTORIETY_DOWN_THRESHOLD,
   ARCHETYPES, ARCHETYPE_LABELS, ARCHETYPE_COLORS,
 } from './config.mjs';
+import { IRONS } from './irons.mjs';
 
 export function generateDashboardHTML() {
   const profileDefaults = {
@@ -58,6 +59,27 @@ export function generateDashboardHTML() {
   const archetypeMeta = ARCHETYPES.map(type => ({
     id: type, label: ARCHETYPE_LABELS[type], color: ARCHETYPE_COLORS[type],
   }));
+
+  // Group irons by rarity for the toggle section
+  const rarityOrder = ['common', 'uncommon', 'rare', 'legendary'];
+  const ironsByRarity = {};
+  for (const r of rarityOrder) ironsByRarity[r] = IRONS.filter(i => i.rarity === r);
+
+  const ironSectionHTML = rarityOrder.map(rarity => {
+    const irons = ironsByRarity[rarity];
+    const label = rarity.charAt(0).toUpperCase() + rarity.slice(1);
+    return `
+          <div class="iron-group-header">
+            <span class="rarity-${rarity}">${label} (${irons.length})</span>
+            <div class="grp-btns">
+              <button onclick="toggleIronGroup('${rarity}', true)">All</button>
+              <button onclick="toggleIronGroup('${rarity}', false)">None</button>
+            </div>
+          </div>
+          <div class="iron-grid">
+            ${irons.map(i => `<label class="iron-check" title="${i.desc}"><input type="checkbox" data-iron="${i.id}" data-rarity="${rarity}" checked>${i.name}</label>`).join('\n            ')}
+          </div>`;
+  }).join('\n');
 
   return `<!DOCTYPE html>
 <html>
@@ -177,6 +199,24 @@ export function generateDashboardHTML() {
 
     .note { text-align: center; color: #555; font-size: 10px; margin-top: 12px; }
     .elapsed { color: #666; font-size: 11px; text-align: right; margin-bottom: 8px; }
+
+    /* ── Iron Toggles ── */
+    .iron-master { display: flex; gap: 6px; padding: 4px 0 6px; }
+    .iron-master button, .iron-group-header button {
+      background: #1a1a1a; color: #999; border: 1px solid #333; padding: 2px 8px;
+      font-family: inherit; font-size: 10px; cursor: pointer; border-radius: 3px;
+    }
+    .iron-master button:hover, .iron-group-header button:hover { background: #222; color: #e0e0e0; }
+    .iron-group-header { display: flex; justify-content: space-between; align-items: center; padding: 4px 0 2px; }
+    .iron-group-header span { font-size: 11px; font-weight: bold; }
+    .iron-group-header .rarity-common { color: #aaa; }
+    .iron-group-header .rarity-uncommon { color: #4CAF50; }
+    .iron-group-header .rarity-rare { color: #2196F3; }
+    .iron-group-header .rarity-legendary { color: #FF9800; }
+    .iron-group-header .grp-btns { display: flex; gap: 4px; }
+    .iron-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 8px; padding: 2px 0 6px; }
+    .iron-check { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #bbb; padding: 1px 0; }
+    .iron-check input[type="checkbox"] { margin: 0; accent-color: #FAD009; }
   </style>
 </head>
 <body>
@@ -264,6 +304,15 @@ export function generateDashboardHTML() {
         <div class="field"><label>Chart samples</label><input type="number" id="sim-samples" value="${defaults.sim.sampleRuns}" min="1" max="20"></div>
       </details>
 
+      <details>
+        <summary>Irons (${IRONS.length})</summary>
+        <div class="iron-master">
+          <button onclick="toggleAllIrons(true)">Enable All</button>
+          <button onclick="toggleAllIrons(false)">Disable All</button>
+        </div>
+        ${ironSectionHTML}
+      </details>
+
       <div class="btn-row">
         <button id="runBtn">RUN SIMULATION</button>
         <button id="resetBtn">Reset</button>
@@ -347,6 +396,14 @@ export function generateDashboardHTML() {
   <script>
     const DEFAULTS = ${JSON.stringify(defaults)};
     const ARCHETYPES = ${JSON.stringify(archetypeMeta)};
+
+    function toggleAllIrons(on) {
+      document.querySelectorAll('[data-iron]').forEach(cb => cb.checked = on);
+    }
+    function toggleIronGroup(rarity, on) {
+      document.querySelectorAll('[data-iron][data-rarity="' + rarity + '"]').forEach(cb => cb.checked = on);
+    }
+
     let prevStats = null;
     let lastStats = null;
     let lastHistogram = null;
@@ -454,6 +511,7 @@ export function generateDashboardHTML() {
           holster: v('p-' + a.id + '-holster'),
           skip: v('p-' + a.id + '-skip'),
         }])),
+        disabledIrons: Array.from(document.querySelectorAll('[data-iron]:not(:checked)')).map(cb => cb.dataset.iron),
       };
     }
 
@@ -628,6 +686,11 @@ export function generateDashboardHTML() {
           document.getElementById('p-' + a.id + '-skip').value = p.skip;
         }
       }
+      // Restore iron toggles
+      const disabled = new Set(d.disabledIrons || []);
+      document.querySelectorAll('[data-iron]').forEach(cb => {
+        cb.checked = !disabled.has(cb.dataset.iron);
+      });
     }
 
     // ── Preset system (localStorage) ──

@@ -192,7 +192,38 @@ function startServeServer() {
           const archetypesMod = cfg.profiles
             ? buildArchetypesMod(cfg.profiles)
             : defaultArchetypesMod;
-          const engine = createEngine(configMod, defaultIronsMod, archetypesMod);
+
+          // Filter irons if any are disabled
+          let ironsMod = defaultIronsMod;
+          if (cfg.disabledIrons && cfg.disabledIrons.length > 0) {
+            const disabledSet = new Set(cfg.disabledIrons);
+            ironsMod = {
+              ...defaultIronsMod,
+              IRONS: defaultIronsMod.IRONS.filter(i => !disabledSet.has(i.id)),
+              rollIronOffering(equipped) {
+                const equippedIds = new Set(equipped.map(i => i.id));
+                const available = this.IRONS.filter(i => !equippedIds.has(i.id));
+                if (available.length < 3) return available.slice(0, 3);
+                const pool = [];
+                for (const iron of available) {
+                  const weight = defaultIronsMod.RARITY_WEIGHTS[iron.rarity];
+                  for (let j = 0; j < weight; j++) pool.push(iron);
+                }
+                const picked = [];
+                const pickedIds = new Set();
+                while (picked.length < 3 && pool.length > 0) {
+                  const iron = pool[Math.floor(Math.random() * pool.length)];
+                  if (!pickedIds.has(iron.id)) {
+                    picked.push(iron);
+                    pickedIds.add(iron.id);
+                  }
+                }
+                return picked;
+              },
+            };
+          }
+
+          const engine = createEngine(configMod, ironsMod, archetypesMod);
 
           // Stats runs
           const statRuns = cfg.sim.statRuns || 200;
