@@ -86,6 +86,6 @@ export const ARCHETYPE_LABELS = {
 };
 
 export const ARCHETYPES = [
-  'random_monkey', 'cautious_turtle', 'aggro_gambler', 'newbie', 'hot_tilt',
-  'comeback_grinder', 'optimizer', 'skip_burner', 'streaky_pro', 'conservative_climber',
+  'newbie', 'random_monkey', 'aggro_gambler', 'hot_tilt', 'cautious_turtle',
+  'comeback_grinder', 'skip_burner', 'streaky_pro', 'conservative_climber', 'optimizer',
 ];
