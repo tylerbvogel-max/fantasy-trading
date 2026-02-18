@@ -23,7 +23,6 @@ import AuthScreen from './src/screens/AuthScreen';
 import BountyHunterScreen from './src/screens/BountyHunterScreen';
 import BountyBoardScreen from './src/screens/BountyBoardScreen';
 import BountyStatsScreen from './src/screens/BountyStatsScreen';
-import SwipeTestScreen from './src/screens/SwipeTestScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 
 const queryClient = new QueryClient();
@@ -33,7 +32,6 @@ const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocu
   Bounty: { focused: 'skull', unfocused: 'skull-outline' },
   Stats: { focused: 'stats-chart', unfocused: 'stats-chart-outline' },
   Board: { focused: 'list', unfocused: 'list-outline' },
-  Lab: { focused: 'flask', unfocused: 'flask-outline' },
   Profile: { focused: 'person', unfocused: 'person-outline' },
 };
 
@@ -58,7 +56,6 @@ function MainTabs() {
       <Tab.Screen name="Bounty" component={BountyHunterScreen} />
       <Tab.Screen name="Stats" component={BountyStatsScreen} />
       <Tab.Screen name="Board" component={BountyBoardScreen} />
-      <Tab.Screen name="Lab" component={SwipeTestScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
