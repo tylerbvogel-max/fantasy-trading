@@ -1,6 +1,6 @@
-# Fantasy Stock Trading
+# Bounty Hunter
 
-A competitive paper trading mobile app where players compete with virtual portfolios using real stock market data across themed seasons.
+A stock prediction mobile game where players make directional picks on 1-hour price windows, earn Double Dollars, climb wanted levels, and collect Irons that modify gameplay.
 
 ## Project Structure
 
@@ -17,7 +17,6 @@ fantasy-trading/
 │   │   ├── services/     # Business logic layer
 │   │   ├── schemas/      # Pydantic request/response models
 │   │   └── jobs/         # Background task scheduler
-│   ├── alembic/          # Database migrations
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── .env.example
@@ -30,6 +29,9 @@ fantasy-trading/
 │   │   └── utils/        # Theme, helpers
 │   ├── app.json
 │   └── package.json
+├── tools/
+│   └── bounty-sim/       # Simulation dashboard for tuning game parameters
+├── docs/                 # Design documents and references
 └── README.md
 ```
 
@@ -37,7 +39,7 @@ fantasy-trading/
 
 ### Prerequisites
 
-- Python 3.11+ 
+- Python 3.11+
 - PostgreSQL 15+
 - Node.js 18+
 - Expo CLI (`npm install -g expo-cli`)
@@ -102,8 +104,7 @@ Scan the QR code with Expo Go on your phone.
 3. **Generate invite codes**: POST `/admin/invite-codes`
 4. **Refresh stock prices**: POST `/admin/stocks/refresh` (first time populates prices from Finnhub)
 5. **Register on mobile**: Open the app, enter an alias and one of the invite codes
-6. **Join a season**: The app will show available seasons to join
-7. **Start trading!**
+6. **Start predicting!**
 
 ## API Endpoints
 
@@ -114,27 +115,19 @@ Scan the QR code with Expo Go on your phone.
 | POST | `/auth/login` | Login with alias + token |
 | GET | `/auth/me` | Get current user profile |
 
-### Seasons
+### Bounty
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/seasons` | List all seasons |
-| GET | `/seasons/{id}` | Season details |
-| POST | `/seasons/{id}/join` | Join a season |
-| GET | `/seasons/{id}/leaderboard` | Season standings |
-| GET | `/seasons/{id}/stocks` | Available stocks for season |
-
-### Trading
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/trade` | Execute a market order |
-| POST | `/trade/validate` | Pre-validate a trade |
-| GET | `/trade/history?season_id=X` | Transaction history |
-
-### Portfolio
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/portfolio?season_id=X` | Current holdings + values |
-| GET | `/portfolio/history?season_id=X` | Historical snapshots |
+| GET | `/bounty/status` | Current window, picks, and player stats |
+| POST | `/bounty/predict` | Submit a prediction (UP/DOWN/HOLD) |
+| POST | `/bounty/skip` | Skip a stock (costs DD) |
+| GET | `/bounty/board` | Leaderboard (weekly or all-time) |
+| GET | `/bounty/history` | Past predictions |
+| GET | `/bounty/stats` | Detailed player statistics |
+| GET | `/bounty/irons` | Equipped Irons |
+| GET | `/bounty/irons/offering` | Current Iron offering |
+| POST | `/bounty/irons/pick` | Pick an Iron from offering |
+| POST | `/bounty/reset` | Reset player stats |
 
 ### Stocks
 | Method | Path | Description |
@@ -147,28 +140,11 @@ Scan the QR code with Expo Go on your phone.
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/admin/invite-codes` | Generate invite codes |
+| POST | `/admin/invite-codes/bulk` | Generate bulk invite codes |
 | GET | `/admin/invite-codes` | List all codes |
-| POST | `/admin/seasons` | Create a new season |
-| POST | `/admin/seasons/{id}/end` | End a season |
 | POST | `/admin/stocks/refresh` | Force price refresh |
-
-## Themed Seasons
-
-Create themed seasons by specifying `allowed_stocks`:
-
-```json
-{
-  "id": "SEASON_TECH_01",
-  "name": "Tech Titans Q1 2026",
-  "season_type": "tech_only",
-  "allowed_stocks": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "CRM", "ADBE"],
-  "start_date": "2026-03-01T00:00:00Z",
-  "starting_cash": 50000,
-  "description": "Tech stocks only! Who knows Silicon Valley best?"
-}
-```
-
-Season types: `open` (all stocks), `tech_only`, `mag7`, `micro_cap`, `custom`
+| POST | `/admin/stocks/trending` | Refresh trending rankings |
+| POST | `/admin/stocks/import` | Import stocks from Finnhub |
 
 ## Deployment
 
@@ -189,18 +165,19 @@ Season types: `open` (all stocks), `tech_only`, `mag7`, `micro_cap`, `custom`
 
 ## Background Jobs
 
-The backend runs scheduled tasks automatically:
-
 | Job | Schedule | What It Does |
 |-----|----------|--------------|
 | Price Refresh | Every 15 min (weekdays) | Updates stock prices from Finnhub |
 | Price Refresh | Every hour (weekends) | Lower frequency off-market |
-| Daily Snapshot | 4:30 PM ET daily | Captures portfolio values for charts |
+| Trending Stocks | 10 AM ET (weekdays) | Updates trending rankings |
+| Window Creation | 8:50 AM ET (weekdays) | Creates day's prediction windows |
+| Window Settlement | End of each window | Scores predictions, updates stats |
 
-## Phase 2 Roadmap
+## Simulation Dashboard
 
-The schema includes placeholder tables for future features:
-- **Player Interactions**: Forced Sale, Forced Trade, Asset Swap, Portfolio Peek
-- **Formal Auth**: JWT + OAuth (Google, Apple)
-- **Push Notifications**: Trade confirmations, interaction alerts
-- **Character Classes**: Investor archetypes with unique perks
+```bash
+node tools/bounty-sim/sim.mjs --serve
+# Opens at http://localhost:8080
+```
+
+Adjust all game parameters (scoring, wanted levels, Iron effects) and run Monte Carlo simulations to tune the economy.

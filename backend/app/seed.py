@@ -1,10 +1,9 @@
 """
-Seed script: Creates initial data for the Fantasy Trading app.
+Seed script: Creates initial data for the Bounty Hunter app.
 Run after migrations: python -m app.seed
 """
 import asyncio
 import secrets
-from datetime import datetime, timezone
 from app.database import engine, async_session, Base
 from app.models import *  # noqa - ensure all models loaded
 from app.services.auth_service import generate_token, hash_token
@@ -99,29 +98,6 @@ async def seed():
             db.add(invite)
             codes.append(code)
 
-        # 4. Create the first season (matching your existing one)
-        season = Season(
-            id="SEASON_001",
-            name="Winter Championship 2026",
-            season_type="open",
-            start_date=datetime(2026, 1, 25, tzinfo=timezone.utc),
-            starting_cash=100000.00,
-            description="The inaugural season! All stocks available. $100K starting cash.",
-        )
-        db.add(season)
-
-        # 5. Create a themed season example
-        mag7_season = Season(
-            id="SEASON_MAG7_01",
-            name="Magnificent 7 Showdown",
-            season_type="mag7",
-            allowed_stocks=["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"],
-            start_date=datetime(2026, 2, 1, tzinfo=timezone.utc),
-            starting_cash=100000.00,
-            description="Trade only the Magnificent 7 tech giants. Who picks the best mix?",
-        )
-        db.add(mag7_season)
-
         await db.commit()
 
         print("=" * 60)
@@ -132,9 +108,6 @@ async def seed():
         print(f"\nInvite codes generated:")
         for code in codes:
             print(f"  {code}")
-        print(f"\nSeasons created:")
-        print(f"  SEASON_001 - Winter Championship 2026 (open)")
-        print(f"  SEASON_MAG7_01 - Magnificent 7 Showdown (mag7)")
         print(f"\nStocks seeded: {len(INITIAL_STOCKS)}")
         print(f"\nNext steps:")
         print(f"  1. Set FINNHUB_API_KEY in .env")

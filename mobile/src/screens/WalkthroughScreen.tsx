@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, FontSize, FontFamily, Radius } from "../utils/theme";
-import { useMode } from "../contexts/ModeContext";
 import { useWalkthrough } from "../contexts/WalkthroughContext";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -23,86 +22,45 @@ interface Slide {
   color: string;
 }
 
-const CLASSROOM_SLIDES: Slide[] = [
+const SLIDES: Slide[] = [
   {
-    icon: "rocket-outline",
-    title: "Welcome!",
-    description: "Learn to invest with virtual money in a safe environment",
-    color: Colors.primary,
-  },
-  {
-    icon: "swap-horizontal-outline",
-    title: "Trade",
-    description: "Buy and sell real stocks with your $10,000 virtual balance",
-    color: Colors.accent,
-  },
-  {
-    icon: "briefcase-outline",
-    title: "Portfolio",
-    description: "Track your holdings and watch your portfolio grow",
+    icon: "skull-outline",
+    title: "Welcome, Hunter",
+    description: "Predict stock price movements on 1-hour windows to earn Double Dollars",
     color: Colors.orange,
   },
   {
-    icon: "school-outline",
-    title: "Learn",
-    description: "Take quizzes to earn bonus cash for your portfolio",
+    icon: "trending-up-outline",
+    title: "Make Your Pick",
+    description: "Swipe UP, DOWN, or HOLD on each stock — choose your confidence level",
+    color: Colors.accent,
+  },
+  {
+    icon: "star-outline",
+    title: "Climb the Ranks",
+    description: "Build your wanted level with streaks and earn bigger multipliers",
     color: Colors.yellow,
   },
   {
-    icon: "bar-chart-outline",
-    title: "Stocks",
-    description: "Browse real stocks and see live market prices",
+    icon: "hammer-outline",
+    title: "Collect Irons",
+    description: "Unlock gear that modifies your scoring, accuracy, and economy",
     color: Colors.primary,
   },
   {
-    icon: "trophy-outline",
-    title: "Leaderboard",
-    description: "Compete with classmates to become the best trader",
-    color: Colors.accent,
-  },
-];
-
-const LEAGUE_SLIDES: Slide[] = [
-  {
-    icon: "rocket-outline",
-    title: "Welcome!",
-    description: "Compete with real stock picks against other traders",
-    color: Colors.primary,
-  },
-  {
-    icon: "swap-horizontal-outline",
-    title: "Trade",
-    description: "Buy and sell stocks in your active season",
-    color: Colors.accent,
-  },
-  {
-    icon: "briefcase-outline",
-    title: "Portfolio",
-    description: "Track your holdings and P&L across seasons",
+    icon: "list-outline",
+    title: "Top the Board",
+    description: "Compete against other hunters on the weekly and all-time leaderboards",
     color: Colors.orange,
-  },
-  {
-    icon: "bar-chart-outline",
-    title: "Stocks",
-    description: "Browse stocks, filter by sector, and check prices",
-    color: Colors.yellow,
-  },
-  {
-    icon: "calendar-outline",
-    title: "Seasons",
-    description: "Join seasons, create your own, and climb the leaderboard",
-    color: Colors.primary,
   },
 ];
 
 export default function WalkthroughScreen() {
-  const { mode } = useMode();
   const { completeWalkthrough } = useWalkthrough();
   const scrollRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const slides = mode === "classroom" ? CLASSROOM_SLIDES : LEAGUE_SLIDES;
-  const isLastSlide = currentIndex === slides.length - 1;
+  const isLastSlide = currentIndex === SLIDES.length - 1;
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
@@ -133,7 +91,7 @@ export default function WalkthroughScreen() {
         onMomentumScrollEnd={handleScroll}
         bounces={false}
       >
-        {slides.map((slide, index) => (
+        {SLIDES.map((slide, index) => (
           <View key={index} style={styles.slide}>
             <View style={[styles.iconCircle, { backgroundColor: slide.color + "20" }]}>
               <Ionicons name={slide.icon} size={64} color={slide.color} />
@@ -148,7 +106,7 @@ export default function WalkthroughScreen() {
       <View style={styles.bottomControls}>
         {/* Dot indicators */}
         <View style={styles.dots}>
-          {slides.map((slide, index) => (
+          {SLIDES.map((slide, index) => (
             <View
               key={index}
               style={[
@@ -163,7 +121,7 @@ export default function WalkthroughScreen() {
 
         {/* Next / Get Started button */}
         <TouchableOpacity
-          style={[styles.nextButton, { backgroundColor: slides[currentIndex].color }]}
+          style={[styles.nextButton, { backgroundColor: SLIDES[currentIndex].color }]}
           onPress={handleNext}
         >
           <Text style={styles.nextButtonText}>

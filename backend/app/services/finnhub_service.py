@@ -1,13 +1,12 @@
 import httpx
 import asyncio
 from datetime import datetime, timezone
-from sqlalchemy import select, func, update
+from sqlalchemy import select, update
 import logging
 
 logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.stock import StockActive, StockMaster
-from app.models.holding import Holding
 from app.config import get_settings
 
 settings = get_settings()
@@ -88,7 +87,7 @@ async def refresh_stock_price(db: AsyncSession, symbol: str) -> StockActive | No
 
 
 async def refresh_all_prices(db: AsyncSession, all_stocks: bool = False) -> int:
-    """Refresh prices for held stocks, or all stocks in the master catalog."""
+    """Refresh prices for active stocks, or all stocks in the master catalog."""
     if all_stocks:
         result = await db.execute(
             select(StockMaster.symbol)
@@ -97,8 +96,7 @@ async def refresh_all_prices(db: AsyncSession, all_stocks: bool = False) -> int:
         )
     else:
         result = await db.execute(
-            select(func.distinct(Holding.stock_symbol))
-            .where(Holding.shares_owned > 0)
+            select(StockActive.symbol).order_by(StockActive.symbol)
         )
     symbols = [row[0] for row in result.all()]
 

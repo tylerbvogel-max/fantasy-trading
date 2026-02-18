@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, seasons, trade, portfolio, stocks, admin, education, bounty
+from app.routers import auth, stocks, admin, bounty
 from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.database import engine, Base
 from sqlalchemy import text
@@ -17,22 +17,6 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            # Add columns that were added after initial table creation
-            await conn.execute(text(
-                "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS game_mode VARCHAR(20) NOT NULL DEFAULT 'league'"
-            ))
-            await conn.execute(text(
-                "ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS difficulty INTEGER NOT NULL DEFAULT 1"
-            ))
-            await conn.execute(text(
-                "UPDATE education_topics SET name = 'Trading' WHERE id = 'trading-101' AND name = 'Trading 101'"
-            ))
-            await conn.execute(text(
-                "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS max_trades_per_player INTEGER"
-            ))
-            await conn.execute(text(
-                "ALTER TABLE seasons ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id)"
-            ))
             # Bounty sim mechanics columns
             await conn.execute(text(
                 "ALTER TABLE bounty_player_stats ADD COLUMN IF NOT EXISTS notoriety FLOAT DEFAULT 0.0"
@@ -77,9 +61,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Fantasy Stock Trading",
-    description="Competitive paper trading game with themed seasons",
-    version="1.0.0",
+    title="Bounty Hunter",
+    description="Stock prediction game — make directional picks on 1-hour price windows",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -94,20 +78,16 @@ app.add_middleware(
 
 # Register routers
 app.include_router(auth.router)
-app.include_router(seasons.router)
-app.include_router(trade.router)
-app.include_router(portfolio.router)
 app.include_router(stocks.router)
 app.include_router(admin.router)
-app.include_router(education.router)
 app.include_router(bounty.router)
 
 
 @app.get("/")
 async def root():
     return {
-        "app": "Fantasy Stock Trading",
-        "version": "1.0.1",
+        "app": "Bounty Hunter",
+        "version": "2.0.0",
         "docs": "/docs",
     }
 

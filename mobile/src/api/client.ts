@@ -1,5 +1,5 @@
 /**
- * API client for the Fantasy Trading backend.
+ * API client for the Bounty Hunter backend.
  * All requests go through this module for consistent auth handling.
  */
 
@@ -106,8 +106,6 @@ export interface UserProfile {
   alias: string;
   is_admin: boolean;
   created_at: string;
-  active_seasons: SeasonSummary[];
-  knowledge_score: number;
 }
 
 export const auth = {
@@ -125,214 +123,6 @@ export const auth = {
 
   me: () => request<UserProfile>("/auth/me"),
 };
-
-// ── Seasons ──
-
-export interface SeasonSummary {
-  id: string;
-  name: string;
-  season_type: string;
-  mode: string;
-  is_active: boolean;
-  starting_cash: number;
-  player_count: number;
-  start_date: string;
-  end_date: string | null;
-  max_trades_per_player: number | null;
-  margin_enabled: boolean;
-  leverage_multiplier: number | null;
-  margin_interest_rate: number | null;
-  maintenance_margin_pct: number | null;
-}
-
-export interface SeasonDetail extends SeasonSummary {
-  allowed_stocks: string[] | null;
-  description: string | null;
-}
-
-export interface CreateSeasonRequest {
-  name: string;
-  starting_cash: number;
-  duration_days: number;
-  max_trades_per_player?: number | null;
-  description?: string | null;
-  margin_enabled?: boolean;
-  leverage_multiplier?: number;
-  margin_interest_rate?: number;
-  maintenance_margin_pct?: number;
-}
-
-export interface LeaderboardEntry {
-  rank: number;
-  alias: string;
-  total_value: number;
-  percent_gain: number;
-  holdings_count: number;
-}
-
-export const seasons = {
-  list: (mode?: string) =>
-    request<SeasonSummary[]>(`/seasons${mode ? `?mode=${mode}` : ""}`),
-
-  get: (id: string) => request<SeasonDetail>(`/seasons/${id}`),
-
-  create: (data: CreateSeasonRequest) =>
-    request<SeasonDetail>("/seasons", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  join: (id: string) =>
-    request<{ player_season_id: string; message: string }>(
-      `/seasons/${id}/join`,
-      { method: "POST" }
-    ),
-
-  leaderboard: (id: string) =>
-    request<LeaderboardEntry[]>(`/seasons/${id}/leaderboard`),
-
-  players: (id: string) => request<string[]>(`/seasons/${id}/players`),
-
-  stocks: (id: string) => request<StockQuote[]>(`/seasons/${id}/stocks`),
-};
-
-// ── Trading ──
-
-export interface TradeRequest {
-  season_id: string;
-  stock_symbol: string;
-  transaction_type: "BUY" | "SELL";
-  shares: number;
-  use_margin?: boolean;
-}
-
-export interface TradeResponse {
-  transaction_id: string;
-  stock_symbol: string;
-  transaction_type: string;
-  shares: number;
-  price_per_share: number;
-  total_amount: number;
-  new_cash_balance: number;
-  executed_at: string;
-  margin_used: number;
-  new_margin_loan: number;
-}
-
-export interface TransactionHistory {
-  id: string;
-  stock_symbol: string;
-  transaction_type: string;
-  shares: number;
-  price_per_share: number;
-  total_amount: number;
-  executed_at: string;
-}
-
-export interface TradeValidation {
-  is_valid: boolean;
-  stock_symbol: string;
-  current_price: number;
-  estimated_total: number;
-  available_cash: number | null;
-  available_shares: number | null;
-  message: string;
-  buying_power: number | null;
-  margin_warning: string | null;
-}
-
-export const trading = {
-  execute: (data: TradeRequest) =>
-    request<TradeResponse>("/trade", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  validate: (data: TradeRequest) =>
-    request<TradeValidation>("/trade/validate", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  history: (seasonId: string) =>
-    request<TransactionHistory[]>(`/trade/history?season_id=${seasonId}`),
-};
-
-// ── Portfolio ──
-
-export interface HoldingResponse {
-  stock_symbol: string;
-  stock_name: string;
-  shares_owned: number;
-  average_purchase_price: number;
-  current_price: number;
-  current_value: number;
-  gain_loss: number;
-  gain_loss_pct: number;
-  weight_pct: number;
-}
-
-export interface PortfolioSummary {
-  season_id: string;
-  season_name: string;
-  cash_balance: number;
-  holdings_value: number;
-  total_value: number;
-  percent_gain: number;
-  holdings: HoldingResponse[];
-  margin_loan_balance: number;
-  margin_equity: number;
-  margin_call_active: boolean;
-}
-
-export const portfolio = {
-  get: (seasonId: string) =>
-    request<PortfolioSummary>(`/portfolio?season_id=${seasonId}`),
-
-  history: (seasonId: string) =>
-    request<{ date: string; total_value: number; percent_gain: number }[]>(
-      `/portfolio/history?season_id=${seasonId}`
-    ),
-
-  analytics: (seasonId: string, compareTo?: string) => {
-    const params = new URLSearchParams({ season_id: seasonId });
-    if (compareTo) params.append("compare_to", compareTo);
-    return request<PortfolioAnalytics>(`/portfolio/analytics?${params}`);
-  },
-
-  player: (seasonId: string, alias: string) =>
-    request<PortfolioSummary>(`/portfolio/player?season_id=${seasonId}&alias=${encodeURIComponent(alias)}`),
-};
-
-// ── Analytics ──
-
-export interface BenchmarkAnalytics {
-  benchmark: string;
-  benchmark_name: string;
-  beta: number;
-  alpha: number;
-  data_points: number;
-  beta_interpretation: string;
-  alpha_interpretation: string;
-}
-
-export interface PlayerComparison {
-  compare_alias: string;
-  beta: number;
-  alpha: number;
-  data_points: number;
-  beta_interpretation: string;
-  alpha_interpretation: string;
-}
-
-export interface PortfolioAnalytics {
-  season_id: string;
-  benchmarks: BenchmarkAnalytics[];
-  player_comparison: PlayerComparison | null;
-  insufficient_data: boolean;
-  min_days_required: number;
-  days_available: number;
-}
 
 // ── Stocks ──
 
@@ -358,59 +148,6 @@ export const stocks = {
 
   count: () => request<{ count: number }>("/stocks/count"),
 };
-
-// ── Education ──
-
-export interface TopicSummary {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  fact_count: number;
-  completed_count: number;
-  progress_pct: number;
-}
-
-export interface QuizQuestionResponse {
-  id: string;
-  question_text: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  difficulty: number;
-}
-
-export interface FactDetail {
-  id: string;
-  title: string;
-  explanation: string;
-  question: QuizQuestionResponse | null;
-  is_mastered: boolean;
-  is_locked: boolean;
-  retry_available_at: string | null;
-}
-
-export interface QuizAnswerRequest {
-  question_id: string;
-  selected_option: string;
-}
-
-export interface QuizAnswerResponse {
-  is_correct: boolean;
-  correct_option: string;
-  explanation: string;
-  points_earned: number;
-  retry_available_at: string | null;
-  knowledge_score: number;
-}
-
-export interface UserKnowledgeScore {
-  total_score: number;
-  questions_answered: number;
-  questions_correct: number;
-  topics_mastered: number;
-}
 
 // ── Bounty ──
 
@@ -620,19 +357,4 @@ export const bounty = {
     request<BountyResetResponse>("/bounty/reset", {
       method: "POST",
     }),
-};
-
-export const education = {
-  topics: () => request<TopicSummary[]>("/education/topics"),
-
-  facts: (topicId: string) =>
-    request<FactDetail[]>(`/education/topics/${topicId}/facts`),
-
-  submitAnswer: (data: QuizAnswerRequest) =>
-    request<QuizAnswerResponse>("/education/quiz/answer", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  score: () => request<UserKnowledgeScore>("/education/score"),
 };

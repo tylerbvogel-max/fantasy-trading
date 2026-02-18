@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import * as SecureStore from "expo-secure-store";
-import { useMode } from "./ModeContext";
+
+const STORE_KEY = "walkthrough_seen_bountyHunter";
 
 interface WalkthroughContextValue {
   showWalkthrough: boolean;
@@ -16,37 +17,24 @@ const WalkthroughContext = createContext<WalkthroughContextValue>({
   resetWalkthrough: () => {},
 });
 
-function getStoreKey(mode: string): string {
-  const normalized = mode === "arena" ? "league" : mode;
-  return `walkthrough_seen_${normalized}`;
-}
-
 export function WalkthroughProvider({ children }: { children: React.ReactNode }) {
-  const { mode } = useMode();
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!mode) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    SecureStore.getItemAsync(getStoreKey(mode)).then((seen) => {
+    SecureStore.getItemAsync(STORE_KEY).then((seen) => {
       setShowWalkthrough(!seen);
       setIsLoading(false);
     });
-  }, [mode]);
+  }, []);
 
   const completeWalkthrough = () => {
-    if (!mode) return;
     setShowWalkthrough(false);
-    SecureStore.setItemAsync(getStoreKey(mode), "true");
+    SecureStore.setItemAsync(STORE_KEY, "true");
   };
 
   const resetWalkthrough = () => {
-    if (!mode) return;
-    SecureStore.deleteItemAsync(getStoreKey(mode));
+    SecureStore.deleteItemAsync(STORE_KEY);
     setShowWalkthrough(true);
   };
 

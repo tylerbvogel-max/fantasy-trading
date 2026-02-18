@@ -70,7 +70,8 @@
 - "Stock drops" — new stocks become available to claim mid-season
 - Volatility events: random earnings, SEC investigation (stock frozen), delisting risk (forced sell), etc.
 
-## Tutorial / Education
+## Tutorial / Education (Future Mode — Preserved)
+- **Core feature: Financial Mastery Quiz System** — progressive difficulty from basic financial literacy (what is a stock, P/E ratio, market cap) all the way up to Jane Street-level interview questions (probability puzzles, options pricing, market microstructure, expected value problems). This is the anchor feature if education mode is ever built out.
 - **Tutorial Island** — 1 week intro league for complete beginners
 - Tip pop-ups
 - Market knowledge quiz / learning modules
