@@ -8,7 +8,7 @@ import Constants from "expo-constants";
 
 // Reads from app.json → expo.extra.apiUrl. Change there for prod.
 const API_BASE: string =
-  Constants.expoConfig?.extra?.apiUrl ?? "http://192.168.1.90:8000";
+  Constants.expoConfig?.extra?.apiUrl ?? "https://fantasy-trading-api.onrender.com";
 
 const TOKEN_KEY = "auth_token";
 
