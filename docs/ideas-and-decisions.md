@@ -11,6 +11,25 @@
 - Tappable stock name in swipe card → opens an info/detail page about the security (company info, key stats, news)
 - **Bloomberg-style scrolling headlines** — pull headline data from Finviz or another rolling news source for stocks actively owned by players in a given league. Display as a ticker/marquee that cycles like the Bloomberg channel crawl
 
+## Dev Notes
+- Intro loading screen animation
+- Animations in general — invest in motion/polish across the app
+- Collection page of accomplishments/achievements — super granular with descriptions
+- "Enhanced stocks" — behavior changes from what the market reports (more volatile, less volatile, directional shifts)
+- Dummy stocks added to provide combos and add more to the 5-card monte
+- Change "ante" to "fund fee" or something more financial-sounding
+- Equivalent of tarot cards — check Claude for finance-world analogues
+- Planet card equivalent — apply certain behavior changes to stocks; check behaviors Balatro uses for inspiration
+- Booster packs (find better term) that provide modifier types above — mix into gameplay, earn them as rewards. Maybe call them "funding rounds" or similar
+- Difficulty unlocks — need lever to identify different difficulty types (fewer stocks, higher ante with more stocks, preselected modifiers, other changes)
+- Ability to restart at any time — need 1-hour marker to move from player-initiated timestamp
+- Transition pages that give famous finance quotes — see [`finance-quotes.md`](finance-quotes.md) for 35 curated quotes organized by era
+- Add more stocks as sets so rounds can be played faster — sets of 5 still, but add ~50 total. Maybe make this a variable component. Goal: allow more than single-round interaction per session, more interactions per day. Needs design work to hammer out.
+- Consider what analytics tools day traders commonly use and make those selectable styles (candlestick chart, time range selection, moving averages, etc.). Depends on data availability. Ability to toggle on/off, or make these power-ups themselves.
+- Leaderboard analytics needs bolstering — alpha, beta, std dev; use Fidelity performance stats for inspiration
+- Future state: AI narrative based on player behavior for feedback. Must be cryptic, not fed on game mechanics so no cheating derived.
+- Need disclaimer: game is for entertainment purposes and not financial advice. "This should be obvious, but… [insert disclosure here]"
+
 ---
 
 ## Mini League Sessions
