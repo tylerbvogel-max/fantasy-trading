@@ -22,12 +22,11 @@ The app is focused exclusively on Bounty Hunter mode. Previous multi-mode infras
 - Swagger docs at /docs
 
 ### Mobile
-- 5 tabs: Bounty, Stats, Board, Lab, Profile
+- 4 tabs: Bounty, Stats, Board, Profile
 - Auth screen (register with invite code, login with token)
 - BountyHunterScreen — main prediction interface with swipe cards
 - BountyStatsScreen — detailed player statistics
 - BountyBoardScreen — leaderboard
-- SwipeTestScreen — lab/testing area
 - ProfileScreen — user info, settings, logout
 
 ## Key Design Decisions
