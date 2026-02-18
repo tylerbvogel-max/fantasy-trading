@@ -118,7 +118,7 @@ class BountyIronOffering(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    bounty_window_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bounty_windows.id"), nullable=False)
+    bounty_window_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("bounty_windows.id"), nullable=True)
     offered_iron_ids: Mapped[str] = mapped_column(String(500), nullable=False)  # JSON array string
     chosen_iron_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

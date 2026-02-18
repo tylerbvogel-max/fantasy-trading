@@ -147,7 +147,7 @@ def roll_iron_offering(equipped_ids: set[str]) -> list[dict]:
 
 
 async def create_iron_offering(
-    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID
+    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID | None = None
 ) -> BountyIronOffering | None:
     """Create an iron offering for a player after window settlement."""
     equipped_result = await db.execute(
@@ -742,6 +742,9 @@ async def reset_player(db: AsyncSession, user_id: uuid.UUID) -> dict:
     )
     for off in off_result.scalars().all():
         off.chosen_iron_id = "__reset__"
+
+    # Create a fresh iron offering for the new game
+    await create_iron_offering(db, user_id, window_id=None)
 
     await db.commit()
     return {
