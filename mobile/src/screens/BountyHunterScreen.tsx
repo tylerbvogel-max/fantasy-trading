@@ -60,6 +60,41 @@ const TEST_CHOICES: ("RISE" | "FALL" | "HOLD")[] = ["RISE", "FALL", "HOLD"];
 const NOTORIETY_WEIGHT: Record<number, number> = { 1: 1, 2: 1.5, 3: 2 };
 const NOTORIETY_UP_THRESHOLD = 3;
 const NOTORIETY_DOWN_THRESHOLD = -2;
+
+const WantedBar = ({ level, mult }: { level: number; mult: number }) => (
+  <View
+    style={{
+      width: 120,
+      height: 16,
+      backgroundColor: Colors.surface,
+      borderRadius: Radius.full,
+      overflow: "hidden",
+      justifyContent: "center",
+    }}
+  >
+    <View
+      style={{
+        position: "absolute",
+        width: `${Math.min(level / 10, 1) * 100}%`,
+        height: "100%",
+        backgroundColor: Colors.orange,
+        borderRadius: Radius.full,
+      }}
+    />
+    <Text
+      style={{
+        position: "absolute",
+        alignSelf: "center",
+        color: "#fff",
+        fontSize: FontSize.xs,
+        fontFamily: FontFamily.bold,
+      }}
+    >
+      Lv.{level} · {mult}x
+    </Text>
+  </View>
+);
+
 const ANTE_BASE = 75;
 const HOLSTER_COLOR = Colors.primary;
 
@@ -712,9 +747,7 @@ export default function BountyHunterScreen() {
           >
             $${displayBalance.toLocaleString()}
           </Text>
-          <Text style={styles.wantedText}>
-            Lv.{wantedLevel} ({mult}x)
-          </Text>
+          <WantedBar level={wantedLevel} mult={mult} />
         </View>
 
         {/* Pick counter */}
@@ -910,9 +943,7 @@ export default function BountyHunterScreen() {
           >
             $${displayBalance.toLocaleString()}
           </Text>
-          <Text style={styles.wantedText}>
-            Lv.{wantedLevel} ({mult}x)
-          </Text>
+          <WantedBar level={wantedLevel} mult={mult} />
         </View>
 
         <ScrollView contentContainerStyle={styles.lockedPicksArea}>
@@ -1172,9 +1203,7 @@ export default function BountyHunterScreen() {
         >
           $${displayBalance.toLocaleString()}
         </Text>
-        <Text style={styles.wantedText}>
-          Lv.{wantedLevel} ({mult}x)
-        </Text>
+        <WantedBar level={wantedLevel} mult={mult} />
       </View>
 
       {previousWindow && previousWindow.is_settled && (
@@ -1324,12 +1353,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     color: Colors.yellow,
   },
-  wantedText: {
-    fontSize: FontSize.lg,
-    fontFamily: FontFamily.bold,
-    color: Colors.orange,
-  },
-
   // ── Status row (pick counter + confidence pills) ──
   statusRow: {
     flexDirection: "row",
