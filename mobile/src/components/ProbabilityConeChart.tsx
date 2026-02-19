@@ -170,15 +170,24 @@ export default function ProbabilityConeChart({
   // ── Synthesize OHLC when candleChart is on but backend only sent close ──
   const hasRealOHLC = histRaw.some((c) => c.open != null);
   const hist: CandlePoint[] = candleChart && !hasRealOHLC
-    ? histRaw.map((c, i) => {
-        // Use previous close as open, interpolate high/low from neighbors
-        const prevClose = i > 0 ? histRaw[i - 1].close : c.close;
-        const nextClose = i < histRaw.length - 1 ? histRaw[i + 1].close : c.close;
-        const synthOpen = prevClose;
-        const synthHigh = Math.max(synthOpen, c.close, (c.close + Math.max(synthOpen, nextClose)) / 2);
-        const synthLow = Math.min(synthOpen, c.close, (c.close + Math.min(synthOpen, nextClose)) / 2);
-        return { ...c, open: synthOpen, high: synthHigh, low: synthLow };
-      })
+    ? (() => {
+        // Compute avg absolute move to scale synthetic wicks
+        let totalMove = 0;
+        for (let i = 1; i < histRaw.length; i++) {
+          totalMove += Math.abs(histRaw[i].close - histRaw[i - 1].close);
+        }
+        const avgMove = histRaw.length > 1 ? totalMove / (histRaw.length - 1) : histRaw[0].close * 0.001;
+        return histRaw.map((c, i) => {
+          const prevClose = i > 0 ? histRaw[i - 1].close : c.close;
+          const synthOpen = prevClose;
+          const bodyHigh = Math.max(synthOpen, c.close);
+          const bodyLow = Math.min(synthOpen, c.close);
+          // Wicks extend beyond the body by 30-80% of avgMove (seeded by index for consistency)
+          const wickUp = avgMove * (0.3 + ((i * 7 + 3) % 11) / 22);
+          const wickDn = avgMove * (0.3 + ((i * 13 + 5) % 11) / 22);
+          return { ...c, open: synthOpen, high: bodyHigh + wickUp, low: bodyLow - wickDn };
+        });
+      })()
     : histRaw;
 
   const lastPrice = hist[hist.length - 1].close;
