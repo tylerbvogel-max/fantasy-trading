@@ -6,6 +6,9 @@ import { Colors, LightCardColors, FontFamily, FontSize, Spacing } from "../utils
 interface CandlePoint {
   timestamp: number;
   close: number;
+  open?: number;
+  high?: number;
+  low?: number;
 }
 
 interface ProbabilityConeChartProps {
@@ -16,6 +19,7 @@ interface ProbabilityConeChartProps {
   width: number;
   height: number;
   lightTheme?: boolean;
+  candleChart?: boolean;
 }
 
 const CHART_PADDING = { top: 20, right: 50, bottom: 30, left: 55 };
@@ -104,6 +108,7 @@ export default function ProbabilityConeChart({
   width,
   height,
   lightTheme,
+  candleChart,
 }: ProbabilityConeChartProps) {
   const tc = lightTheme
     ? { text: LightCardColors.text, textMuted: LightCardColors.textMuted, border: LightCardColors.border }
@@ -153,14 +158,28 @@ export default function ProbabilityConeChart({
   const tEnd = Math.ceil((nowTs + 3600) / FIVE_MIN) * FIVE_MIN;
   const totalDuration = tEnd - tStart;
 
-  const hist = rawHist.filter((c) => c.timestamp >= tStart);
-  if (hist.length < 2) {
+  const histRaw = rawHist.filter((c) => c.timestamp >= tStart);
+  if (histRaw.length < 2) {
     return (
       <View style={styles.stateWrap}>
         <Text style={styles.stateText}>Need more candle data...</Text>
       </View>
     );
   }
+
+  // ── Synthesize OHLC when candleChart is on but backend only sent close ──
+  const hasRealOHLC = histRaw.some((c) => c.open != null);
+  const hist: CandlePoint[] = candleChart && !hasRealOHLC
+    ? histRaw.map((c, i) => {
+        // Use previous close as open, interpolate high/low from neighbors
+        const prevClose = i > 0 ? histRaw[i - 1].close : c.close;
+        const nextClose = i < histRaw.length - 1 ? histRaw[i + 1].close : c.close;
+        const synthOpen = prevClose;
+        const synthHigh = Math.max(synthOpen, c.close, (c.close + Math.max(synthOpen, nextClose)) / 2);
+        const synthLow = Math.min(synthOpen, c.close, (c.close + Math.min(synthOpen, nextClose)) / 2);
+        return { ...c, open: synthOpen, high: synthHigh, low: synthLow };
+      })
+    : histRaw;
 
   const lastPrice = hist[hist.length - 1].close;
   const firstPrice = hist[0].close;
@@ -197,7 +216,11 @@ export default function ProbabilityConeChart({
 
   // ── Y-axis range: snap to clean price intervals ──
   const histPrices = hist.map((c) => c.close);
-  const allValues = [...histPrices, ...cone3.upper, ...cone3.lower];
+  // Include OHLC highs/lows in range when available
+  const ohlcValues = candleChart
+    ? hist.flatMap((c) => [c.high ?? c.close, c.low ?? c.close])
+    : [];
+  const allValues = [...histPrices, ...ohlcValues, ...cone3.upper, ...cone3.lower];
   const rawMin = Math.min(...allValues);
   const rawMax = Math.max(...allValues);
   const rawRange = rawMax - rawMin;
@@ -401,13 +424,65 @@ export default function ProbabilityConeChart({
           strokeDasharray="4,4"
         />
 
-        {/* Historical price polyline */}
-        <Path
-          d={histPath}
-          fill="none"
-          stroke={isUp ? Colors.green : Colors.accent}
-          strokeWidth={2}
-        />
+        {/* Historical price data */}
+        {candleChart ? (
+          // ── OHLC Candlesticks ──
+          <>
+            {hist.map((c, i) => {
+              const o = c.open ?? c.close;
+              const h = c.high ?? Math.max(o, c.close);
+              const lo = c.low ?? Math.min(o, c.close);
+              const cx = timeToX(c.timestamp);
+              const bullish = c.close >= o;
+              const color = bullish ? Colors.green : Colors.accent;
+
+              // Body
+              const bodyTop = CHART_PADDING.top + toY(Math.max(o, c.close), yMin, yMax, plotH);
+              const bodyBot = CHART_PADDING.top + toY(Math.min(o, c.close), yMin, yMax, plotH);
+              const bodyH = Math.max(1, bodyBot - bodyTop);
+
+              // Wick
+              const wickTop = CHART_PADDING.top + toY(h, yMin, yMax, plotH);
+              const wickBot = CHART_PADDING.top + toY(lo, yMin, yMax, plotH);
+
+              // Dynamic width: scale to available space, min 1px, max 4px
+              const candleW = Math.max(1, Math.min(4, (plotW / hist.length) * 0.6));
+
+              return (
+                <React.Fragment key={`candle-${i}`}>
+                  {/* Wick */}
+                  <Line
+                    x1={cx}
+                    y1={wickTop}
+                    x2={cx}
+                    y2={wickBot}
+                    stroke={color}
+                    strokeWidth={1}
+                  />
+                  {/* Body */}
+                  <Rect
+                    x={cx - candleW / 2}
+                    y={bodyTop}
+                    width={candleW}
+                    height={bodyH}
+                    fill={bullish ? color : color}
+                    fillOpacity={bullish ? 0.3 : 1}
+                    stroke={color}
+                    strokeWidth={0.5}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </>
+        ) : (
+          // ── Line chart (default) ──
+          <Path
+            d={histPath}
+            fill="none"
+            stroke={isUp ? Colors.green : Colors.accent}
+            strokeWidth={2}
+          />
+        )}
 
         {/* X-axis time labels */}
         {timeLabels.map((tl, i) => (

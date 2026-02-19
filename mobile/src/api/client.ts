@@ -183,6 +183,8 @@ export interface BountyPickResponse {
   insurance_triggered: boolean;
   base_points: number;
   wanted_multiplier_used: number;
+  leverage: number;
+  margin_call_triggered: boolean;
 }
 
 export interface BountyEquippedIron {
@@ -205,6 +207,7 @@ export interface BountyStatsResponse {
   chambers: number;
   is_busted: boolean;
   bust_count: number;
+  margin_call_cooldown: number;
   equipped_irons: BountyEquippedIron[];
   pending_offering: boolean;
 }
@@ -212,6 +215,9 @@ export interface BountyStatsResponse {
 export interface SpyCandlePoint {
   timestamp: number;
   close: number;
+  open?: number;
+  high?: number;
+  low?: number;
 }
 
 export interface BountyStockStatus {
@@ -236,6 +242,7 @@ export interface BountyStatus {
   stocks: BountyStockStatus[];
   ante_cost: number;
   skip_cost: number;
+  max_leverage: number;
 }
 
 export interface BountyIronFullDef {
@@ -274,6 +281,7 @@ export interface BountySubmitResponse {
   bet_amount: number;
   message: string;
   symbol: string;
+  leverage: number;
 }
 
 export interface ConfidenceStatEntry {
@@ -338,7 +346,7 @@ export interface BountyBoardEntry {
 export const bounty = {
   status: () => request<BountyStatus>("/bounty/status"),
 
-  predict: (data: { bounty_window_id: string; prediction: string; bet_amount: number; symbol: string }) =>
+  predict: (data: { bounty_window_id: string; prediction: string; bet_amount: number; symbol: string; leverage: number }) =>
     request<BountySubmitResponse>("/bounty/predict", {
       method: "POST",
       body: JSON.stringify(data),

@@ -26,6 +26,7 @@ import {
 import ProbabilityConeChart from "../components/ProbabilityConeChart";
 import IronOfferingModal from "../components/IronOfferingModal";
 import PixelFire from "../components/PixelFire";
+import QuoteTransition from "../components/QuoteTransition";
 
 // ── Card & gesture constants ──
 
@@ -221,7 +222,7 @@ function useCountdown(targetTime: string | null) {
 
 export default function BountyHunterScreen() {
   // ── Card theme ──
-  const { lightCards } = useCardTheme();
+  const { lightCards, candleChart } = useCardTheme();
 
   // ── API hooks ──
   const { data: status, isLoading, isError, refetch } = useBountyStatus();
@@ -233,16 +234,18 @@ export default function BountyHunterScreen() {
 
   // ── UI state ──
   const [betAmount, setBetAmount] = useState(50);
+  const [leverage, setLeverage] = useState(1.0);
   const [toast, setToast] = useState<string | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const [swipedPicks, setSwipedPicks] = useState<
-    { symbol: string; prediction: "UP" | "DOWN" | "HOLD"; betAmount: number }[]
+    { symbol: string; prediction: "UP" | "DOWN" | "HOLD"; betAmount: number; leverage: number }[]
   >([]);
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
   const [showIronModal, setShowIronModal] = useState(false);
   const [ignoreServerPicks, setIgnoreServerPicks] = useState(false);
   const [boostedIronId, setBoostedIronId] = useState<string | null>(null);
-
+  const [roundNumber, setRoundNumber] = useState(1);
+  const [showQuote, setShowQuote] = useState(false);
 
   // ── Test mode: random outcomes for each stock (1/3 each) ──
   const [testOutcomes, setTestOutcomes] = useState<Record<string, "RISE" | "FALL" | "HOLD">>({});
@@ -263,7 +266,12 @@ export default function BountyHunterScreen() {
   const anteCost = status?.ante_cost ?? 75;
   const skipCost = status?.skip_cost ?? 25;
 
-  const allStocks = (status?.stocks ?? []).slice(0, 5);
+  const BATCH_SIZE = 5;
+  const TOTAL_ROUNDS = 30;
+  const totalStocks = status?.stocks ?? [];
+  const totalBatches = Math.max(1, Math.ceil(totalStocks.length / BATCH_SIZE));
+  const batchIndex = (roundNumber - 1) % totalBatches;
+  const allStocks = totalStocks.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
   const swipedSymbolSet = new Set(swipedPicks.map((p) => p.symbol));
   const unpickedStocks = allStocks.filter(
     (s) =>
@@ -280,14 +288,17 @@ export default function BountyHunterScreen() {
   const currentStock = unpickedStocks.length > 0 ? unpickedStocks[0] : null;
   const nextStock = unpickedStocks.length > 1 ? unpickedStocks[1] : null;
   const allExhausted = allStocks.length > 0 && unpickedStocks.length === 0;
+  const cardInBatch = pickedStocks.length + skippedStocks.length + 1;
   const stockProgress = allStocks.length > 0
-    ? `${pickedStocks.length + skippedStocks.length + 1}/${allStocks.length}`
+    ? `Round ${roundNumber}/${TOTAL_ROUNDS} · Card ${Math.min(cardInBatch, allStocks.length)}/${allStocks.length}`
     : "";
 
   const hasActiveWindow = !!currentWindow;
   const wantedLevel = Math.max(1, (stats?.wanted_level ?? 1) + testLevelOffset);
   const mult = getWantedMult(Math.max(wantedLevel, 1));
   const displayBalance = (stats?.double_dollars ?? 0) + testBalanceOffset;
+  const maxLeverage = status?.max_leverage ?? 2.0;
+  const marginCallCooldown = stats?.margin_call_cooldown ?? 0;
 
   const windowEndCountdown = useCountdown(currentWindow?.end_time ?? null);
   const nextWindowCountdown = useCountdown(
@@ -464,7 +475,13 @@ export default function BountyHunterScreen() {
     setSwipedPicks([]);
     setSkippedSymbols([]);
     setBoostedIronId(null);
+    setLeverage(1.0);
   }, [windowId]);
+
+  // Auto-set leverage to 1.0 when cooldown is active
+  useEffect(() => {
+    if (marginCallCooldown > 0) setLeverage(1.0);
+  }, [marginCallCooldown]);
 
   // Show iron offering modal
   useEffect(() => {
@@ -497,7 +514,7 @@ export default function BountyHunterScreen() {
   const handleSwipe = (prediction: "UP" | "DOWN") => {
     if (!currentWindow || !currentStock) return;
     const symbol = currentStock.symbol;
-    setSwipedPicks((prev) => [...prev, { symbol, prediction, betAmount }]);
+    setSwipedPicks((prev) => [...prev, { symbol, prediction, betAmount, leverage }]);
 
     // In test rounds (ignoreServerPicks), skip backend — just track locally
     if (ignoreServerPicks) {
@@ -511,6 +528,7 @@ export default function BountyHunterScreen() {
         prediction,
         bet_amount: betAmount,
         symbol,
+        leverage,
       },
       {
         onSuccess: () => showToast(`${symbol} Locked In!`),
@@ -535,7 +553,7 @@ export default function BountyHunterScreen() {
   const handleHold = () => {
     if (!currentWindow || !currentStock) return;
     const symbol = currentStock.symbol;
-    setSwipedPicks((prev) => [...prev, { symbol, prediction: "HOLD", betAmount }]);
+    setSwipedPicks((prev) => [...prev, { symbol, prediction: "HOLD", betAmount, leverage }]);
 
     // In test rounds (ignoreServerPicks), skip backend — just track locally
     if (ignoreServerPicks) {
@@ -549,6 +567,7 @@ export default function BountyHunterScreen() {
         prediction: "HOLD",
         bet_amount: betAmount,
         symbol,
+        leverage,
       },
       {
         onSuccess: () => showToast(`${symbol} HOLD Locked In!`),
@@ -632,20 +651,35 @@ export default function BountyHunterScreen() {
     });
   };
 
-  const handleNextRound = () => {
-    setTestBalanceOffset((prev) => prev + lastRoundTotal.current);
-    setTestLevelOffset((prev) => prev + lastLevelChange.current);
+  const advanceRound = () => {
+    setShowQuote(false);
+    const nextRound = roundNumber + 1;
+    setRoundNumber(nextRound);
     setSwipedPicks([]);
     setSkippedSymbols([]);
     setBoostedIronId(null);
     setIgnoreServerPicks(true);
-    generateTestOutcomes(allStocks);
+    // Generate outcomes for the next batch's stocks
+    const nextBatchIndex = (nextRound - 1) % totalBatches;
+    const nextBatchStocks = totalStocks.slice(nextBatchIndex * BATCH_SIZE, (nextBatchIndex + 1) * BATCH_SIZE);
+    generateTestOutcomes(nextBatchStocks);
     refetch();
   };
 
-  // ── Scoring display values (bet-based) ──
-  const betWin = betAmount * mult;
-  const betLose = betAmount;
+  const handleNextRound = () => {
+    setTestBalanceOffset((prev) => prev + lastRoundTotal.current);
+    setTestLevelOffset((prev) => prev + lastLevelChange.current);
+    if (Math.random() < 0.5) {
+      setShowQuote(true);
+    } else {
+      advanceRound();
+    }
+  };
+
+  // ── Scoring display values (bet-based with leverage) ──
+  const effLev = leverage; // HOLD halving shown separately in indicator
+  const betWin = Math.round(betAmount * effLev * mult);
+  const betLose = Math.round(betAmount * effLev);
 
   // ── Loading state ──
   if (isLoading) {
@@ -820,18 +854,25 @@ export default function BountyHunterScreen() {
             </Text>
           </Animated.View>
 
-          {/* Holster indicator (bottom) */}
-          <Animated.View
-            style={[styles.indicator, styles.bottomIndicator, { opacity: holsterOpacity }]}
-          >
-            <Ionicons name="shield-checkmark" size={20} color={HOLSTER_COLOR} />
-            <Text style={[styles.indicatorLabel, { color: HOLSTER_COLOR }]}>HOLD</Text>
-            <Text style={styles.indicatorScore}>
-              <Text style={{ color: Colors.green }}>+{betWin}</Text>
-              {" / "}
-              <Text style={{ color: Colors.accent }}>-{betLose}</Text>
-            </Text>
-          </Animated.View>
+          {/* Holster indicator (bottom) — HOLD halves leverage */}
+          {(() => {
+            const holdEffLev = 1 + (leverage - 1) * 0.5;
+            const holdWin = Math.round(betAmount * holdEffLev * mult);
+            const holdLose = Math.round(betAmount * holdEffLev);
+            return (
+              <Animated.View
+                style={[styles.indicator, styles.bottomIndicator, { opacity: holsterOpacity }]}
+              >
+                <Ionicons name="shield-checkmark" size={20} color={HOLSTER_COLOR} />
+                <Text style={[styles.indicatorLabel, { color: HOLSTER_COLOR }]}>HOLD</Text>
+                <Text style={styles.indicatorScore}>
+                  <Text style={{ color: Colors.green }}>+{holdWin}</Text>
+                  {" / "}
+                  <Text style={{ color: Colors.accent }}>-{holdLose}</Text>
+                </Text>
+              </Animated.View>
+            );
+          })()}
 
           {/* Back card (next stock peeking behind) */}
           {nextStock && (
@@ -846,6 +887,7 @@ export default function BountyHunterScreen() {
                     width={CHART_WIDTH}
                     height={CHART_HEIGHT}
                     lightTheme={lightCards}
+                    candleChart={candleChart}
                   />
                 </View>
               </View>
@@ -892,6 +934,7 @@ export default function BountyHunterScreen() {
                 width={CHART_WIDTH}
                 height={CHART_HEIGHT}
                 lightTheme={lightCards}
+                candleChart={candleChart}
               />
 
               {/* Test outcome indicator */}
@@ -934,6 +977,10 @@ export default function BountyHunterScreen() {
           onBetAmountChange={setBetAmount}
           boostedIronId={boostedIronId}
           onBoostSelected={handleBoostSelected}
+          leverage={leverage}
+          onLeverageChange={setLeverage}
+          maxLeverage={maxLeverage}
+          marginCallCooldown={marginCallCooldown}
         />
       </View>
     );
@@ -943,6 +990,7 @@ export default function BountyHunterScreen() {
   if (hasActiveWindow && allExhausted) {
     return (
       <View style={styles.container}>
+        <QuoteTransition visible={showQuote} onComplete={advanceRound} />
         {toastElement}
         {ironModal}
 
@@ -981,19 +1029,25 @@ export default function BountyHunterScreen() {
               const bet = ignoreServerPicks
                 ? (swipedPick?.betAmount ?? 50)
                 : ((stock.my_pick as any)?.bet_amount ?? swipedPick?.betAmount ?? 50);
+              const pickLev = ignoreServerPicks
+                ? (swipedPick?.leverage ?? 1.0)
+                : ((stock.my_pick as any)?.leverage ?? swipedPick?.leverage ?? 1.0);
               const conf = betToTier(bet);
               const testAnswer = testOutcomes[stock.symbol];
               const predLabel = pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred;
               const isHold = pred === "HOLD";
               const isDE = conf === 3;
 
+              // Effective leverage (halved for HOLD)
+              const pickEffLev = isHold ? 1 + (pickLev - 1) * 0.5 : pickLev;
+
               // Ghost Rider: random miss→correct flip
               let isWin = testAnswer === predLabel;
               if (!isWin && fx.ghostChance > 0 && Math.random() < fx.ghostChance) isWin = true;
 
-              // Bet-based scoring: win = bet × mult, lose = bet
-              let winVal = bet * mult;
-              let loseVal = bet;
+              // Bet-based scoring with leverage: win = bet × leverage × mult, lose = bet × leverage
+              let winVal = Math.round(bet * pickEffLev * mult);
+              let loseVal = Math.round(bet * pickEffLev);
 
               // Iron win bonuses
               if (conf === 1) winVal += fx.drawWinBonus * mult;
@@ -1015,13 +1069,18 @@ export default function BountyHunterScreen() {
               let notorietyDelta = notorietyWeight * (isWin ? 1 : -1);
               if (isWin && fx.notorietyBonus > 0) notorietyDelta += fx.notorietyBonus;
 
-              roundTotal += scaledPoints;
+              // Carry cost for leverage
+              const carryCost = Math.round((pickLev - 1.0) * 10);
+              roundTotal += scaledPoints - carryCost;
               roundNotoriety += notorietyDelta;
+
+              // Leverage notoriety bonus
+              if (isWin && pickLev >= 3.0) roundNotoriety += 0.5;
 
               const color = pred === "UP" ? Colors.green : pred === "DOWN" ? Colors.accent : pred === "HOLD" ? Colors.primary : Colors.textMuted;
               const icon = pred === "UP" ? "arrow-up-circle" : pred === "DOWN" ? "arrow-down-circle" : pred === "HOLD" ? "pause-circle" : "checkmark-circle";
 
-              return { stock, pred, predLabel, conf, bet, testAnswer, isWin, isHold, basePoints, scaledPoints, notorietyDelta, color, icon };
+              return { stock, pred, predLabel, conf, bet, testAnswer, isWin, isHold, basePoints, scaledPoints, notorietyDelta, color, icon, pickLev, carryCost };
             });
 
             // Store for handleNextRound to accumulate
@@ -1039,7 +1098,7 @@ export default function BountyHunterScreen() {
             return (
               <>
                 <View style={styles.lockedPicksGrid}>
-                  {scoredPicks.map(({ stock, pred, predLabel, bet, testAnswer, isWin, basePoints, scaledPoints, color, icon }) => (
+                  {scoredPicks.map(({ stock, pred, predLabel, bet, testAnswer, isWin, basePoints, scaledPoints, color, icon, pickLev, carryCost }) => (
                     <View
                       key={stock.symbol}
                       style={[styles.lockedPickCard, { borderColor: color + "40" }]}
@@ -1054,7 +1113,7 @@ export default function BountyHunterScreen() {
                         </Text>
                       )}
                       <Text style={[styles.lockedPickBounty, { color: Colors.orange }]}>
-                        $${bet}
+                        $${bet}{pickLev > 1 ? ` @${pickLev.toFixed(1)}x` : ""}
                       </Text>
                       {testAnswer && (
                         <>
@@ -1183,22 +1242,6 @@ export default function BountyHunterScreen() {
           </TouchableOpacity>
         </ScrollView>
 
-        {previousWindow && previousWindow.is_settled && previousPick && (
-          <View style={styles.prevResultBar}>
-            <Text style={styles.prevResultLabel}>Last:</Text>
-            <Text
-              style={[
-                styles.prevResultPayout,
-                {
-                  color:
-                    (previousPick.payout ?? 0) >= 0 ? Colors.green : Colors.accent,
-                },
-              ]}
-            >
-              {(previousPick.payout ?? 0) >= 0 ? "+" : ""}$${previousPick.payout}
-            </Text>
-          </View>
-        )}
       </View>
     );
   }
@@ -1385,7 +1428,7 @@ const styles = StyleSheet.create({
   // ── Test mode ──
   testOutcomeTag: {
     position: "absolute",
-    bottom: Spacing.lg + 20,
+    bottom: Spacing.lg + 36,
     alignSelf: "center",
     backgroundColor: Colors.background + "CC",
     paddingHorizontal: Spacing.sm,
@@ -1477,8 +1520,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   backCard: {
-    transform: [{ scale: 0.95 }, { translateY: 8 }],
-    opacity: 0.5,
+    transform: [{ scale: 0.97 }, { translateY: 14 }],
+    opacity: 0.6,
   },
 
   // Cardinal direction labels on card
@@ -1557,13 +1600,15 @@ const styles = StyleSheet.create({
   },
   lockedPickCard: {
     alignItems: "center",
+    justifyContent: "center",
     gap: 2,
     backgroundColor: Colors.card,
     borderRadius: Radius.md,
     borderWidth: 1,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
-    minWidth: 80,
+    width: 100,
+    minHeight: 120,
   },
   lockedPickSymbol: {
     fontFamily: FontFamily.bold,

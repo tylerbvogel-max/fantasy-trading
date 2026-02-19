@@ -26,7 +26,7 @@ export default function ProfileScreen() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { resetWalkthrough } = useWalkthrough();
   const { musicEnabled, toggleMusic } = useAudio();
-  const { lightCards, toggleLightCards } = useCardTheme();
+  const { lightCards, toggleLightCards, candleChart, toggleCandleChart } = useCardTheme();
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
@@ -99,6 +99,22 @@ export default function ProfileScreen() {
             onValueChange={toggleLightCards}
             trackColor={{ false: Colors.surface, true: Colors.yellow + "60" }}
             thumbColor={lightCards ? Colors.yellow : Colors.textMuted}
+          />
+        </View>
+
+        {/* Candle Charts toggle */}
+        <View style={styles.candleChartCard}>
+          <View style={styles.cardLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: Colors.green + "20" }]}>
+              <Ionicons name="bar-chart-outline" size={20} color={Colors.green} />
+            </View>
+            <Text style={styles.candleChartLabel}>Candle Charts</Text>
+          </View>
+          <Switch
+            value={candleChart}
+            onValueChange={toggleCandleChart}
+            trackColor={{ false: Colors.surface, true: Colors.green + "60" }}
+            thumbColor={candleChart ? Colors.green : Colors.textMuted}
           />
         </View>
 
@@ -247,5 +263,21 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
     color: Colors.yellow,
+  },
+  candleChartCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.card,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginTop: Spacing.md,
+  },
+  candleChartLabel: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.bold,
+    color: Colors.green,
   },
 });

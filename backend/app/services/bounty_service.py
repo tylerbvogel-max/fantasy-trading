@@ -1,7 +1,9 @@
 import json
 import random
 import uuid
+import asyncio
 import httpx
+import time as _time
 from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from sqlalchemy import select, func, and_, Integer, case
@@ -11,6 +13,7 @@ from app.models.bounty import (
     SpyPriceLog, BountyPlayerIron, BountyIronOffering,
 )
 from app.models.user import User
+from app.models.stock import StockActive, StockMaster
 from app.services.finnhub_service import get_stock_price, fetch_quote
 from app.services.bounty_config import (
     DIR_SCORING, HOL_SCORING, WANTED_MULT, WANTED_LEVEL_CAP,
@@ -20,6 +23,10 @@ from app.services.bounty_config import (
     wanted_multiplier, skip_cost as calc_skip_cost,
     IRON_DEFS, IRON_DEFS_BY_ID, RARITY_WEIGHTS,
     chambers_for_level, bet_to_tier,
+    max_leverage_for_level, margin_call_chance,
+    MARGIN_CALL_PENALTY_DD, MARGIN_CALL_WANTED_DROP, MARGIN_CALL_COOLDOWN,
+    CARRY_COST_PER_X, HOLD_LEVERAGE_FACTOR,
+    LEVERAGE_NOTORIETY_BONUS_THRESHOLD, LEVERAGE_NOTORIETY_BONUS,
 )
 from app.config import get_settings
 
@@ -46,6 +53,36 @@ STOCK_NAMES = {
 }
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
+
+# ── Chart cache (in-memory, TTL-based) ──
+_chart_cache: dict[str, tuple[float, list[dict]]] = {}
+CHART_CACHE_TTL = 90  # seconds
+
+
+async def fetch_chart_cached(symbol: str) -> list[dict]:
+    """Fetch chart data with in-memory caching (90s TTL)."""
+    now = _time.time()
+    cached = _chart_cache.get(symbol)
+    if cached and (now - cached[0]) < CHART_CACHE_TTL:
+        return cached[1]
+    candles = await fetch_chart_yahoo(symbol)
+    if candles:
+        _chart_cache[symbol] = (now, candles)
+    return candles
+
+
+async def get_hot_stocks_pool(db: AsyncSession) -> list[str]:
+    """Get top 25 trending stocks by volume rank, fallback to hardcoded list."""
+    result = await db.execute(
+        select(StockActive.symbol)
+        .where(StockActive.trending_rank.isnot(None))
+        .order_by(StockActive.trending_rank)
+        .limit(25)
+    )
+    symbols = [row[0] for row in result.all()]
+    if len(symbols) < 10:
+        return WINDOW_STOCKS  # fallback to hardcoded
+    return symbols
 
 
 class BountyError(Exception):
@@ -80,6 +117,10 @@ async def get_player_iron_effects(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "de_win_multiplier": 1,
         "ghost_chance": 0.0,
         "score_multiplier": 1.0,
+        "leverage_cap_bonus": 0.0,
+        "margin_call_reduction": 0.0,
+        "carry_cost_discount": 0.0,
+        "leverage_loss_shield": 0.0,
     }
 
     for iron_row in equipped:
@@ -301,8 +342,9 @@ async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
     db.add(window)
     await db.flush()
 
-    # Create per-stock rows
-    for symbol in WINDOW_STOCKS:
+    # Create per-stock rows from hot stocks pool (or fallback)
+    stock_pool = await get_hot_stocks_pool(db)
+    for symbol in stock_pool:
         db.add(BountyWindowStock(
             bounty_window_id=window.id,
             symbol=symbol,
@@ -383,16 +425,23 @@ async def submit_prediction(
     prediction: str,
     bet_amount: int,
     symbol: str = "SPY",
+    leverage: float = 1.0,
 ) -> BountyPrediction:
     """Submit a prediction for a bounty window."""
-    # Validate symbol
-    if symbol not in WINDOW_STOCKS:
-        raise BountyError(f"Invalid stock symbol: {symbol}")
-
     # Validate window exists and is active
     window = await db.get(BountyWindow, window_id)
     if not window:
         raise BountyError("Bounty window not found")
+
+    # Validate symbol against window's actual stocks
+    stock_check = await db.execute(
+        select(BountyWindowStock).where(
+            BountyWindowStock.bounty_window_id == window_id,
+            BountyWindowStock.symbol == symbol,
+        )
+    )
+    if not stock_check.scalars().first():
+        raise BountyError(f"Invalid stock symbol: {symbol}")
 
     now = datetime.now(timezone.utc)
     if now < window.start_time or now >= window.end_time:
@@ -450,6 +499,24 @@ async def submit_prediction(
         # Reset notoriety for this window
         stats.notoriety = 0.0
 
+    # Leverage validation
+    max_lev = max_leverage_for_level(max(stats.wanted_level, 1))
+    if leverage < 1.0 or leverage > max_lev:
+        raise BountyError(f"Leverage must be between 1.0x and {max_lev}x at your wanted level")
+    if stats.margin_call_cooldown > 0 and leverage > 1.0:
+        raise BountyError("Margin call cooldown active — leverage locked to 1.0x")
+
+    # Carry cost for leverage
+    carry_cost = round((leverage - 1.0) * CARRY_COST_PER_X)
+    if carry_cost > 0:
+        if stats.double_dollars < carry_cost:
+            raise BountyError(f"Can't afford leverage carry cost ($${ carry_cost })")
+        stats.double_dollars -= carry_cost
+
+    # Decrement margin call cooldown
+    if stats.margin_call_cooldown > 0:
+        stats.margin_call_cooldown -= 1
+
     mult = wanted_multiplier(max(stats.wanted_level, 1))
 
     pred = BountyPrediction(
@@ -462,6 +529,7 @@ async def submit_prediction(
         wanted_level_at_pick=stats.wanted_level,
         action_type=action_type,
         wanted_multiplier_used=mult,
+        leverage=leverage,
     )
     db.add(pred)
 
@@ -638,15 +706,18 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             pred.is_correct = is_correct
             pred.insurance_triggered = insurance_triggered
 
-            # Calculate scoring — bet-based: win = bet_amount × wanted_mult, lose = bet_amount
+            # Calculate scoring — bet-based with leverage
             bet = pred.bet_amount or 0
             conf = pred.confidence or bet_to_tier(bet)
             mult = wanted_multiplier(max(stats.wanted_level, 1))
 
+            # Effective leverage (halved for HOLD)
+            eff_lev = 1 + (pred.leverage - 1) * HOLD_LEVERAGE_FACTOR if is_holster else pred.leverage
+
             if insurance_triggered:
                 base = 0
             elif is_correct:
-                win_val = bet * mult
+                win_val = round(bet * eff_lev * mult)
                 # Apply iron win bonuses (scaled by mult already in bet, add flat bonuses)
                 if conf == 1:
                     win_val += fx["draw_win_bonus"] * mult
@@ -660,13 +731,27 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
                     win_val = round(win_val * fx["de_win_multiplier"])
                 base = win_val
             else:
-                lose_val = bet
+                lose_val = round(bet * eff_lev)
                 # Apply iron loss reduction
                 lose_val = max(0, lose_val - fx["all_lose_reduction"])
+                # Leverage loss shield iron effect
+                if fx["leverage_loss_shield"] > 0:
+                    lose_val = round(lose_val * (1 - fx["leverage_loss_shield"]))
                 # Snake Oil: Draw holster losses = 0
                 if fx["snake_oil"] and is_holster and conf == 1:
                     lose_val = 0
                 base = -lose_val
+
+                # Margin call check (not for HOLD, not for insurance)
+                if not is_holster and not insurance_triggered and pred.leverage > 2.0:
+                    mc_chance = margin_call_chance(pred.leverage)
+                    # Apply iron margin call reduction
+                    mc_chance = max(0, mc_chance - fx["margin_call_reduction"])
+                    if random.random() < mc_chance:
+                        pred.margin_call_triggered = True
+                        stats.double_dollars -= MARGIN_CALL_PENALTY_DD
+                        stats.wanted_level = max(1, stats.wanted_level - MARGIN_CALL_WANTED_DROP)
+                        stats.margin_call_cooldown = MARGIN_CALL_COOLDOWN
 
             pred.base_points = base
             pred.wanted_multiplier_used = mult
@@ -688,6 +773,9 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             notoriety_delta = notoriety_weight * (1 if is_correct else -1)
             if is_correct and fx["notoriety_bonus"] > 0:
                 notoriety_delta += fx["notoriety_bonus"]
+            # Leverage notoriety bonus for high-leverage correct picks
+            if is_correct and pred.leverage >= LEVERAGE_NOTORIETY_BONUS_THRESHOLD:
+                notoriety_delta += LEVERAGE_NOTORIETY_BONUS
             window_notoriety += notoriety_delta
 
         # End of window for this user: evaluate notoriety → wanted level
@@ -733,6 +821,7 @@ async def reset_player(db: AsyncSession, user_id: uuid.UUID) -> dict:
     stats.is_busted = False
     stats.notoriety = 0.0
     stats.skip_count_this_window = 0
+    stats.margin_call_cooldown = 0
     # Chambers persist across resets (high-water mark)
 
     # Clear irons (should already be empty but just in case)
@@ -794,6 +883,8 @@ def _pick_to_response(pred: BountyPrediction) -> dict:
         "insurance_triggered": pred.insurance_triggered,
         "base_points": pred.base_points,
         "wanted_multiplier_used": pred.wanted_multiplier_used,
+        "leverage": pred.leverage,
+        "margin_call_triggered": pred.margin_call_triggered,
     }
 
 
@@ -830,6 +921,7 @@ def _stats_to_response(stats: BountyPlayerStats) -> dict:
         "chambers": stats.chambers,
         "is_busted": stats.is_busted,
         "bust_count": stats.bust_count,
+        "margin_call_cooldown": stats.margin_call_cooldown,
         "pending_offering": False,  # Set by caller
     }
 
@@ -867,7 +959,7 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
     # Fetch SPY chart: Yahoo Finance (2h of 1-min data), fallback to self-logged prices
     candles = []
     if current:
-        candles = await fetch_chart_yahoo("SPY")
+        candles = await fetch_chart_cached("SPY")
 
         # Fallback: use self-logged prices if Yahoo fails
         if not candles:
@@ -908,13 +1000,20 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         )
         user_preds = {p.symbol: p for p in pred_result.scalars().all()}
 
-        for stock_row in stock_rows:
-            stock_candles = await fetch_chart_yahoo(stock_row.symbol)
+        # Fetch all stock charts in parallel
+        chart_tasks = [fetch_chart_cached(sr.symbol) for sr in stock_rows]
+        all_candles = await asyncio.gather(*chart_tasks)
+
+        for stock_row, stock_candles in zip(stock_rows, all_candles):
             stock_pick = user_preds.get(stock_row.symbol)
+
+            # Dynamic name: try StockActive, fallback to hardcoded
+            stock_active = await db.get(StockActive, stock_row.symbol)
+            name = stock_active.name if stock_active and stock_active.name else STOCK_NAMES.get(stock_row.symbol, stock_row.symbol)
 
             stocks_status.append({
                 "symbol": stock_row.symbol,
-                "name": STOCK_NAMES.get(stock_row.symbol, stock_row.symbol),
+                "name": name,
                 "open_price": float(stock_row.open_price) if stock_row.open_price else None,
                 "close_price": float(stock_row.close_price) if stock_row.close_price else None,
                 "result": stock_row.result,
@@ -946,6 +1045,7 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "stocks": stocks_status,
         "ante_cost": ante_cost,
         "skip_cost": next_skip_cost,
+        "max_leverage": max_leverage_for_level(max(stats.wanted_level, 1)),
     }
 
 
@@ -1013,12 +1113,12 @@ async def get_bounty_board(db: AsyncSession, period: str = "alltime") -> list[di
 
 
 async def fetch_chart_yahoo(symbol: str = "SPY") -> list[dict]:
-    """Fetch last 2 hours of 1-minute data from Yahoo Finance."""
+    """Fetch last 2 hours of 5-minute OHLC data from Yahoo Finance."""
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
                 f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-                params={"interval": "1m", "range": "2h"},
+                params={"interval": "5m", "range": "2h"},
                 headers={"User-Agent": "Mozilla/5.0"},
                 timeout=10.0,
             )
@@ -1031,16 +1131,32 @@ async def fetch_chart_yahoo(symbol: str = "SPY") -> list[dict]:
                 return []
 
             timestamps = result[0].get("timestamp", [])
-            closes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            quote = result[0].get("indicators", {}).get("quote", [{}])[0]
+            opens = quote.get("open", [])
+            highs = quote.get("high", [])
+            lows = quote.get("low", [])
+            closes = quote.get("close", [])
 
             if not timestamps or not closes:
                 return []
 
-            return [
-                {"timestamp": ts, "close": round(close, 2)}
-                for ts, close in zip(timestamps, closes)
-                if close is not None
-            ]
+            candles = []
+            for i, ts in enumerate(timestamps):
+                c = closes[i] if i < len(closes) else None
+                if c is None:
+                    continue
+                point: dict = {"timestamp": ts, "close": round(c, 2)}
+                o = opens[i] if i < len(opens) else None
+                h = highs[i] if i < len(highs) else None
+                lo = lows[i] if i < len(lows) else None
+                if o is not None:
+                    point["open"] = round(o, 2)
+                if h is not None:
+                    point["high"] = round(h, 2)
+                if lo is not None:
+                    point["low"] = round(lo, 2)
+                candles.append(point)
+            return candles
         except (httpx.RequestError, KeyError, IndexError):
             return []
 

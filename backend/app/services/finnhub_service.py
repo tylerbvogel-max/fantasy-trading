@@ -211,13 +211,25 @@ async def refresh_trending_stocks(db: AsyncSession) -> int:
     matched = 0
     for rank, quote in enumerate(quotes, start=1):
         symbol = quote.get("symbol", "")
+        volume = quote.get("regularMarketVolume")
         stock = await db.get(StockActive, symbol)
         if stock:
             stock.trending_rank = rank
-            volume = quote.get("regularMarketVolume")
             if volume is not None:
                 stock.volume = volume
             matched += 1
+        else:
+            # Auto-create StockActive row if symbol exists in StockMaster
+            master = await db.get(StockMaster, symbol)
+            if master:
+                stock = StockActive(
+                    symbol=symbol,
+                    name=master.name,
+                    trending_rank=rank,
+                    volume=volume,
+                )
+                db.add(stock)
+                matched += 1
 
     await db.commit()
     logger.info(f"Trending stocks updated: {matched} matched out of {len(quotes)}")

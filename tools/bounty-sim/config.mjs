@@ -6,6 +6,8 @@ export const NUM_RUNS = 200;
 export const NUM_ROUNDS = 30;
 export const PICKS_PER_ROUND = 5;
 export const STARTING_BALANCE = 5000;
+export const STOCK_POOL_SIZE = 25;
+export const BATCHES_PER_CYCLE = 5;
 
 // ── Chambers (Iron slots) ──
 export const STARTING_CHAMBERS = 2;
