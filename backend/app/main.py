@@ -48,6 +48,13 @@ async def lifespan(app: FastAPI):
             await conn.execute(text(
                 "ALTER TABLE bounty_iron_offerings ALTER COLUMN bounty_window_id DROP NOT NULL"
             ))
+            # Bet slider: add bet_amount column, make confidence nullable
+            await conn.execute(text(
+                "ALTER TABLE bounty_predictions ADD COLUMN IF NOT EXISTS bet_amount INTEGER DEFAULT 0"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE bounty_predictions ALTER COLUMN confidence DROP NOT NULL"
+            ))
             # Migrate existing players: set starting balance for those with 0
             await conn.execute(text(
                 "UPDATE bounty_player_stats SET double_dollars = 5000, wanted_level = 1 "
