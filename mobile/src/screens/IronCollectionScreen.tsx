@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { useAllIrons, useBountyIrons } from "../hooks/useApi";
@@ -16,7 +17,13 @@ const RARITY_COLORS: Record<string, string> = {
   common: Colors.textSecondary,
 };
 
-const RARITY_ORDER: string[] = ["legendary", "rare", "uncommon", "common"];
+const RARITY_ORDER: string[] = ["common", "uncommon", "rare", "legendary"];
+
+const NUM_COLUMNS = 3;
+const SCREEN_PADDING = Spacing.xl;
+const CARD_GAP = Spacing.sm;
+const CARD_WIDTH =
+  (Dimensions.get("window").width - SCREEN_PADDING * 2 - CARD_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
 export default function IronCollectionScreen() {
   const { data: allIrons, isLoading: ironsLoading } = useAllIrons();
@@ -49,44 +56,50 @@ export default function IronCollectionScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Irons</Text>
         <Text style={styles.subtitle}>
-          {allIrons?.length ?? 0} total
+          {equippedIds.size}/{allIrons?.length ?? 0} collected
         </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         {grouped.map((group) => {
           const color = RARITY_COLORS[group.rarity] ?? Colors.textMuted;
+          const collected = group.irons.filter((i) => equippedIds.has(i.id)).length;
           return (
             <View key={group.rarity} style={styles.section}>
-              <Text style={[styles.sectionTitle, { color }]}>
-                {group.rarity.charAt(0).toUpperCase() + group.rarity.slice(1)}
-              </Text>
-              {group.irons.map((iron) => {
-                const isEquipped = equippedIds.has(iron.id);
-                return (
-                  <View
-                    key={iron.id}
-                    style={[styles.ironCard, { borderLeftColor: color }]}
-                  >
-                    <View style={styles.ironHeader}>
-                      <Text style={[styles.ironName, { color }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color }]}>
+                  {group.rarity.charAt(0).toUpperCase() + group.rarity.slice(1)}
+                </Text>
+                <Text style={styles.sectionCount}>
+                  {collected}/{group.irons.length}
+                </Text>
+              </View>
+              <View style={styles.grid}>
+                {group.irons.map((iron) => {
+                  const isCollected = equippedIds.has(iron.id);
+                  return (
+                    <View
+                      key={iron.id}
+                      style={[styles.ironCard, { borderTopColor: color }]}
+                    >
+                      {isCollected && (
+                        <View style={[styles.equippedDot, { backgroundColor: color }]} />
+                      )}
+                      <Text style={[styles.ironName, { color }]} numberOfLines={2}>
                         {iron.name}
                       </Text>
-                      {isEquipped && (
-                        <View style={styles.equippedBadge}>
-                          <Text style={styles.equippedText}>EQUIPPED</Text>
-                        </View>
+                      <Text style={styles.effectText}>
+                        {iron.description}
+                      </Text>
+                      {iron.boost_description && (
+                        <Text style={styles.boostText}>
+                          {iron.boost_description}
+                        </Text>
                       )}
                     </View>
-                    <Text style={styles.effectText}>{iron.description}</Text>
-                    {iron.boost_description && (
-                      <Text style={styles.boostText}>
-                        Boosted: {iron.boost_description}
-                      </Text>
-                    )}
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
           );
         })}
@@ -101,7 +114,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: Spacing.statusBar,
     paddingBottom: Spacing.md,
     flexDirection: "row",
@@ -124,59 +137,83 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   content: {
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: SCREEN_PADDING,
     paddingBottom: Spacing.xxxl,
   },
   section: {
     marginBottom: Spacing.lg,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginBottom: Spacing.sm,
   },
   sectionTitle: {
     fontSize: FontSize.sm,
     fontFamily: FontFamily.bold,
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginBottom: Spacing.sm,
+  },
+  sectionCount: {
+    fontSize: FontSize.xs,
+    fontFamily: FontFamily.regular,
+    color: Colors.textMuted,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: CARD_GAP,
   },
   ironCard: {
+    width: CARD_WIDTH,
+    minHeight: CARD_WIDTH * 1.1,
     backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing.sm,
-    borderLeftWidth: 3,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    borderTopWidth: 2,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  ironHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: Spacing.xs,
+  equippedDot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   ironName: {
-    fontSize: FontSize.md,
-    fontFamily: FontFamily.bold,
-  },
-  equippedBadge: {
-    backgroundColor: Colors.orange + "20",
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: Radius.sm,
-  },
-  equippedText: {
     fontSize: FontSize.xs,
     fontFamily: FontFamily.bold,
-    color: Colors.orange,
-    letterSpacing: 0.5,
+    marginBottom: 2,
   },
   effectText: {
-    fontSize: FontSize.sm,
+    fontSize: 10,
     fontFamily: FontFamily.regular,
     color: Colors.textSecondary,
   },
   boostText: {
-    fontSize: FontSize.sm,
+    fontSize: 10,
     fontFamily: FontFamily.regular,
     color: Colors.orange,
-    marginTop: Spacing.xs,
+    marginTop: 2,
+  },
+  lockedCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.6,
+    borderColor: Colors.border,
+  },
+  lockedIcon: {
+    fontSize: FontSize.xl,
+    fontFamily: FontFamily.bold,
+    color: Colors.textMuted,
+  },
+  lockedText: {
+    fontSize: 10,
+    fontFamily: FontFamily.regular,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
 });
