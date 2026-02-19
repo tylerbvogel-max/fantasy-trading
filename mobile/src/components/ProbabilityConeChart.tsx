@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
-import Svg, { Path, Line, Text as SvgText } from "react-native-svg";
+import Svg, { Path, Line, Rect, Text as SvgText } from "react-native-svg";
 import { Colors, FontFamily, FontSize, Spacing } from "../utils/theme";
 
 interface CandlePoint {
@@ -296,12 +296,56 @@ export default function ProbabilityConeChart({
           </React.Fragment>
         ))}
 
-        {/* 3σ cone (lightest) */}
-        <Path d={cone3Path} fill={Colors.orange} fillOpacity={0.08} />
-        {/* 2σ cone */}
-        <Path d={cone2Path} fill={Colors.orange} fillOpacity={0.16} />
-        {/* 1σ cone (darkest) */}
-        <Path d={cone1Path} fill={Colors.orange} fillOpacity={0.3} />
+        {/* 3σ cone outline */}
+        <Path d={cone3Path} fill="none" stroke={Colors.text} strokeOpacity={0.12} strokeWidth={1} />
+        {/* 2σ cone outline */}
+        <Path d={cone2Path} fill="none" stroke={Colors.text} strokeOpacity={0.2} strokeWidth={1} />
+        {/* 1σ cone outline */}
+        <Path d={cone1Path} fill="none" stroke={Colors.text} strokeOpacity={0.35} strokeWidth={1} />
+
+        {/* Outcome zones: rise / hold / fall — to the right of "Now" */}
+        {(() => {
+          const refPrice = openPrice ?? lastPrice;
+          const holdHalf = refPrice * 0.0005; // HOLD_THRESHOLD = 0.05%
+          const riseY = CHART_PADDING.top + toY(refPrice + holdHalf, yMin, yMax, plotH);
+          const fallY = CHART_PADDING.top + toY(refPrice - holdHalf, yMin, yMax, plotH);
+          const plotTop = CHART_PADDING.top;
+          const plotBottom = CHART_PADDING.top + plotH;
+          const zoneLeft = nowX;
+          const zoneWidth = CHART_PADDING.left + plotW - nowX;
+          if (zoneWidth <= 0) return null;
+          return (
+            <>
+              {/* Rise — green, top of plot to rise threshold */}
+              <Rect
+                x={zoneLeft}
+                y={plotTop}
+                width={zoneWidth}
+                height={Math.max(0, riseY - plotTop)}
+                fill={Colors.green}
+                fillOpacity={0.08}
+              />
+              {/* Hold — blue, between rise and fall thresholds */}
+              <Rect
+                x={zoneLeft}
+                y={riseY}
+                width={zoneWidth}
+                height={Math.max(0, fallY - riseY)}
+                fill="#4DA6FF"
+                fillOpacity={0.18}
+              />
+              {/* Fall — pink, from fall threshold to bottom of plot */}
+              <Rect
+                x={zoneLeft}
+                y={fallY}
+                width={zoneWidth}
+                height={Math.max(0, plotBottom - fallY)}
+                fill={Colors.accent}
+                fillOpacity={0.08}
+              />
+            </>
+          );
+        })()}
 
         {/* "Now" dashed vertical line */}
         <Line

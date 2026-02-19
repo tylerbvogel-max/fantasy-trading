@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
-import RevolverCylinder from "../components/RevolverCylinder";
+import HexIronBar from "../components/HexIronBar";
 import {
   useBountyStatus,
   useSubmitPrediction,
@@ -30,7 +30,7 @@ import PixelFire from "../components/PixelFire";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
-const CARD_WIDTH = SCREEN_WIDTH - Spacing.xl * 2;
+const CARD_WIDTH = SCREEN_WIDTH - Spacing.xl * 2 - 24;
 const CARD_SIZE = CARD_WIDTH;
 const COMMIT_THRESHOLD = CARD_WIDTH * 0.3;
 const VELOCITY_THRESHOLD = 0.5;
@@ -693,13 +693,8 @@ export default function BountyHunterScreen() {
     );
   }
 
-  // Equipped irons — revolver cylinder
   const chambers = stats?.chambers ?? 2;
   const equipped = stats?.equipped_irons ?? [];
-  const equippedIronsRow = (
-    <RevolverCylinder chambers={chambers} irons={equipped} maxChambers={6} />
-  );
-
 
   // ── Active window + current stock — 4-direction swipe card ──
   if (hasActiveWindow && currentStock) {
@@ -726,8 +721,6 @@ export default function BountyHunterScreen() {
         <View style={styles.statusRow}>
           <Text style={styles.pickCounter}>Card {stockProgress}</Text>
         </View>
-
-        {equippedIronsRow}
 
         {/* 4-direction swipe area */}
         <View style={styles.swipeArea}>
@@ -815,6 +808,8 @@ export default function BountyHunterScreen() {
             </View>
           )}
 
+          <PixelFire width={CARD_WIDTH} height={CARD_SIZE} cardTranslateX={translateX} cardTranslateY={translateY} />
+
           {/* Main swipeable card */}
           <Animated.View
             style={[
@@ -829,7 +824,6 @@ export default function BountyHunterScreen() {
             ]}
             {...panResponder.panHandlers}
           >
-          <PixelFire width={CARD_WIDTH} height={CARD_SIZE} />
           <View style={styles.card}>
             {/* Color overlays */}
             <Animated.View
@@ -887,39 +881,14 @@ export default function BountyHunterScreen() {
           </Animated.View>
         </View>
 
-        {/* Confidence buttons at bottom */}
-        <View style={styles.bottomConfBar}>
-          {CONFIDENCE_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              style={[
-                styles.bottomConfButton,
-                {
-                  backgroundColor: confidence === opt.value ? opt.bgColor : Colors.card,
-                  borderColor: confidence === opt.value ? opt.color : Colors.border,
-                },
-              ]}
-              onPress={() => setConfidence(opt.value)}
-            >
-              <Text
-                style={[
-                  styles.bottomConfLabel,
-                  { color: confidence === opt.value ? opt.color : Colors.textMuted },
-                ]}
-              >
-                {opt.label}
-              </Text>
-              <Text
-                style={[
-                  styles.bottomConfScore,
-                  { color: confidence === opt.value ? opt.color : Colors.textMuted },
-                ]}
-              >
-                {opt.description}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <HexIronBar
+          chambers={chambers}
+          irons={equipped}
+          maxChambers={6}
+          confidenceOptions={CONFIDENCE_OPTIONS}
+          selectedConfidence={confidence}
+          onSelectConfidence={setConfidence}
+        />
       </View>
     );
   }
@@ -945,8 +914,6 @@ export default function BountyHunterScreen() {
             Lv.{wantedLevel} ({mult}x)
           </Text>
         </View>
-
-        {equippedIronsRow}
 
         <ScrollView contentContainerStyle={styles.lockedPicksArea}>
           <Ionicons name="checkmark-circle" size={48} color={Colors.green} />
@@ -1210,8 +1177,6 @@ export default function BountyHunterScreen() {
         </Text>
       </View>
 
-      {equippedIronsRow}
-
       {previousWindow && previousWindow.is_settled && (
         <View style={styles.resultCardCompact}>
           <Text style={styles.resultCompactLabel}>Last Bounty</Text>
@@ -1377,31 +1342,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: FontSize.md,
     color: Colors.text,
-  },
-
-  // ── Bottom confidence bar ──
-  bottomConfBar: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xxxl,
-    paddingTop: Spacing.sm,
-  },
-  bottomConfButton: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-  },
-  bottomConfLabel: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.sm,
-  },
-  bottomConfScore: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xs,
-    marginTop: 2,
   },
 
   // ── Test mode ──
