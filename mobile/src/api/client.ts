@@ -238,6 +238,14 @@ export interface BountyStatus {
   skip_cost: number;
 }
 
+export interface BountyIronFullDef {
+  id: string;
+  name: string;
+  rarity: string;
+  description: string;
+  boost_description?: string;
+}
+
 export interface BountyIronDef {
   id: string;
   name: string;
@@ -349,6 +357,8 @@ export const bounty = {
     request<BountyPickResponse[]>(`/bounty/history?limit=${limit ?? 20}`),
 
   stats: () => request<BountyDetailedStats>("/bounty/stats"),
+
+  allIrons: () => request<BountyIronFullDef[]>("/bounty/irons/all"),
 
   irons: () => request<BountyEquippedIron[]>("/bounty/irons"),
 

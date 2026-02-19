@@ -25,6 +25,7 @@ import AuthScreen from './src/screens/AuthScreen';
 import BountyHunterScreen from './src/screens/BountyHunterScreen';
 import BountyBoardScreen from './src/screens/BountyBoardScreen';
 import BountyStatsScreen from './src/screens/BountyStatsScreen';
+import IronCollectionScreen from './src/screens/IronCollectionScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const Tab = createBottomTabNavigator();
 const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
   Bounty: { focused: 'skull', unfocused: 'skull-outline' },
   Stats: { focused: 'stats-chart', unfocused: 'stats-chart-outline' },
+  Irons: { focused: 'hardware-chip', unfocused: 'hardware-chip-outline' },
   Board: { focused: 'list', unfocused: 'list-outline' },
   Profile: { focused: 'person', unfocused: 'person-outline' },
 };
@@ -57,6 +59,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Bounty" component={BountyHunterScreen} />
       <Tab.Screen name="Stats" component={BountyStatsScreen} />
+      <Tab.Screen name="Irons" component={IronCollectionScreen} />
       <Tab.Screen name="Board" component={BountyBoardScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

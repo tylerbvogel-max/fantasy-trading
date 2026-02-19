@@ -16,7 +16,7 @@ from app.services.bounty_service import (
     reset_player,
     BountyError,
 )
-from app.services.bounty_config import CONFIDENCE_LABELS, IRON_DEFS_BY_ID
+from app.services.bounty_config import CONFIDENCE_LABELS, IRON_DEFS_BY_ID, IRON_DEFS
 from app.models.user import User
 from app.schemas import (
     BountyStatusResponse,
@@ -27,6 +27,7 @@ from app.schemas import (
     BountyDetailedStats,
     BountyEquippedIron,
     BountyIronDef,
+    BountyIronFullDef,
     BountyIronOfferingResponse,
     BountyIronPickRequest,
     BountySkipRequest,
@@ -102,6 +103,20 @@ async def bounty_history(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_prediction_history(db, user.id, limit)
+
+
+@router.get("/irons/all", response_model=list[BountyIronFullDef])
+async def bounty_irons_all():
+    return [
+        BountyIronFullDef(
+            id=iron["id"],
+            name=iron["name"],
+            rarity=iron["rarity"],
+            description=iron["description"],
+            boost_description=iron.get("boost_description"),
+        )
+        for iron in IRON_DEFS
+    ]
 
 
 @router.get("/irons", response_model=list[BountyEquippedIron])

@@ -117,9 +117,9 @@ def skip_cost(n: int, balance: int) -> int:
     return math.ceil(25 * math.pow(2.5, n - 1) * max(1, balance / 5000))
 
 
-# ── Iron definitions ──
+# ── Iron definitions (75 total — mirrors tools/bounty-sim/irons.mjs) ──
 IRON_DEFS = [
-    # Common
+    # ── Common (28) ──
     {
         "id": "steady_hand", "name": "Steady Hand", "rarity": "common",
         "description": "+3 Draw wins",
@@ -136,10 +136,8 @@ IRON_DEFS = [
     },
     {
         "id": "lucky_horseshoe", "name": "Lucky Horseshoe", "rarity": "common",
-        "description": "5% insurance chance",
-        "effects": {"insurance_chance": 0.05},
-        "boost_description": "+10% insurance, 5% ghost",
-        "boost_effects": {"insurance_chance": 0.10, "ghost_chance": 0.05},
+        "description": "+5% accuracy",
+        "effects": {"accuracy_bonus": 0.05},
     },
     {
         "id": "trail_rations", "name": "Trail Rations", "rarity": "common",
@@ -162,7 +160,118 @@ IRON_DEFS = [
         "boost_description": "+8 holster wins, Draw holster losses=0",
         "boost_effects": {"holster_win_bonus": 8, "snake_oil": True},
     },
-    # Uncommon
+    {
+        "id": "tin_star", "name": "Tin Star", "rarity": "common",
+        "description": "+2 directional wins",
+        "effects": {"dir_win_bonus": 2},
+    },
+    {
+        "id": "pocket_watch", "name": "Pocket Watch", "rarity": "common",
+        "description": "+3 QD wins",
+        "effects": {"qd_win_bonus": 3},
+    },
+    {
+        "id": "canteen", "name": "Canteen", "rarity": "common",
+        "description": "+$30/round income",
+        "effects": {"round_income": 30},
+    },
+    {
+        "id": "worn_boots", "name": "Worn Boots", "rarity": "common",
+        "description": "+1 win per round survived",
+        "effects": {"worn_boots_per_round": 1},
+    },
+    {
+        "id": "rusty_spurs", "name": "Rusty Spurs", "rarity": "common",
+        "description": "+8 wins at wanted \u22642",
+        "effects": {"low_level_win_bonus": 8},
+    },
+    {
+        "id": "campfire", "name": "Campfire", "rarity": "common",
+        "description": "-2 holster losses",
+        "effects": {"holster_lose_reduction": 2},
+    },
+    {
+        "id": "whiskey_flask", "name": "Whiskey Flask", "rarity": "common",
+        "description": "+6 wins on 1st pick/round",
+        "effects": {"first_pick_win_bonus": 6},
+    },
+    {
+        "id": "rope_lasso", "name": "Rope Lasso", "rarity": "common",
+        "description": "+8% holster accuracy",
+        "effects": {"holster_accuracy_bonus": 0.08},
+    },
+    {
+        "id": "chaps", "name": "Chaps", "rarity": "common",
+        "description": "-1 directional losses",
+        "effects": {"dir_lose_reduction": 1},
+    },
+    {
+        "id": "six_shooter", "name": "Six-Shooter", "rarity": "common",
+        "description": "Every 6th correct: +$150",
+        "effects": {"six_shooter_interval": 6, "six_shooter_bonus": 150},
+    },
+    {
+        "id": "cowbell", "name": "Cowbell", "rarity": "common",
+        "description": "+0.5 notoriety/round",
+        "effects": {"flat_notoriety_per_round": 0.5},
+    },
+    {
+        "id": "hay_bale", "name": "Hay Bale", "rarity": "common",
+        "description": "+$40 on correct holster",
+        "effects": {"holster_correct_bonus": 40},
+    },
+    {
+        "id": "branding_iron", "name": "Branding Iron", "rarity": "common",
+        "description": "+4 RISE wins",
+        "effects": {"rise_win_bonus": 4},
+    },
+    {
+        "id": "cattle_prod", "name": "Cattle Prod", "rarity": "common",
+        "description": "+4 FALL wins",
+        "effects": {"fall_win_bonus": 4},
+    },
+    {
+        "id": "scouts_compass", "name": "Scout's Compass", "rarity": "common",
+        "description": "+5% acc on 1st pick/round",
+        "effects": {"first_pick_accuracy_bonus": 0.05},
+    },
+    {
+        "id": "rattlesnake_skin", "name": "Rattlesnake Skin", "rarity": "common",
+        "description": "-20% skip cost",
+        "effects": {"skip_discount": 0.20},
+    },
+    {
+        "id": "saddlebag", "name": "Saddlebag", "rarity": "common",
+        "description": "+$15 flat per pick",
+        "effects": {"flat_per_pick": 15},
+    },
+    {
+        "id": "dust_devil", "name": "Dust Devil", "rarity": "common",
+        "description": "+5 wins after a skip",
+        "effects": {"post_skip_win_bonus": 5},
+    },
+    {
+        "id": "water_trough", "name": "Water Trough", "rarity": "common",
+        "description": "Losses halved if bal <$2k",
+        "effects": {"low_balance_loss_halved": True},
+    },
+    {
+        "id": "copper_ring", "name": "Copper Ring", "rarity": "common",
+        "description": "+0.5 notor/correct dir",
+        "effects": {"dir_notoriety_bonus": 0.5},
+    },
+    {
+        "id": "horseshoe_nail", "name": "Horseshoe Nail", "rarity": "common",
+        "description": "+2% acc per iron equipped",
+        "effects": {"accuracy_per_iron": 0.02},
+    },
+    {
+        "id": "tenderfoot", "name": "Tenderfoot", "rarity": "common",
+        "description": "+5 wins when round acc <50%",
+        "effects": {"low_accuracy_win_bonus": 5},
+    },
+
+    # ── Uncommon (22) ──
     {
         "id": "iron_sights", "name": "Iron Sights", "rarity": "uncommon",
         "description": "+5 Quick Draw wins",
@@ -179,8 +288,8 @@ IRON_DEFS = [
     },
     {
         "id": "deadeye_scope", "name": "Deadeye Scope", "rarity": "uncommon",
-        "description": "10% Dead Eye insurance",
-        "effects": {"de_insurance_chance": 0.10},
+        "description": "+10% DE accuracy",
+        "effects": {"de_accuracy_bonus": 0.10},
         "boost_description": "+15% DE insurance, DE wins x1.5",
         "boost_effects": {"de_insurance_chance": 0.15, "de_win_multiplier": 1.5},
     },
@@ -198,7 +307,93 @@ IRON_DEFS = [
         "boost_description": "+1.0 notoriety, +0.5 wins/level",
         "boost_effects": {"notoriety_bonus": 1.0, "per_level_win_bonus": 0.5},
     },
-    # Rare
+    {
+        "id": "silver_bullet", "name": "Silver Bullet", "rarity": "uncommon",
+        "description": "+10 wins at wanted \u22655",
+        "effects": {"high_level_win_bonus": 10},
+    },
+    {
+        "id": "saloon_door", "name": "Saloon Door", "rarity": "uncommon",
+        "description": "1st bust/run: survive w/$500",
+        "effects": {"saloon_door": True},
+    },
+    {
+        "id": "fools_gold", "name": "Fool's Gold", "rarity": "uncommon",
+        "description": "+$150/round, ante +$25",
+        "effects": {"fools_gold_income": 150, "ante_penalty": 25},
+    },
+    {
+        "id": "war_paint", "name": "War Paint", "rarity": "uncommon",
+        "description": "+6 wins when notor negative",
+        "effects": {"neg_notoriety_win_bonus": 6},
+    },
+    {
+        "id": "smoke_bomb", "name": "Smoke Bomb", "rarity": "uncommon",
+        "description": "1st loss/round halved",
+        "effects": {"smoke_bomb": True},
+    },
+    {
+        "id": "panning_kit", "name": "Panning Kit", "rarity": "uncommon",
+        "description": "+$20/round per iron equipped",
+        "effects": {"income_per_iron": 20},
+    },
+    {
+        "id": "horse_thief", "name": "Horse Thief", "rarity": "uncommon",
+        "description": "Recover 15% of ante",
+        "effects": {"ante_recovery_pct": 0.15},
+    },
+    {
+        "id": "moonshine", "name": "Moonshine", "rarity": "uncommon",
+        "description": "Wins +40%, losses +20%",
+        "effects": {"moonshine_win_mult": 1.4, "moonshine_lose_mult": 1.2},
+    },
+    {
+        "id": "telegraph", "name": "Telegraph", "rarity": "uncommon",
+        "description": "+8% acc repeating direction",
+        "effects": {"repeat_dir_accuracy": 0.08},
+    },
+    {
+        "id": "prospectors_pick", "name": "Prospector's Pick", "rarity": "uncommon",
+        "description": "+$75/round if bal >$10k",
+        "effects": {"high_balance_income": 75},
+    },
+    {
+        "id": "twin_revolvers", "name": "Twin Revolvers", "rarity": "uncommon",
+        "description": "QD uses DE win values",
+        "effects": {"twin_revolvers": True},
+    },
+    {
+        "id": "dynamite", "name": "Dynamite", "rarity": "uncommon",
+        "description": "+20 all wins, -5% accuracy",
+        "effects": {"dynamite_win_bonus": 20, "dynamite_accuracy_penalty": 0.05},
+    },
+    {
+        "id": "medicine_bag", "name": "Medicine Bag", "rarity": "uncommon",
+        "description": "+$50/round if bal < start",
+        "effects": {"low_balance_income": 50},
+    },
+    {
+        "id": "war_drum", "name": "War Drum", "rarity": "uncommon",
+        "description": "After 2 correct: +5 wins",
+        "effects": {"war_drum_bonus": 5},
+    },
+    {
+        "id": "coyote_howl", "name": "Coyote Howl", "rarity": "uncommon",
+        "description": "Start at wanted level 2",
+        "effects": {"starting_level_bonus": 1},
+    },
+    {
+        "id": "marked_cards", "name": "Marked Cards", "rarity": "uncommon",
+        "description": "After miss: +12% acc next",
+        "effects": {"marked_cards_accuracy": 0.12},
+    },
+    {
+        "id": "rattlesnake_venom", "name": "Rattlesnake Venom", "rarity": "uncommon",
+        "description": "-0.5 opp notoriety (PvP)",
+        "effects": {},
+    },
+
+    # ── Rare (15) ──
     {
         "id": "sheriffs_badge", "name": "Sheriff's Badge", "rarity": "rare",
         "description": "+1 wins per wanted level",
@@ -227,9 +422,116 @@ IRON_DEFS = [
         "boost_description": "All scoring x1.3 more, +$50/correct",
         "boost_effects": {"score_multiplier": 1.3, "flat_cash_per_correct": 50},
     },
+    {
+        "id": "blood_oath", "name": "Blood Oath", "rarity": "rare",
+        "description": "All scoring x2, ante x2",
+        "effects": {"score_multiplier": 2, "ante_multiplier": 2},
+    },
+    {
+        "id": "bounty_mark", "name": "Bounty Hunter's Mark", "rarity": "rare",
+        "description": "+$25/wanted lv/round",
+        "effects": {"bounty_mark_income": 25},
+    },
+    {
+        "id": "gatling_gun", "name": "Gatling Gun", "rarity": "rare",
+        "description": "Correct DE: score twice",
+        "effects": {"gatling_gun": True},
+    },
+    {
+        "id": "stagecoach", "name": "Stagecoach", "rarity": "rare",
+        "description": "+1 chamber slot",
+        "effects": {"extra_chambers": 1},
+    },
+    {
+        "id": "phoenix_feather", "name": "Phoenix Feather", "rarity": "rare",
+        "description": "On bust: revive at $1k",
+        "effects": {"phoenix_feather": True},
+    },
+    {
+        "id": "outlaws_legacy", "name": "Outlaw's Legacy", "rarity": "rare",
+        "description": "Notor up threshold -1",
+        "effects": {"outlaw_legacy": 1},
+    },
+    {
+        "id": "diamond_spurs", "name": "Diamond Spurs", "rarity": "rare",
+        "description": "Holster scoring x1.5",
+        "effects": {"holster_score_mult": 1.5},
+    },
+    {
+        "id": "midnight_oil", "name": "Midnight Oil", "rarity": "rare",
+        "description": "+1 pick per round",
+        "effects": {"extra_picks": 1},
+    },
+    {
+        "id": "platinum_tooth", "name": "Platinum Tooth", "rarity": "rare",
+        "description": "+$100 flat per correct",
+        "effects": {"flat_cash_per_correct": 100},
+    },
+    {
+        "id": "tombstone_ace", "name": "Tombstone Ace", "rarity": "rare",
+        "description": "Wrong DE: 25% score correct",
+        "effects": {"tombstone_ace_chance": 0.25},
+    },
+    {
+        "id": "thunderclap", "name": "Thunderclap", "rarity": "rare",
+        "description": "+$500 on level up",
+        "effects": {"thunderclap_bonus": 500},
+    },
+
+    # ── Legendary (10) ──
+    {
+        "id": "peacemaker", "name": "The Peacemaker", "rarity": "legendary",
+        "description": "All picks use DE win vals",
+        "effects": {"peacemaker": True},
+    },
+    {
+        "id": "wanted_doa", "name": "Wanted: Dead or Alive", "rarity": "legendary",
+        "description": "Wanted never decreases",
+        "effects": {"wanted_never_decrease": True},
+    },
+    {
+        "id": "gold_rush", "name": "Gold Rush", "rarity": "legendary",
+        "description": "Gains x2, losses x2",
+        "effects": {"gold_rush": True},
+    },
+    {
+        "id": "ace_of_spades", "name": "The Ace of Spades", "rarity": "legendary",
+        "description": "Every 5th pick auto-correct",
+        "effects": {"ace_of_spades_interval": 5},
+    },
+    {
+        "id": "manifest_destiny", "name": "Manifest Destiny", "rarity": "legendary",
+        "description": "Mult reads +2 levels",
+        "effects": {"manifest_destiny": 2},
+    },
+    {
+        "id": "lone_ranger", "name": "The Lone Ranger", "rarity": "legendary",
+        "description": "1 iron equipped: effects x3",
+        "effects": {"lone_ranger": True},
+    },
+    {
+        "id": "lady_luck", "name": "Lady Luck", "rarity": "legendary",
+        "description": "30% miss becomes correct",
+        "effects": {"ghost_chance": 0.30},
+    },
+    {
+        "id": "el_dorado", "name": "El Dorado", "rarity": "legendary",
+        "description": "+$500/round, +$50 more/round",
+        "effects": {"el_dorado_base": 500, "el_dorado_increment": 50},
+    },
+    {
+        "id": "dead_mans_hand", "name": "Dead Man's Hand", "rarity": "legendary",
+        "description": "On bust: 50% peak as score",
+        "effects": {"dead_mans_hand": True},
+    },
+    {
+        "id": "high_noon", "name": "High Noon", "rarity": "legendary",
+        "description": "1/round: auto-correct, next auto-wrong",
+        "effects": {"high_noon": True},
+    },
 ]
 
 IRON_DEFS_BY_ID = {iron["id"]: iron for iron in IRON_DEFS}
 
 # Rarity weights for offering rolls
-RARITY_WEIGHTS = {"common": 50, "uncommon": 35, "rare": 15}
+RARITY_WEIGHTS = {"common": 45, "uncommon": 30, "rare": 18, "legendary": 7}

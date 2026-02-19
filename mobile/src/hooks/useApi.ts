@@ -8,6 +8,7 @@ import type {
   BountySubmitResponse,
   BountyDetailedStats,
   BountyEquippedIron,
+  BountyIronFullDef,
   BountyIronOffering,
   BountyResetResponse,
   BountySkipResponse,
@@ -80,6 +81,13 @@ export function useBountySkip() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
     },
+  });
+}
+
+export function useAllIrons() {
+  return useQuery<BountyIronFullDef[]>({
+    queryKey: ["allIrons"],
+    queryFn: () => bounty.allIrons(),
   });
 }
 

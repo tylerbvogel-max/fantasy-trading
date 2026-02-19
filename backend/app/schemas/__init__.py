@@ -180,6 +180,14 @@ class BountySubmitResponse(BaseModel):
     symbol: str = "SPY"
 
 
+class BountyIronFullDef(BaseModel):
+    id: str
+    name: str
+    rarity: str
+    description: str
+    boost_description: str | None = None
+
+
 class BountyIronDef(BaseModel):
     id: str
     name: str
