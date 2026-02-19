@@ -170,7 +170,22 @@ export default function ProbabilityConeChart({
   const nowX = timeToX(nowTs);
 
   // ── Volatility / cone generation ──
-  const sigma = computeSigma(hist);
+  const sigma = computeSigma(hist); // per-candle σ of log returns
+
+  // σ_window: scale per-candle σ to the full projection window
+  // Estimate candle interval from data, then count how many fit in the projection
+  const avgInterval =
+    hist.length >= 2
+      ? (hist[hist.length - 1].timestamp - hist[0].timestamp) / (hist.length - 1)
+      : 300; // default 5 min
+  const projSeconds = tEnd - nowTs;
+  const windowCandles = Math.max(1, projSeconds / avgInterval);
+  const sigmaWindow = sigma * Math.sqrt(windowCandles);
+
+  // Dynamic hold threshold: Φ⁻¹(2/3) ≈ 0.4307 × σ_window → ~1/3 probability each
+  const PHI_INV_TWO_THIRDS = 0.4307;
+  const holdThreshold = Math.max(0.0003, Math.min(0.02, PHI_INV_TWO_THIRDS * sigmaWindow));
+
   const cone1 = generateCone(lastPrice, sigma, 1, PROJECTION_POINTS);
   const cone2 = generateCone(lastPrice, sigma, 2, PROJECTION_POINTS);
   const cone3 = generateCone(lastPrice, sigma, 3, PROJECTION_POINTS);
@@ -306,7 +321,7 @@ export default function ProbabilityConeChart({
         {/* Outcome zones: rise / hold / fall — to the right of "Now" */}
         {(() => {
           const refPrice = openPrice ?? lastPrice;
-          const holdHalf = refPrice * 0.0005; // HOLD_THRESHOLD = 0.05%
+          const holdHalf = refPrice * holdThreshold;
           const riseY = CHART_PADDING.top + toY(refPrice + holdHalf, yMin, yMax, plotH);
           const fallY = CHART_PADDING.top + toY(refPrice - holdHalf, yMin, yMax, plotH);
           const plotTop = CHART_PADDING.top;
@@ -343,6 +358,28 @@ export default function ProbabilityConeChart({
                 fill={Colors.accent}
                 fillOpacity={0.08}
               />
+              {/* Hold/Rise boundary */}
+              <Line
+                x1={zoneLeft}
+                y1={riseY}
+                x2={zoneLeft + zoneWidth}
+                y2={riseY}
+                stroke={Colors.text}
+                strokeOpacity={0.35}
+                strokeWidth={1}
+                strokeDasharray="4,4"
+              />
+              {/* Hold/Fall boundary */}
+              <Line
+                x1={zoneLeft}
+                y1={fallY}
+                x2={zoneLeft + zoneWidth}
+                y2={fallY}
+                stroke={Colors.text}
+                strokeOpacity={0.35}
+                strokeWidth={1}
+                strokeDasharray="4,4"
+              />
             </>
           );
         })()}
@@ -353,7 +390,8 @@ export default function ProbabilityConeChart({
           y1={CHART_PADDING.top}
           x2={nowX}
           y2={CHART_PADDING.top + plotH}
-          stroke={Colors.textMuted}
+          stroke={Colors.text}
+          strokeOpacity={0.35}
           strokeWidth={1}
           strokeDasharray="4,4"
         />
