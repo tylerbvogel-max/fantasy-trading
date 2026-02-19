@@ -24,6 +24,7 @@ import {
 } from "../hooks/useApi";
 import ProbabilityConeChart from "../components/ProbabilityConeChart";
 import IronOfferingModal from "../components/IronOfferingModal";
+import PixelFire from "../components/PixelFire";
 
 // ── Card & gesture constants ──
 
@@ -817,7 +818,7 @@ export default function BountyHunterScreen() {
           {/* Main swipeable card */}
           <Animated.View
             style={[
-              styles.card,
+              styles.cardOuter,
               {
                 transform: [
                   { translateX },
@@ -828,6 +829,8 @@ export default function BountyHunterScreen() {
             ]}
             {...panResponder.panHandlers}
           >
+          <PixelFire width={CARD_WIDTH} height={CARD_SIZE} />
+          <View style={styles.card}>
             {/* Color overlays */}
             <Animated.View
               style={[styles.cardOverlay, { backgroundColor: Colors.green, opacity: riseBgOpacity }]}
@@ -880,6 +883,7 @@ export default function BountyHunterScreen() {
                 <Text style={[styles.cardLabel, { color: Colors.green }]}>RISE</Text>
               </View>
             </View>
+          </View>
           </Animated.View>
         </View>
 
@@ -1464,6 +1468,11 @@ const styles = StyleSheet.create({
   },
 
   // Card
+  cardOuter: {
+    width: CARD_WIDTH,
+    height: CARD_SIZE,
+    overflow: "visible",
+  },
   card: {
     width: CARD_WIDTH,
     height: CARD_SIZE,
