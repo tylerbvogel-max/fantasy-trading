@@ -106,6 +106,10 @@
 - **8-bit SFX on Swipe** — play retro sound effects on each committed swipe direction (rise/fall/hold/skip). Code is written in AudioContext (`playSfx`), BountyHunterScreen (`onCommitRef`), and ProfileScreen (SFX toggle) but changes are uncommitted. Still need to generate 4 WAV files via [sfxr.me](https://sfxr.me/) and place them in `mobile/assets/audio/` as `sfx-rise.wav`, `sfx-fall.wav`, `sfx-hold.wav`, `sfx-skip.wav`. Then commit and test.
 - **More Soundtrack Music** — if we want more than one song, get a subscription to [Envato Elements](https://elements.envato.com/) and download tracks from there. No development needed yet.
 
+## Iron Collection Enhancements
+- **Usage Tracking** — track how many times a player has used each iron. After a threshold number of uses, unlock an additional ability — e.g., the iron always occupies its primary slot, or it gains a chance to spawn with a boost for that run.
+- **Seed System** — introduce a seed-based system to define spawn probabilities for specific irons. Seeds could be earned, found, or tied to achievements, giving players a way to influence which irons appear in offerings.
+
 ## Data Analytics
 - **Heat Map** — which stocks are most popular in your league
 - **Sentiment Tracker** — bull/bear ratio among players
@@ -189,5 +193,8 @@ Example — Day Trader:
 ### Prestige Classes (Level 20)
 - Multi-class into hybrid roles (e.g., Value Trader = Value Investor + Day Trader)
 - Requires completing special challenges
+
+## Important Deadlines
+- **June 28, 2026** — Trading becomes 24 hours a day, 5 days a week. The app needs to be live before then.
 
 *Last updated: Feb 2026*
