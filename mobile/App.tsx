@@ -15,7 +15,8 @@ import {
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
 import { Colors } from './src/utils/theme';
-import { loadStoredToken, registerSignOutHandler } from './src/api/client';
+import Constants from 'expo-constants';
+import { loadStoredToken, persistToken, registerSignOutHandler } from './src/api/client';
 import { WalkthroughProvider, useWalkthrough } from './src/contexts/WalkthroughContext';
 import { AudioProvider } from './src/contexts/AudioContext';
 import WalkthroughScreen from './src/screens/WalkthroughScreen';
@@ -68,8 +69,28 @@ function AppContent() {
 
   useEffect(() => {
     registerSignOutHandler(() => setIsAuthenticated(false));
-    loadStoredToken().then((token) => {
-      if (token) setIsAuthenticated(true);
+    loadStoredToken().then(async (token) => {
+      if (token) {
+        setIsAuthenticated(true);
+        setIsLoading(false);
+        return;
+      }
+      // Auto-login: fetch dev token from backend
+      try {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(
+          (Constants.expoConfig?.extra?.apiUrl ?? "https://fantasy-trading-api.onrender.com") + "/auth/dev-token",
+          { signal: controller.signal }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          await persistToken(data.token);
+          setIsAuthenticated(true);
+        }
+      } catch (_) {
+        // backend unreachable — fall through to auth screen
+      }
       setIsLoading(false);
     });
   }, []);

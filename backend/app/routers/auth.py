@@ -60,6 +60,22 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
     )
 
 
+@router.get("/dev-token")
+async def dev_token(db: AsyncSession = Depends(get_db)):
+    """Auto-create a dev user and return a usable token. For local testing only."""
+    from app.services.auth_service import hash_token
+    from sqlalchemy import select
+    DEV_TOKEN = "dev"
+    result = await db.execute(select(User).where(User.alias == "dev"))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(alias="dev", is_admin=True, token_hash=hash_token(DEV_TOKEN))
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    return {"alias": user.alias, "token": DEV_TOKEN}
+
+
 @router.get("/me", response_model=UserProfile)
 async def get_profile(
     user: User = Depends(get_current_user),
