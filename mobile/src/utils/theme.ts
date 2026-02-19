@@ -28,6 +28,15 @@ export const Colors = {
   borderLight: "#404040",
 };
 
+export const LightCardColors = {
+  cardBg: "#F5F5F0",
+  text: "#1A1A1A",
+  textSecondary: "#4A4A4A",
+  textMuted: "#888888",
+  border: "#D0D0D0",
+  surface: "#E8E8E3",
+};
+
 export const Spacing = {
   xs: 4,
   sm: 8,

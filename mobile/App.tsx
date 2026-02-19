@@ -19,6 +19,7 @@ import Constants from 'expo-constants';
 import { loadStoredToken, persistToken, registerSignOutHandler } from './src/api/client';
 import { WalkthroughProvider, useWalkthrough } from './src/contexts/WalkthroughContext';
 import { AudioProvider } from './src/contexts/AudioContext';
+import { CardThemeProvider } from './src/contexts/CardThemeContext';
 import WalkthroughScreen from './src/screens/WalkthroughScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import BountyHunterScreen from './src/screens/BountyHunterScreen';
@@ -140,8 +141,10 @@ export default function App() {
       <SafeAreaProvider>
         <WalkthroughProvider>
           <AudioProvider>
-            <StatusBar style="light" />
-            <AppContent />
+            <CardThemeProvider>
+              <StatusBar style="light" />
+              <AppContent />
+            </CardThemeProvider>
           </AudioProvider>
         </WalkthroughProvider>
       </SafeAreaProvider>

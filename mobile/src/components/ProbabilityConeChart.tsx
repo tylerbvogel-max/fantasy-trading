@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import Svg, { Path, Line, Rect, Text as SvgText } from "react-native-svg";
-import { Colors, FontFamily, FontSize, Spacing } from "../utils/theme";
+import { Colors, LightCardColors, FontFamily, FontSize, Spacing } from "../utils/theme";
 
 interface CandlePoint {
   timestamp: number;
@@ -15,6 +15,7 @@ interface ProbabilityConeChartProps {
   openPrice?: number | null;
   width: number;
   height: number;
+  lightTheme?: boolean;
 }
 
 const CHART_PADDING = { top: 20, right: 50, bottom: 30, left: 55 };
@@ -102,7 +103,11 @@ export default function ProbabilityConeChart({
   openPrice,
   width,
   height,
+  lightTheme,
 }: ProbabilityConeChartProps) {
+  const tc = lightTheme
+    ? { text: LightCardColors.text, textMuted: LightCardColors.textMuted, border: LightCardColors.border }
+    : { text: Colors.text, textMuted: Colors.textMuted, border: Colors.border };
   const plotW = width - CHART_PADDING.left - CHART_PADDING.right;
   const plotH = height - CHART_PADDING.top - CHART_PADDING.bottom;
 
@@ -267,11 +272,11 @@ export default function ProbabilityConeChart({
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.symbol}>{symbol}</Text>
-          {name ? <Text style={styles.subtitle}>{name}</Text> : null}
+          <Text style={[styles.symbol, { color: tc.text }]}>{symbol}</Text>
+          {name ? <Text style={[styles.subtitle, { color: tc.textMuted }]}>{name}</Text> : null}
         </View>
         <View style={styles.priceWrap}>
-          <Text style={styles.currentPrice}>${formatPrice(lastPrice)}</Text>
+          <Text style={[styles.currentPrice, { color: tc.text }]}>${formatPrice(lastPrice)}</Text>
           <Text
             style={[
               styles.changeText,
@@ -295,13 +300,13 @@ export default function ProbabilityConeChart({
               y1={yl.y}
               x2={CHART_PADDING.left + plotW}
               y2={yl.y}
-              stroke={Colors.border}
+              stroke={tc.border}
               strokeWidth={0.5}
             />
             <SvgText
               x={CHART_PADDING.left - 8}
               y={yl.y + 4}
-              fill={Colors.textMuted}
+              fill={tc.textMuted}
               fontSize={10}
               textAnchor="end"
               fontFamily={FontFamily.regular}
@@ -312,11 +317,11 @@ export default function ProbabilityConeChart({
         ))}
 
         {/* 3σ cone outline */}
-        <Path d={cone3Path} fill="none" stroke={Colors.text} strokeOpacity={0.12} strokeWidth={1} />
+        <Path d={cone3Path} fill="none" stroke={tc.text} strokeOpacity={0.12} strokeWidth={1} />
         {/* 2σ cone outline */}
-        <Path d={cone2Path} fill="none" stroke={Colors.text} strokeOpacity={0.2} strokeWidth={1} />
+        <Path d={cone2Path} fill="none" stroke={tc.text} strokeOpacity={0.2} strokeWidth={1} />
         {/* 1σ cone outline */}
-        <Path d={cone1Path} fill="none" stroke={Colors.text} strokeOpacity={0.35} strokeWidth={1} />
+        <Path d={cone1Path} fill="none" stroke={tc.text} strokeOpacity={0.35} strokeWidth={1} />
 
         {/* Outcome zones: rise / hold / fall — to the right of "Now" */}
         {(() => {
@@ -364,7 +369,7 @@ export default function ProbabilityConeChart({
                 y1={riseY}
                 x2={zoneLeft + zoneWidth}
                 y2={riseY}
-                stroke={Colors.text}
+                stroke={tc.text}
                 strokeOpacity={0.35}
                 strokeWidth={1}
                 strokeDasharray="4,4"
@@ -375,7 +380,7 @@ export default function ProbabilityConeChart({
                 y1={fallY}
                 x2={zoneLeft + zoneWidth}
                 y2={fallY}
-                stroke={Colors.text}
+                stroke={tc.text}
                 strokeOpacity={0.35}
                 strokeWidth={1}
                 strokeDasharray="4,4"
@@ -390,7 +395,7 @@ export default function ProbabilityConeChart({
           y1={CHART_PADDING.top}
           x2={nowX}
           y2={CHART_PADDING.top + plotH}
-          stroke={Colors.text}
+          stroke={tc.text}
           strokeOpacity={0.35}
           strokeWidth={1}
           strokeDasharray="4,4"
@@ -410,7 +415,7 @@ export default function ProbabilityConeChart({
             key={`t-${i}`}
             x={tl.x}
             y={height - 6}
-            fill={tl.label === "Now" ? Colors.text : Colors.textMuted}
+            fill={tl.label === "Now" ? tc.text : tc.textMuted}
             fontSize={10}
             textAnchor="middle"
             fontFamily={tl.label === "Now" ? FontFamily.bold : FontFamily.regular}

@@ -16,10 +16,10 @@ from app.services.bounty_config import (
     DIR_SCORING, HOL_SCORING, WANTED_MULT, WANTED_LEVEL_CAP,
     NOTORIETY_WEIGHT, NOTORIETY_UP_THRESHOLD, NOTORIETY_DOWN_THRESHOLD,
     ANTE_BASE, STARTING_DOUBLE_DOLLARS, STARTING_CHAMBERS, MAX_CHAMBERS,
-    HOLD_THRESHOLD, CONFIDENCE_LABELS,
+    HOLD_THRESHOLD_FALLBACK, CONFIDENCE_LABELS, compute_hold_threshold,
     wanted_multiplier, skip_cost as calc_skip_cost,
     IRON_DEFS, IRON_DEFS_BY_ID, RARITY_WEIGHTS,
-    chambers_for_level,
+    chambers_for_level, bet_to_tier,
 )
 from app.config import get_settings
 
@@ -118,6 +118,7 @@ async def get_equipped_irons(db: AsyncSession, user_id: uuid.UUID) -> list[dict]
                 "name": iron_def["name"],
                 "rarity": iron_def["rarity"],
                 "description": iron_def["description"],
+                "boost_description": iron_def.get("boost_description", ""),
                 "slot_number": row.slot_number,
             })
     return irons
@@ -380,7 +381,7 @@ async def submit_prediction(
     user_id: uuid.UUID,
     window_id: uuid.UUID,
     prediction: str,
-    confidence: int,
+    bet_amount: int,
     symbol: str = "SPY",
 ) -> BountyPrediction:
     """Submit a prediction for a bounty window."""
@@ -413,8 +414,11 @@ async def submit_prediction(
 
     if prediction not in ("UP", "DOWN", "HOLD"):
         raise BountyError("Prediction must be UP, DOWN, or HOLD")
-    if confidence not in (1, 2, 3):
-        raise BountyError("Confidence must be 1, 2, or 3")
+    if not (0 <= bet_amount <= 100):
+        raise BountyError("Bet amount must be between 0 and 100")
+
+    # Derive pseudo-tier from bet amount for iron effects
+    confidence = bet_to_tier(bet_amount)
 
     stats = await get_or_create_player_stats(db, user_id)
 
@@ -454,6 +458,7 @@ async def submit_prediction(
         symbol=symbol,
         prediction=prediction,
         confidence=confidence,
+        bet_amount=bet_amount,
         wanted_level_at_pick=stats.wanted_level,
         action_type=action_type,
         wanted_multiplier_used=mult,
@@ -559,7 +564,11 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             pct_change = (price - open_f) / open_f if open_f != 0 else 0
             stock_changes[stock_row.symbol] = abs(pct_change)
 
-            if abs(pct_change) < HOLD_THRESHOLD:
+            # Dynamic hold threshold based on stock volatility
+            candles = await fetch_chart_yahoo(stock_row.symbol)
+            hold_threshold = compute_hold_threshold(candles) if candles else HOLD_THRESHOLD_FALLBACK
+
+            if abs(pct_change) < hold_threshold:
                 stock_row.result = "HOLD"
             elif price >= open_f:
                 stock_row.result = "UP"
@@ -629,29 +638,29 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             pred.is_correct = is_correct
             pred.insurance_triggered = insurance_triggered
 
-            # Calculate scoring
-            scoring_table = HOL_SCORING if is_holster else DIR_SCORING
-            conf = pred.confidence
+            # Calculate scoring — bet-based: win = bet_amount × wanted_mult, lose = bet_amount
+            bet = pred.bet_amount or 0
+            conf = pred.confidence or bet_to_tier(bet)
+            mult = wanted_multiplier(max(stats.wanted_level, 1))
 
             if insurance_triggered:
-                # Insurance forgives the loss — 0 points
                 base = 0
             elif is_correct:
-                win_val = scoring_table[conf]["win"]
-                # Apply iron win bonuses
+                win_val = bet * mult
+                # Apply iron win bonuses (scaled by mult already in bet, add flat bonuses)
                 if conf == 1:
-                    win_val += fx["draw_win_bonus"]
+                    win_val += fx["draw_win_bonus"] * mult
                 if conf == 2:
-                    win_val += fx["qd_win_bonus"]
+                    win_val += fx["qd_win_bonus"] * mult
                 if is_holster:
-                    win_val += fx["holster_win_bonus"]
-                win_val += fx["per_level_win_bonus"] * stats.wanted_level
+                    win_val += fx["holster_win_bonus"] * mult
+                win_val += fx["per_level_win_bonus"] * stats.wanted_level * mult
                 # DE Double Barrel
                 if conf == 3 and not is_holster and fx["de_win_multiplier"] > 1:
                     win_val = round(win_val * fx["de_win_multiplier"])
                 base = win_val
             else:
-                lose_val = scoring_table[conf]["lose"]
+                lose_val = bet
                 # Apply iron loss reduction
                 lose_val = max(0, lose_val - fx["all_lose_reduction"])
                 # Snake Oil: Draw holster losses = 0
@@ -660,10 +669,9 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
                 base = -lose_val
 
             pred.base_points = base
-            mult = wanted_multiplier(max(stats.wanted_level, 1))
             pred.wanted_multiplier_used = mult
 
-            payout = round(base * mult * fx["score_multiplier"])
+            payout = round(base * fx["score_multiplier"])
 
             # Flat cash bonus (unscaled)
             if is_correct and fx["flat_cash_per_correct"] > 0:
@@ -675,8 +683,9 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             if is_correct:
                 stats.correct_predictions += 1
 
-            # Notoriety accumulation
-            notoriety_delta = NOTORIETY_WEIGHT[conf] * (1 if is_correct else -1)
+            # Notoriety accumulation: bet_amount / 33 to scale into ~0-3 range
+            notoriety_weight = bet / 33.0 if bet > 0 else 1.0
+            notoriety_delta = notoriety_weight * (1 if is_correct else -1)
             if is_correct and fx["notoriety_bonus"] > 0:
                 notoriety_delta += fx["notoriety_bonus"]
             window_notoriety += notoriety_delta
@@ -770,11 +779,13 @@ async def get_user_prediction(
 
 def _pick_to_response(pred: BountyPrediction) -> dict:
     """Convert a prediction to response dict."""
+    conf = pred.confidence or bet_to_tier(pred.bet_amount or 0)
     return {
         "id": pred.id,
         "prediction": pred.prediction,
-        "confidence": pred.confidence,
-        "confidence_label": CONFIDENCE_LABELS[pred.confidence],
+        "confidence": conf,
+        "confidence_label": CONFIDENCE_LABELS.get(conf, "Draw"),
+        "bet_amount": pred.bet_amount or 0,
         "is_correct": pred.is_correct,
         "payout": pred.payout,
         "wanted_level_at_pick": pred.wanted_level_at_pick,

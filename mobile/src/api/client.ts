@@ -76,7 +76,13 @@ async function request<T>(
       await signOut();
     }
     const error = await response.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
+    const detail = error.detail;
+    const msg = typeof detail === "string"
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((d: any) => d.msg ?? JSON.stringify(d)).join("; ")
+        : `HTTP ${response.status}`;
+    throw new Error(msg);
   }
 
   return response.json();
@@ -184,6 +190,7 @@ export interface BountyEquippedIron {
   name: string;
   rarity: string;
   description: string;
+  boost_description?: string;
   slot_number: number;
 }
 
@@ -256,7 +263,7 @@ export interface BountySkipResponse {
 
 export interface BountySubmitResponse {
   prediction: string;
-  confidence_label: string;
+  bet_amount: number;
   message: string;
   symbol: string;
 }
@@ -323,7 +330,7 @@ export interface BountyBoardEntry {
 export const bounty = {
   status: () => request<BountyStatus>("/bounty/status"),
 
-  predict: (data: { bounty_window_id: string; prediction: string; confidence: number; symbol: string }) =>
+  predict: (data: { bounty_window_id: string; prediction: string; bet_amount: number; symbol: string }) =>
     request<BountySubmitResponse>("/bounty/predict", {
       method: "POST",
       body: JSON.stringify(data),

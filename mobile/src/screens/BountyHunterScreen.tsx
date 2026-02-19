@@ -12,7 +12,8 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
+import { Colors, LightCardColors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
+import { useCardTheme } from "../contexts/CardThemeContext";
 import HexIronBar from "../components/HexIronBar";
 import {
   useBountyStatus,
@@ -37,19 +38,6 @@ const VELOCITY_THRESHOLD = 0.5;
 const CHART_WIDTH = CARD_WIDTH - Spacing.lg * 2;
 const CHART_HEIGHT = CARD_SIZE - 120;
 
-// ── Scoring tables (display only — mirrors backend bounty_config) ──
-
-const DIR_SCORING: Record<number, { win: number; lose: number }> = {
-  1: { win: 13, lose: 11 },
-  2: { win: 31, lose: 28 },
-  3: { win: 57, lose: 70 },
-};
-
-const HOL_SCORING: Record<number, { win: number; lose: number }> = {
-  1: { win: 8, lose: 6 },
-  2: { win: 19, lose: 15 },
-  3: { win: 35, lose: 30 },
-};
 
 const WANTED_MULT: Record<number, number> = {
   1: 1, 2: 2, 3: 4, 4: 8, 5: 18,
@@ -57,7 +45,6 @@ const WANTED_MULT: Record<number, number> = {
 };
 
 const TEST_CHOICES: ("RISE" | "FALL" | "HOLD")[] = ["RISE", "FALL", "HOLD"];
-const NOTORIETY_WEIGHT: Record<number, number> = { 1: 1, 2: 1.5, 3: 2 };
 const NOTORIETY_UP_THRESHOLD = 3;
 const NOTORIETY_DOWN_THRESHOLD = -2;
 
@@ -94,7 +81,6 @@ const WantedBar = ({ level, mult }: { level: number; mult: number }) => (
     </Text>
   </View>
 );
-
 const ANTE_BASE = 75;
 const HOLSTER_COLOR = Colors.primary;
 
@@ -117,7 +103,26 @@ interface IronEffects {
   scoreMultiplier: number;
 }
 
-function getIronEffects(equipped: { iron_id: string }[]): IronEffects {
+// Boost effects map: keyed by iron_id, values are additive (multiply for deWinMultiplier/scoreMultiplier)
+const BOOST_EFFECTS: Record<string, Partial<IronEffects>> = {
+  steady_hand:     { drawWinBonus: 6, allLoseReduction: 2 },
+  thick_skin:      { allLoseReduction: 5, holsterWinBonus: 2 },
+  lucky_horseshoe: { accuracyBonus: 0.10, ghostChance: 0.05 },
+  trail_rations:   { anteReduction: 35 },
+  bandolier:       { skipDiscount: 0.40, flatCashPerCorrect: 25 },
+  leather_holster: { holsterWinBonus: 8, snakeOil: true },
+  iron_sights:     { qdWinBonus: 10, deAccuracyBonus: 0.05 },
+  snake_oil:       { allLoseReduction: 5, holsterWinBonus: 3 },
+  deadeye_scope:   { deAccuracyBonus: 0.15, deWinMultiplier: 1.5 },
+  gold_tooth:      { flatCashPerCorrect: 100, notorietyBonus: 0.3 },
+  bounty_poster:   { notorietyBonus: 1.0, perLevelWinBonus: 0.5 },
+  sheriffs_badge:  { perLevelWinBonus: 2, allLoseReduction: 2 },
+  double_barrel:   { deWinMultiplier: 1.5, scoreMultiplier: 1.2 },
+  ghost_rider:     { ghostChance: 0.15, flatCashPerCorrect: 75 },
+  golden_revolver: { scoreMultiplier: 1.3, flatCashPerCorrect: 50 },
+};
+
+function getIronEffects(equipped: { iron_id: string }[], boostedIronId?: string | null): IronEffects {
   const fx: IronEffects = {
     drawWinBonus: 0, allLoseReduction: 0, accuracyBonus: 0,
     anteReduction: 0, skipDiscount: 0, holsterWinBonus: 0,
@@ -144,6 +149,29 @@ function getIronEffects(equipped: { iron_id: string }[]): IronEffects {
       case 'golden_revolver': fx.scoreMultiplier *= 1.5; break;
     }
   }
+
+  // Apply boost effects if an iron is boosted
+  if (boostedIronId) {
+    const boost = BOOST_EFFECTS[boostedIronId];
+    if (boost) {
+      if (boost.drawWinBonus)      fx.drawWinBonus += boost.drawWinBonus;
+      if (boost.allLoseReduction)  fx.allLoseReduction += boost.allLoseReduction;
+      if (boost.accuracyBonus)     fx.accuracyBonus += boost.accuracyBonus;
+      if (boost.anteReduction)     fx.anteReduction += boost.anteReduction;
+      if (boost.skipDiscount)      fx.skipDiscount += boost.skipDiscount;
+      if (boost.holsterWinBonus)   fx.holsterWinBonus += boost.holsterWinBonus;
+      if (boost.qdWinBonus)        fx.qdWinBonus += boost.qdWinBonus;
+      if (boost.snakeOil)          fx.snakeOil = true;
+      if (boost.deAccuracyBonus)   fx.deAccuracyBonus += boost.deAccuracyBonus;
+      if (boost.flatCashPerCorrect) fx.flatCashPerCorrect += boost.flatCashPerCorrect;
+      if (boost.notorietyBonus)    fx.notorietyBonus += boost.notorietyBonus;
+      if (boost.perLevelWinBonus)  fx.perLevelWinBonus += boost.perLevelWinBonus;
+      if (boost.deWinMultiplier)   fx.deWinMultiplier *= boost.deWinMultiplier;
+      if (boost.ghostChance)       fx.ghostChance = Math.min(1, fx.ghostChance + boost.ghostChance);
+      if (boost.scoreMultiplier)   fx.scoreMultiplier *= boost.scoreMultiplier;
+    }
+  }
+
   return fx;
 }
 
@@ -192,6 +220,9 @@ function useCountdown(targetTime: string | null) {
 }
 
 export default function BountyHunterScreen() {
+  // ── Card theme ──
+  const { lightCards } = useCardTheme();
+
   // ── API hooks ──
   const { data: status, isLoading, isError, refetch } = useBountyStatus();
   const submitPrediction = useSubmitPrediction();
@@ -201,15 +232,16 @@ export default function BountyHunterScreen() {
   const resetMutation = useBountyReset();
 
   // ── UI state ──
-  const [confidence, setConfidence] = useState(1);
+  const [betAmount, setBetAmount] = useState(50);
   const [toast, setToast] = useState<string | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const [swipedPicks, setSwipedPicks] = useState<
-    { symbol: string; prediction: "UP" | "DOWN" | "HOLD"; confidence: number }[]
+    { symbol: string; prediction: "UP" | "DOWN" | "HOLD"; betAmount: number }[]
   >([]);
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
   const [showIronModal, setShowIronModal] = useState(false);
   const [ignoreServerPicks, setIgnoreServerPicks] = useState(false);
+  const [boostedIronId, setBoostedIronId] = useState<string | null>(null);
 
 
   // ── Test mode: random outcomes for each stock (1/3 each) ──
@@ -426,11 +458,12 @@ export default function BountyHunterScreen() {
     translateY.setValue(0);
   }, [currentStock?.symbol]);
 
-  // Reset optimistic lists when window changes
+  // Reset optimistic lists and boost when window changes
   const windowId = currentWindow?.id;
   useEffect(() => {
     setSwipedPicks([]);
     setSkippedSymbols([]);
+    setBoostedIronId(null);
   }, [windowId]);
 
   // Show iron offering modal
@@ -464,7 +497,7 @@ export default function BountyHunterScreen() {
   const handleSwipe = (prediction: "UP" | "DOWN") => {
     if (!currentWindow || !currentStock) return;
     const symbol = currentStock.symbol;
-    setSwipedPicks((prev) => [...prev, { symbol, prediction, confidence }]);
+    setSwipedPicks((prev) => [...prev, { symbol, prediction, betAmount }]);
 
     // In test rounds (ignoreServerPicks), skip backend — just track locally
     if (ignoreServerPicks) {
@@ -476,7 +509,7 @@ export default function BountyHunterScreen() {
       {
         bounty_window_id: currentWindow.id,
         prediction,
-        confidence,
+        bet_amount: betAmount,
         symbol,
       },
       {
@@ -502,7 +535,7 @@ export default function BountyHunterScreen() {
   const handleHold = () => {
     if (!currentWindow || !currentStock) return;
     const symbol = currentStock.symbol;
-    setSwipedPicks((prev) => [...prev, { symbol, prediction: "HOLD", confidence }]);
+    setSwipedPicks((prev) => [...prev, { symbol, prediction: "HOLD", betAmount }]);
 
     // In test rounds (ignoreServerPicks), skip backend — just track locally
     if (ignoreServerPicks) {
@@ -514,7 +547,7 @@ export default function BountyHunterScreen() {
       {
         bounty_window_id: currentWindow.id,
         prediction: "HOLD",
-        confidence,
+        bet_amount: betAmount,
         symbol,
       },
       {
@@ -571,6 +604,10 @@ export default function BountyHunterScreen() {
     else if (direction === "fall") handleSwipe("DOWN");
   };
 
+  const handleBoostSelected = (ironId: string | null) => {
+    setBoostedIronId(ironId);
+  };
+
   const handlePickIron = (ironId: string) => {
     pickIronMutation.mutate(ironId, {
       onSuccess: () => {
@@ -600,42 +637,15 @@ export default function BountyHunterScreen() {
     setTestLevelOffset((prev) => prev + lastLevelChange.current);
     setSwipedPicks([]);
     setSkippedSymbols([]);
+    setBoostedIronId(null);
     setIgnoreServerPicks(true);
     generateTestOutcomes(allStocks);
     refetch();
   };
 
-  // ── Scoring display values ──
-  const dirScore = DIR_SCORING[confidence];
-  const holScore = HOL_SCORING[confidence];
-  const dirWin = Math.round(dirScore.win * mult);
-  const dirLose = Math.round(dirScore.lose * mult);
-  const holWin = Math.round(holScore.win * mult);
-  const holLose = Math.round(holScore.lose * mult);
-
-  const CONFIDENCE_OPTIONS = [
-    {
-      value: 1,
-      label: "Draw",
-      description: `+${DIR_SCORING[1].win}\u00D7${mult}`,
-      color: Colors.text,
-      bgColor: Colors.surface,
-    },
-    {
-      value: 2,
-      label: "Quick Draw",
-      description: `+${DIR_SCORING[2].win}\u00D7${mult}`,
-      color: Colors.yellow,
-      bgColor: Colors.yellow + "20",
-    },
-    {
-      value: 3,
-      label: "Dead Eye",
-      description: `+${DIR_SCORING[3].win}\u00D7${mult}`,
-      color: Colors.orange,
-      bgColor: Colors.orange + "20",
-    },
-  ];
+  // ── Scoring display values (bet-based) ──
+  const betWin = betAmount * mult;
+  const betLose = betAmount;
 
   // ── Loading state ──
   if (isLoading) {
@@ -791,9 +801,9 @@ export default function BountyHunterScreen() {
             <Ionicons name="trending-down" size={20} color={Colors.accent} />
             <Text style={[styles.indicatorLabel, { color: Colors.accent }]}>FALL</Text>
             <Text style={styles.indicatorScore}>
-              <Text style={{ color: Colors.green }}>+{dirWin}</Text>
+              <Text style={{ color: Colors.green }}>+{betWin}</Text>
               {" / "}
-              <Text style={{ color: Colors.accent }}>-{dirLose}</Text>
+              <Text style={{ color: Colors.accent }}>-{betLose}</Text>
             </Text>
           </Animated.View>
 
@@ -804,9 +814,9 @@ export default function BountyHunterScreen() {
             <Ionicons name="trending-up" size={20} color={Colors.green} />
             <Text style={[styles.indicatorLabel, { color: Colors.green }]}>RISE</Text>
             <Text style={styles.indicatorScore}>
-              <Text style={{ color: Colors.green }}>+{dirWin}</Text>
+              <Text style={{ color: Colors.green }}>+{betWin}</Text>
               {" / "}
-              <Text style={{ color: Colors.accent }}>-{dirLose}</Text>
+              <Text style={{ color: Colors.accent }}>-{betLose}</Text>
             </Text>
           </Animated.View>
 
@@ -817,16 +827,16 @@ export default function BountyHunterScreen() {
             <Ionicons name="shield-checkmark" size={20} color={HOLSTER_COLOR} />
             <Text style={[styles.indicatorLabel, { color: HOLSTER_COLOR }]}>HOLD</Text>
             <Text style={styles.indicatorScore}>
-              <Text style={{ color: Colors.green }}>+{holWin}</Text>
+              <Text style={{ color: Colors.green }}>+{betWin}</Text>
               {" / "}
-              <Text style={{ color: Colors.accent }}>-{holLose}</Text>
+              <Text style={{ color: Colors.accent }}>-{betLose}</Text>
             </Text>
           </Animated.View>
 
           {/* Back card (next stock peeking behind) */}
           {nextStock && (
             <View style={styles.backCardContainer}>
-              <View style={[styles.card, styles.backCard]}>
+              <View style={[styles.card, styles.backCard, lightCards && { backgroundColor: LightCardColors.cardBg, borderColor: LightCardColors.border }]}>
                 <View style={styles.cardContent}>
                   <ProbabilityConeChart
                     candles={nextStock.candles}
@@ -835,6 +845,7 @@ export default function BountyHunterScreen() {
                     openPrice={nextStock.open_price}
                     width={CHART_WIDTH}
                     height={CHART_HEIGHT}
+                    lightTheme={lightCards}
                   />
                 </View>
               </View>
@@ -857,7 +868,7 @@ export default function BountyHunterScreen() {
             ]}
             {...panResponder.panHandlers}
           >
-          <View style={styles.card}>
+          <View style={[styles.card, lightCards && { backgroundColor: LightCardColors.cardBg, borderColor: LightCardColors.border }]}>
             {/* Color overlays */}
             <Animated.View
               style={[styles.cardOverlay, { backgroundColor: Colors.green, opacity: riseBgOpacity }]}
@@ -880,6 +891,7 @@ export default function BountyHunterScreen() {
                 openPrice={currentStock.open_price}
                 width={CHART_WIDTH}
                 height={CHART_HEIGHT}
+                lightTheme={lightCards}
               />
 
               {/* Test outcome indicator */}
@@ -898,16 +910,16 @@ export default function BountyHunterScreen() {
 
               {/* Cardinal direction labels */}
               <View style={[styles.cardLabelWrap, { top: 4, left: 0, right: 0 }]}>
-                <Text style={[styles.cardLabel, { color: Colors.orange }]}>SKIP ↑</Text>
+                <Text style={[styles.cardLabel, { color: lightCards ? "#B85C00" : Colors.orange }]}>SKIP ↑</Text>
               </View>
               <View style={[styles.cardLabelWrap, { bottom: 4, left: 0, right: 0 }]}>
-                <Text style={[styles.cardLabel, { color: HOLSTER_COLOR }]}>↓ HOLD</Text>
+                <Text style={[styles.cardLabel, { color: lightCards ? "#4A5A9A" : HOLSTER_COLOR }]}>↓ HOLD</Text>
               </View>
               <View style={[styles.cardLabelWrap, { left: 4, top: 0, bottom: 0 }]}>
-                <Text style={[styles.cardLabel, { color: Colors.accent }]}>FALL</Text>
+                <Text style={[styles.cardLabel, { color: lightCards ? "#C0207A" : Colors.accent }]}>FALL</Text>
               </View>
               <View style={[styles.cardLabelWrap, { right: 4, top: 0, bottom: 0 }]}>
-                <Text style={[styles.cardLabel, { color: Colors.green }]}>RISE</Text>
+                <Text style={[styles.cardLabel, { color: lightCards ? "#267A4D" : Colors.green }]}>RISE</Text>
               </View>
             </View>
           </View>
@@ -918,9 +930,10 @@ export default function BountyHunterScreen() {
           chambers={chambers}
           irons={equipped}
           maxChambers={6}
-          confidenceOptions={CONFIDENCE_OPTIONS}
-          selectedConfidence={confidence}
-          onSelectConfidence={setConfidence}
+          betAmount={betAmount}
+          onBetAmountChange={setBetAmount}
+          boostedIronId={boostedIronId}
+          onBoostSelected={handleBoostSelected}
         />
       </View>
     );
@@ -952,20 +965,23 @@ export default function BountyHunterScreen() {
 
           {/* Scored picks grid */}
           {(() => {
-            const fx = getIronEffects(stats?.equipped_irons ?? []);
+            const fx = getIronEffects(stats?.equipped_irons ?? [], boostedIronId);
             const effectiveAnte = Math.max(0, ANTE_BASE - fx.anteReduction);
             let roundTotal = -effectiveAnte; // ante deducted at round start
             let roundNotoriety = 0;
 
+            // Helper: map bet amount to pseudo-tier for iron effects
+            const betToTier = (b: number) => b <= 33 ? 1 : b <= 66 ? 2 : 3;
+
             const scoredPicks = pickedStocks.map((stock) => {
               const swipedPick = swipedPicks.find((p) => p.symbol === stock.symbol);
-              // In test rounds, always prefer local swipe over server pick
               const pred = ignoreServerPicks
                 ? (swipedPick?.prediction ?? stock.my_pick?.prediction)
                 : (stock.my_pick?.prediction ?? swipedPick?.prediction);
-              const conf = ignoreServerPicks
-                ? (swipedPick?.confidence ?? stock.my_pick?.confidence ?? 1)
-                : (stock.my_pick?.confidence ?? swipedPick?.confidence ?? 1);
+              const bet = ignoreServerPicks
+                ? (swipedPick?.betAmount ?? 50)
+                : ((stock.my_pick as any)?.bet_amount ?? swipedPick?.betAmount ?? 50);
+              const conf = betToTier(bet);
               const testAnswer = testOutcomes[stock.symbol];
               const predLabel = pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred;
               const isHold = pred === "HOLD";
@@ -975,28 +991,28 @@ export default function BountyHunterScreen() {
               let isWin = testAnswer === predLabel;
               if (!isWin && fx.ghostChance > 0 && Math.random() < fx.ghostChance) isWin = true;
 
-              const scoring = isHold ? HOL_SCORING[conf] : DIR_SCORING[conf];
-              let winVal = scoring.win;
-              let loseVal = scoring.lose;
+              // Bet-based scoring: win = bet × mult, lose = bet
+              let winVal = bet * mult;
+              let loseVal = bet;
 
-              // Iron win bonuses (matches engine.mjs)
-              if (conf === 1) winVal += fx.drawWinBonus;
-              if (conf === 2) winVal += fx.qdWinBonus;
-              if (isHold) winVal += fx.holsterWinBonus;
-              winVal += fx.perLevelWinBonus * wantedLevel;
+              // Iron win bonuses
+              if (conf === 1) winVal += fx.drawWinBonus * mult;
+              if (conf === 2) winVal += fx.qdWinBonus * mult;
+              if (isHold) winVal += fx.holsterWinBonus * mult;
+              winVal += fx.perLevelWinBonus * wantedLevel * mult;
               if (isDE && !isHold && fx.deWinMultiplier > 1) winVal = Math.round(winVal * fx.deWinMultiplier);
 
               // Iron loss reduction
               loseVal = Math.max(0, loseVal - fx.allLoseReduction);
-              // Snake Oil: Draw holster losses = 0
               if (fx.snakeOil && isHold && conf === 1) loseVal = 0;
 
               const basePoints = isWin ? winVal : -loseVal;
-              let scaledPoints = Math.round(basePoints * mult * fx.scoreMultiplier);
-              // Flat cash bonus (unscaled)
+              let scaledPoints = Math.round(basePoints * fx.scoreMultiplier);
               if (isWin && fx.flatCashPerCorrect > 0) scaledPoints += fx.flatCashPerCorrect;
 
-              let notorietyDelta = (NOTORIETY_WEIGHT[conf] ?? 1) * (isWin ? 1 : -1);
+              // Notoriety: bet / 33 to scale into ~0-3 range
+              const notorietyWeight = bet > 0 ? bet / 33 : 1;
+              let notorietyDelta = notorietyWeight * (isWin ? 1 : -1);
               if (isWin && fx.notorietyBonus > 0) notorietyDelta += fx.notorietyBonus;
 
               roundTotal += scaledPoints;
@@ -1004,9 +1020,8 @@ export default function BountyHunterScreen() {
 
               const color = pred === "UP" ? Colors.green : pred === "DOWN" ? Colors.accent : pred === "HOLD" ? Colors.primary : Colors.textMuted;
               const icon = pred === "UP" ? "arrow-up-circle" : pred === "DOWN" ? "arrow-down-circle" : pred === "HOLD" ? "pause-circle" : "checkmark-circle";
-              const confOpt = CONFIDENCE_OPTIONS.find((o) => o.value === conf) ?? CONFIDENCE_OPTIONS[0];
 
-              return { stock, pred, predLabel, conf, testAnswer, isWin, isHold, basePoints, scaledPoints, notorietyDelta, color, icon, confOpt };
+              return { stock, pred, predLabel, conf, bet, testAnswer, isWin, isHold, basePoints, scaledPoints, notorietyDelta, color, icon };
             });
 
             // Store for handleNextRound to accumulate
@@ -1024,7 +1039,7 @@ export default function BountyHunterScreen() {
             return (
               <>
                 <View style={styles.lockedPicksGrid}>
-                  {scoredPicks.map(({ stock, pred, predLabel, conf, testAnswer, isWin, basePoints, scaledPoints, color, icon, confOpt }) => (
+                  {scoredPicks.map(({ stock, pred, predLabel, bet, testAnswer, isWin, basePoints, scaledPoints, color, icon }) => (
                     <View
                       key={stock.symbol}
                       style={[styles.lockedPickCard, { borderColor: color + "40" }]}
@@ -1038,8 +1053,8 @@ export default function BountyHunterScreen() {
                           {predLabel}
                         </Text>
                       )}
-                      <Text style={[styles.lockedPickBounty, { color: confOpt.color }]}>
-                        {confOpt.label}
+                      <Text style={[styles.lockedPickBounty, { color: Colors.orange }]}>
+                        $${bet}
                       </Text>
                       {testAnswer && (
                         <>
@@ -1059,7 +1074,7 @@ export default function BountyHunterScreen() {
                           >
                             {scaledPoints >= 0 ? "+" : ""}{scaledPoints}
                             <Text style={styles.testScoreBreakdown}>
-                              {" "}({basePoints}×{mult})
+                              {" "}($${bet} bet)
                             </Text>
                           </Text>
                         </>

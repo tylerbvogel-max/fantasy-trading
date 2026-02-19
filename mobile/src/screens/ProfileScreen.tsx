@@ -15,6 +15,7 @@ import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
 import { signOut } from "../api/client";
 import { useWalkthrough } from "../contexts/WalkthroughContext";
 import { useAudio } from "../contexts/AudioContext";
+import { useCardTheme } from "../contexts/CardThemeContext";
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -25,6 +26,7 @@ export default function ProfileScreen() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { resetWalkthrough } = useWalkthrough();
   const { musicEnabled, toggleMusic } = useAudio();
+  const { lightCards, toggleLightCards } = useCardTheme();
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
@@ -81,6 +83,22 @@ export default function ProfileScreen() {
             onValueChange={toggleMusic}
             trackColor={{ false: Colors.surface, true: Colors.accent + "60" }}
             thumbColor={musicEnabled ? Colors.accent : Colors.textMuted}
+          />
+        </View>
+
+        {/* Light Cards toggle */}
+        <View style={styles.lightCardsCard}>
+          <View style={styles.cardLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: Colors.yellow + "20" }]}>
+              <Ionicons name="sunny-outline" size={20} color={Colors.yellow} />
+            </View>
+            <Text style={styles.lightCardsLabel}>Light Cards</Text>
+          </View>
+          <Switch
+            value={lightCards}
+            onValueChange={toggleLightCards}
+            trackColor={{ false: Colors.surface, true: Colors.yellow + "60" }}
+            thumbColor={lightCards ? Colors.yellow : Colors.textMuted}
           />
         </View>
 
@@ -213,5 +231,21 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
     color: Colors.accent,
+  },
+  lightCardsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.card,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginTop: Spacing.md,
+  },
+  lightCardsLabel: {
+    fontSize: FontSize.md,
+    fontFamily: FontFamily.bold,
+    color: Colors.yellow,
   },
 });

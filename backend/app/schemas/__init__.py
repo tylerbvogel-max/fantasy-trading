@@ -169,13 +169,13 @@ class BountyStatusResponse(BaseModel):
 class BountySubmitRequest(BaseModel):
     bounty_window_id: UUID
     prediction: str = Field(..., pattern="^(UP|DOWN|HOLD)$")
-    confidence: int = Field(..., ge=1, le=3)
+    bet_amount: int = Field(..., ge=0, le=100)
     symbol: str = "SPY"
 
 
 class BountySubmitResponse(BaseModel):
     prediction: str
-    confidence_label: str
+    bet_amount: int
     message: str
     symbol: str = "SPY"
 

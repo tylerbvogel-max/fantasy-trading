@@ -53,12 +53,12 @@ async def bounty_predict(
 ):
     try:
         pred = await submit_prediction(
-            db, user.id, req.bounty_window_id, req.prediction, req.confidence, req.symbol
+            db, user.id, req.bounty_window_id, req.prediction, req.bet_amount, req.symbol
         )
         return BountySubmitResponse(
             prediction=pred.prediction,
-            confidence_label=CONFIDENCE_LABELS[pred.confidence],
-            message=f"Locked in! {pred.symbol} {pred.prediction} with {CONFIDENCE_LABELS[pred.confidence]} confidence.",
+            bet_amount=pred.bet_amount,
+            message=f"Locked in! {pred.symbol} {pred.prediction} — $${ pred.bet_amount } bet.",
             symbol=pred.symbol,
         )
     except BountyError as e:
