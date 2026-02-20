@@ -5,9 +5,11 @@ from app.models.bounty import (
     BountyWindow, BountyWindowStock, BountyPrediction, BountyPlayerStats,
     SpyPriceLog, BountyPlayerIron, BountyIronOffering,
 )
+from app.models.regime import MarketRegime
 
 __all__ = [
     "User", "StockActive", "StockMaster", "InviteCode",
     "BountyWindow", "BountyWindowStock", "BountyPrediction", "BountyPlayerStats", "SpyPriceLog",
     "BountyPlayerIron", "BountyIronOffering",
+    "MarketRegime",
 ]

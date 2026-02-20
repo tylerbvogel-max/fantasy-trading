@@ -14,6 +14,7 @@ from app.services.bounty_service import (
     record_window_open_price,
     get_current_window,
 )
+from app.services.news_regime_service import run_regime_assessment
 import logging
 from datetime import datetime, timezone
 
@@ -86,6 +87,16 @@ async def job_settle_bounty_window():
             logger.error(f"Bounty settlement failed: {e}")
 
 
+async def job_regime_assessment():
+    """Assess market regime from news headlines + quantitative data."""
+    async with async_session() as db:
+        try:
+            regime = await run_regime_assessment(db)
+            logger.info(f"Regime assessment complete: {regime.final_regime}")
+        except Exception as e:
+            logger.error(f"Regime assessment failed: {e}")
+
+
 def start_scheduler():
     """Initialize and start the background job scheduler."""
     # Price refresh: every 15 min during market hours (Mon-Fri 9:30-16:00 ET)
@@ -126,6 +137,14 @@ def start_scheduler():
         job_settle_bounty_window,
         CronTrigger(hour="0,2,16,18,20,22", minute=1, day_of_week="mon-fri"),
         id="bounty_settle_window",
+        replace_existing=True,
+    )
+
+    # Regime assessment: 3x daily Mon-Fri at ET 9:30am, 1:30pm, 5:30pm (UTC 14:30, 18:30, 22:30)
+    scheduler.add_job(
+        job_regime_assessment,
+        CronTrigger(hour="14,18,22", minute=30, day_of_week="mon-fri"),
+        id="regime_assessment",
         replace_existing=True,
     )
 

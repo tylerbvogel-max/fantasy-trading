@@ -21,6 +21,10 @@ class Settings(BaseSettings):
 
     # Finnhub
     finnhub_api_key: str = ""
+
+    # News & Regime Detection
+    news_api_key: str = ""
+    anthropic_api_key: str = ""
     price_refresh_interval_minutes: int = 15
     price_staleness_threshold_seconds: int = 300  # 5 minutes
 

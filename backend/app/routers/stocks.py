@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models.stock import StockActive, StockMaster
 from app.services.finnhub_service import search_stocks, get_stock_price
 from app.schemas import StockQuote
+import httpx
 
 router = APIRouter(prefix="/stocks", tags=["stocks"])
 
@@ -108,3 +109,53 @@ async def get_stock(symbol: str, db: AsyncSession = Depends(get_db)):
         beta=float(active.beta) if active and active.beta else None,
         last_updated=active.last_updated if active else None,
     )
+
+
+@router.get("/historical/{symbol}")
+async def get_historical(
+    symbol: str,
+    range: str = Query("1y", regex="^(3mo|6mo|1y|2y|5y|10y)$"),
+    interval: str = Query("1d", regex="^(1d|1wk|1mo)$"),
+):
+    """Fetch historical OHLC data from Yahoo Finance."""
+    sym = symbol.upper()
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
+                params={"interval": interval, "range": range},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=15.0,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="Yahoo Finance request failed")
+
+            data = resp.json()
+            result = data.get("chart", {}).get("result", [])
+            if not result:
+                raise HTTPException(status_code=404, detail=f"No data for {sym}")
+
+            timestamps = result[0].get("timestamp", [])
+            quote = result[0].get("indicators", {}).get("quote", [{}])[0]
+            opens = quote.get("open", [])
+            highs = quote.get("high", [])
+            lows = quote.get("low", [])
+            closes = quote.get("close", [])
+            volumes = quote.get("volume", [])
+
+            candles = []
+            for i, ts in enumerate(timestamps):
+                c = closes[i] if i < len(closes) else None
+                if c is None:
+                    continue
+                candles.append({
+                    "timestamp": ts,
+                    "open": round(opens[i], 2) if i < len(opens) and opens[i] else None,
+                    "high": round(highs[i], 2) if i < len(highs) and highs[i] else None,
+                    "low": round(lows[i], 2) if i < len(lows) and lows[i] else None,
+                    "close": round(c, 2),
+                    "volume": volumes[i] if i < len(volumes) else None,
+                })
+            return {"symbol": sym, "candles": candles}
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail=f"Yahoo Finance error: {str(e)}")

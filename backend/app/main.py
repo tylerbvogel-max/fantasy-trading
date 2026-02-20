@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from pathlib import Path
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, stocks, admin, bounty
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from app.routers import auth, stocks, admin, bounty, regime
 from app.jobs.scheduler import start_scheduler, stop_scheduler
 from app.database import engine, Base
 from sqlalchemy import text
@@ -9,6 +12,8 @@ import app.models  # noqa: F401 — ensure all models are registered
 import logging
 
 logging.basicConfig(level=logging.INFO)
+
+templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 
 
 @asynccontextmanager
@@ -91,6 +96,7 @@ app.include_router(auth.router)
 app.include_router(stocks.router)
 app.include_router(admin.router)
 app.include_router(bounty.router)
+app.include_router(regime.router)
 
 
 @app.get("/")
@@ -105,3 +111,8 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/backtest", response_class=HTMLResponse)
+async def backtest_page(request: Request):
+    return templates.TemplateResponse("backtest.html", {"request": request})
