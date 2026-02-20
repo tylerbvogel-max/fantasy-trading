@@ -10,16 +10,24 @@ interface PixelFireProps {
 
 type Edge = "top" | "bottom" | "left" | "right";
 
-interface ParticleConfig {
-  x: number;
-  y: number;
+/** Static pixel within a tongue — no Animated nodes */
+interface PixelConfig {
+  offsetX: number; // relative to tongue anchor
+  offsetY: number;
   color: string;
   size: number;
+}
+
+/** One tongue = one Animated.View with shared drift/opacity */
+interface TongueConfig {
+  anchorX: number;
+  anchorY: number;
   delay: number;
   duration: number;
   driftX: number;
   driftY: number;
   maxOpacity: number;
+  pixels: PixelConfig[];
 }
 
 const BASE_COLOR = "#FA8057";
@@ -33,45 +41,57 @@ function colorForLayer(layer: number, layers: number): string {
   return Math.random() < 0.5 ? TIP_COLOR : MID_COLOR;
 }
 
-function generateParticles(width: number, height: number): ParticleConfig[] {
-  const particles: ParticleConfig[] = [];
+function generateTongues(width: number, height: number): TongueConfig[] {
   const PX = 5;
+  const tongueSpecs: { edge: Edge; ax: number; ay: number; layers: number }[] = [];
 
-  const tongues: { edge: Edge; ax: number; ay: number; layers: number }[] = [];
-
-  const topCount = 24;
+  // ~40 top tongues
+  const topCount = 40;
   for (let i = 0; i < topCount; i++) {
-    tongues.push({
+    tongueSpecs.push({
       edge: "top",
       ax: (width / (topCount + 1)) * (i + 1) + (Math.random() - 0.5) * 14,
       ay: 0,
-      layers: 3 + Math.floor(Math.random() * 2),
+      layers: 3 + Math.floor(Math.random() * 3),
     });
   }
+  // ~22 per side
   for (const edge of ["left", "right"] as Edge[]) {
-    const count = 15;
+    const count = 22;
     for (let i = 0; i < count; i++) {
-      tongues.push({
+      tongueSpecs.push({
         edge,
         ax: edge === "left" ? 0 : width,
         ay: (height / (count + 1)) * (i + 1) + (Math.random() - 0.5) * 12,
-        layers: 2 + Math.floor(Math.random() * 2),
+        layers: 2 + Math.floor(Math.random() * 3),
       });
     }
   }
-  const botCount = 9;
+  // ~18 bottom
+  const botCount = 18;
   for (let i = 0; i < botCount; i++) {
-    tongues.push({
+    tongueSpecs.push({
       edge: "bottom",
       ax: (width / (botCount + 1)) * (i + 1) + (Math.random() - 0.5) * 14,
       ay: height,
-      layers: 2 + Math.floor(Math.random() * 2),
+      layers: 2 + Math.floor(Math.random() * 3),
     });
   }
 
-  for (const { edge, ax, ay, layers } of tongues) {
+  const tongues: TongueConfig[] = [];
+
+  for (const { edge, ax, ay, layers } of tongueSpecs) {
     const baseDelay = Math.random() * 500;
     const duration = 500 + Math.random() * 500;
+
+    // Compute tongue-level drift
+    let avgDriftX = (Math.random() - 0.5) * 4;
+    let avgDriftY = -(6 + Math.random() * 10 + 0.5 * 6);
+    if (edge === "left") avgDriftX -= 3 + Math.random() * 4;
+    if (edge === "right") avgDriftX += 3 + Math.random() * 4;
+    if (edge === "bottom") avgDriftY = -(8 + Math.random() * 6);
+
+    const pixels: PixelConfig[] = [];
 
     for (let layer = 0; layer < layers; layer++) {
       const t = layer / (layers - 1 || 1);
@@ -80,65 +100,60 @@ function generateParticles(width: number, height: number): ParticleConfig[] {
 
       for (let col = 0; col < cols; col++) {
         const lat = (col - (cols - 1) / 2) * PX;
-        let x = ax, y = ay;
+        let x = 0, y = 0; // offsets relative to anchor
 
         switch (edge) {
           case "top":
-            x += lat + (Math.random() - 0.5) * 2;
+            x = lat + (Math.random() - 0.5) * 2;
             y = -layer * PX + (Math.random() - 0.5) * 2;
             break;
           case "bottom":
-            x += lat + (Math.random() - 0.5) * 2;
-            y = ay + layer * PX * 0.5 - PX + (Math.random() - 0.5) * 2;
+            x = lat + (Math.random() - 0.5) * 2;
+            y = layer * PX * 0.5 - PX + (Math.random() - 0.5) * 2;
             break;
           case "left":
-            x = -layer * PX + (Math.random() - 0.5) * 2;
-            y += lat + (Math.random() - 0.5) * 2;
+            x = -ax - layer * PX + (Math.random() - 0.5) * 2;
+            y = lat + (Math.random() - 0.5) * 2;
             break;
           case "right":
-            x = ax + layer * PX * 0.5 - PX + (Math.random() - 0.5) * 2;
-            y += lat + (Math.random() - 0.5) * 2;
+            x = layer * PX * 0.5 - PX + (Math.random() - 0.5) * 2;
+            y = lat + (Math.random() - 0.5) * 2;
             break;
         }
 
-        let driftX = (Math.random() - 0.5) * 4;
-        let driftY = -(6 + Math.random() * 10 + t * 6);
-        if (edge === "left") driftX -= 3 + Math.random() * 4;
-        if (edge === "right") driftX += 3 + Math.random() * 4;
-        if (edge === "bottom") driftY = -(8 + Math.random() * 6);
-
-        particles.push({
-          x, y,
+        pixels.push({
+          offsetX: x,
+          offsetY: y,
           size: Math.max(2, size),
           color: colorForLayer(layer, layers),
-          delay: baseDelay + layer * 40 + Math.random() * 80,
-          duration: duration + t * 200,
-          driftX, driftY,
-          maxOpacity: 0.8 - t * 0.35,
         });
       }
     }
+
+    tongues.push({
+      anchorX: ax,
+      anchorY: ay,
+      delay: baseDelay,
+      duration,
+      driftX: avgDriftX,
+      driftY: avgDriftY,
+      maxOpacity: 0.7,
+      pixels,
+    });
   }
 
-  return particles;
+  return tongues;
 }
 
-// Memoized particle — never re-renders after mount
-const Particle = React.memo(function Particle({
+// One Animated.View per tongue — all pixels inside are static Views
+const TongueGroup = React.memo(function TongueGroup({
   config,
-  cardPosRef,
 }: {
-  config: ParticleConfig;
-  cardPosRef: React.MutableRefObject<{ x: number; y: number }>;
+  config: TongueConfig;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const driftX = useRef(new Animated.Value(0)).current;
   const driftY = useRef(new Animated.Value(0)).current;
-  const baseX = useRef(new Animated.Value(0)).current;
-  const baseY = useRef(new Animated.Value(0)).current;
-
-  const totalX = useRef(Animated.add(baseX, driftX)).current;
-  const totalY = useRef(Animated.add(baseY, driftY)).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -147,8 +162,6 @@ const Particle = React.memo(function Particle({
     const animate = () => {
       if (cancelled) return;
 
-      baseX.setValue(cardPosRef.current.x);
-      baseY.setValue(cardPosRef.current.y);
       driftX.setValue(0);
       driftY.setValue(0);
       opacity.setValue(0);
@@ -195,60 +208,66 @@ const Particle = React.memo(function Particle({
 
   return (
     <Animated.View
-      style={[
-        styles.particle,
-        {
-          width: config.size,
-          height: config.size,
-          backgroundColor: config.color,
-          left: config.x,
-          top: config.y,
-          opacity,
-          transform: [
-            { translateX: totalX as unknown as number },
-            { translateY: totalY as unknown as number },
-          ],
-        },
-      ]}
-    />
+      style={{
+        position: "absolute",
+        left: config.anchorX,
+        top: config.anchorY,
+        opacity,
+        transform: [
+          { translateX: driftX },
+          { translateY: driftY },
+        ],
+      }}
+    >
+      {config.pixels.map((px, i) => (
+        <View
+          key={i}
+          style={{
+            position: "absolute",
+            left: px.offsetX,
+            top: px.offsetY,
+            width: px.size,
+            height: px.size,
+            backgroundColor: px.color,
+            borderRadius: 1,
+          }}
+        />
+      ))}
+    </Animated.View>
   );
 });
 
-// Memoized container — only re-renders if width/height change
+// Main container — card position tracked via a single Animated.View wrapper
 const PixelFire = React.memo(function PixelFire({
   width,
   height,
   cardTranslateX,
   cardTranslateY,
 }: PixelFireProps) {
-  // Particles generated once and never remounted across card changes.
-  // They naturally pick up the new card position via cardPosRef on their next cycle.
-  const particles = useMemo(
-    () => generateParticles(width, height),
+  const tongues = useMemo(
+    () => generateTongues(width, height),
     [width, height]
   );
 
-  const cardPosRef = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const xId = cardTranslateX.addListener(({ value }) => {
-      cardPosRef.current.x = value;
-    });
-    const yId = cardTranslateY.addListener(({ value }) => {
-      cardPosRef.current.y = value;
-    });
-    return () => {
-      cardTranslateX.removeListener(xId);
-      cardTranslateY.removeListener(yId);
-    };
-  }, [cardTranslateX, cardTranslateY]);
-
   return (
-    <View style={[styles.container, { width, height }]} pointerEvents="none">
-      {particles.map((p, i) => (
-        <Particle key={i} config={p} cardPosRef={cardPosRef} />
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          width,
+          height,
+          transform: [
+            { translateX: cardTranslateX },
+            { translateY: cardTranslateY },
+          ],
+        },
+      ]}
+      pointerEvents="none"
+    >
+      {tongues.map((t, i) => (
+        <TongueGroup key={i} config={t} />
       ))}
-    </View>
+    </Animated.View>
   );
 });
 
@@ -258,9 +277,5 @@ const styles = StyleSheet.create({
   container: {
     position: "absolute",
     overflow: "visible",
-  },
-  particle: {
-    position: "absolute",
-    borderRadius: 1,
   },
 });

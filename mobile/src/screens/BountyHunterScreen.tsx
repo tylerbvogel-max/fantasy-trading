@@ -25,7 +25,7 @@ import {
 } from "../hooks/useApi";
 import ProbabilityConeChart from "../components/ProbabilityConeChart";
 import IronOfferingModal from "../components/IronOfferingModal";
-import PixelFire from "../components/PixelFire";
+
 import QuoteTransition from "../components/QuoteTransition";
 
 // ── Card & gesture constants ──
@@ -894,7 +894,6 @@ export default function BountyHunterScreen() {
             </View>
           )}
 
-          <PixelFire width={CARD_WIDTH} height={CARD_SIZE} cardTranslateX={translateX} cardTranslateY={translateY} />
 
           {/* Main swipeable card */}
           <Animated.View
