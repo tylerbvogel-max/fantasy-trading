@@ -39,7 +39,7 @@ function generateParticles(width: number, height: number): ParticleConfig[] {
 
   const tongues: { edge: Edge; ax: number; ay: number; layers: number }[] = [];
 
-  const topCount = 8;
+  const topCount = 24;
   for (let i = 0; i < topCount; i++) {
     tongues.push({
       edge: "top",
@@ -49,7 +49,7 @@ function generateParticles(width: number, height: number): ParticleConfig[] {
     });
   }
   for (const edge of ["left", "right"] as Edge[]) {
-    const count = 5;
+    const count = 15;
     for (let i = 0; i < count; i++) {
       tongues.push({
         edge,
@@ -59,7 +59,7 @@ function generateParticles(width: number, height: number): ParticleConfig[] {
       });
     }
   }
-  const botCount = 3;
+  const botCount = 9;
   for (let i = 0; i < botCount; i++) {
     tongues.push({
       edge: "bottom",
