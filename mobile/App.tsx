@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Animated } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -32,12 +32,68 @@ const queryClient = new QueryClient();
 const Tab = createBottomTabNavigator();
 
 const tabIcons: Record<string, { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
-  Bounty: { focused: 'skull', unfocused: 'skull-outline' },
   Stats: { focused: 'stats-chart', unfocused: 'stats-chart-outline' },
   Irons: { focused: 'hardware-chip', unfocused: 'hardware-chip-outline' },
+  Bounty: { focused: 'skull', unfocused: 'skull-outline' },
   Board: { focused: 'list', unfocused: 'list-outline' },
   Profile: { focused: 'person', unfocused: 'person-outline' },
 };
+
+// Colors the Bounty tab cycles through
+const CYCLE_COLORS = [
+  Colors.orange,
+  Colors.accent,
+  Colors.primary,
+  Colors.green,
+  Colors.yellow,
+];
+
+function BountyTabIcon({ focused }: { focused: boolean }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(anim, {
+        toValue: CYCLE_COLORS.length,
+        duration: CYCLE_COLORS.length * 2000,
+        useNativeDriver: false,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const color = anim.interpolate({
+    inputRange: CYCLE_COLORS.map((_, i) => i),
+    outputRange: CYCLE_COLORS,
+  });
+
+  return (
+    <Animated.View
+      style={{
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: Colors.card,
+        borderWidth: 2,
+        borderColor: color,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+        // Subtle glow via shadow
+        shadowColor: Colors.orange,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: focused ? 0.6 : 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+      }}
+    >
+      <Animated.Text style={{ color }}>
+        <Ionicons name={focused ? 'skull' : 'skull-outline'} size={28} />
+      </Animated.Text>
+    </Animated.View>
+  );
+}
 
 function MainTabs() {
   return (
@@ -45,6 +101,9 @@ function MainTabs() {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
+          if (route.name === 'Bounty') {
+            return <BountyTabIcon focused={focused} />;
+          }
           const icons = tabIcons[route.name];
           const iconName = focused ? icons.focused : icons.unfocused;
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -55,11 +114,12 @@ function MainTabs() {
           backgroundColor: Colors.card,
           borderTopColor: Colors.border,
         },
+        ...(route.name === 'Bounty' ? { tabBarLabel: () => null } : {}),
       })}
     >
-      <Tab.Screen name="Bounty" component={BountyHunterScreen} />
       <Tab.Screen name="Stats" component={BountyStatsScreen} />
       <Tab.Screen name="Irons" component={IronCollectionScreen} />
+      <Tab.Screen name="Bounty" component={BountyHunterScreen} />
       <Tab.Screen name="Board" component={BountyBoardScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

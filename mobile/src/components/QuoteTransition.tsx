@@ -72,7 +72,7 @@ export default function QuoteTransition({ visible, onComplete }: QuoteTransition
         if (!dismissed.current) {
           slideOut();
         }
-      }, 3500);
+      }, 5000);
     });
 
     return () => {
