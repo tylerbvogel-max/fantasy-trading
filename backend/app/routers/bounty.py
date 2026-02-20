@@ -54,13 +54,15 @@ async def bounty_predict(
 ):
     try:
         pred = await submit_prediction(
-            db, user.id, req.bounty_window_id, req.prediction, req.bet_amount, req.symbol
+            db, user.id, req.bounty_window_id, req.prediction, req.bet_amount, req.symbol, req.leverage
         )
+        lev_str = f" @ {pred.leverage}x" if pred.leverage > 1.0 else ""
         return BountySubmitResponse(
             prediction=pred.prediction,
             bet_amount=pred.bet_amount,
-            message=f"Locked in! {pred.symbol} {pred.prediction} — $${ pred.bet_amount } bet.",
+            message=f"Locked in! {pred.symbol} {pred.prediction} — $${ pred.bet_amount } bet{lev_str}.",
             symbol=pred.symbol,
+            leverage=pred.leverage,
         )
     except BountyError as e:
         raise HTTPException(status_code=400, detail=e.message)

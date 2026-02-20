@@ -657,3 +657,56 @@ IRON_DEFS_BY_ID = {iron["id"]: iron for iron in IRON_DEFS}
 
 # Rarity weights for offering rolls
 RARITY_WEIGHTS = {"common": 45, "uncommon": 30, "rare": 18, "legendary": 7}
+
+# ── Leverage ──
+LEVERAGE_MIN = 1.0
+LEVERAGE_MAX = 5.0
+LEVERAGE_STEP = 0.5  # slider increments
+
+# Wanted level → max leverage allowed
+LEVERAGE_CEILING = {
+    1: 2.0, 2: 2.0,
+    3: 3.0, 4: 3.0,
+    5: 4.0, 6: 4.0,
+    7: 5.0, 8: 5.0, 9: 5.0, 10: 5.0,
+}
+
+def max_leverage_for_level(level: int) -> float:
+    if level in LEVERAGE_CEILING:
+        return LEVERAGE_CEILING[level]
+    return LEVERAGE_MAX  # overflow levels get full access
+
+# Margin call probability: based on leverage tier
+# Returns (min_chance, max_chance) — linearly interpolated within tier
+MARGIN_CALL_TIERS = [
+    (1.0, 2.0, 0.0, 0.0),    # 1x–2x: no margin call
+    (2.5, 3.5, 0.05, 0.15),  # 2.5x–3.5x: 5%–15%
+    (4.0, 5.0, 0.15, 0.30),  # 4x–5x: 15%–30%
+]
+
+def margin_call_chance(leverage: float) -> float:
+    if leverage <= 2.0:
+        return 0.0
+    for lo, hi, chance_lo, chance_hi in MARGIN_CALL_TIERS:
+        if lo <= leverage <= hi:
+            t = (leverage - lo) / (hi - lo) if hi > lo else 0
+            return chance_lo + t * (chance_hi - chance_lo)
+    return 0.30  # max
+
+# Margin call penalty: extra DD lost (flat amount)
+MARGIN_CALL_PENALTY_DD = 200
+# Margin call also drops wanted level by 1
+MARGIN_CALL_WANTED_DROP = 1
+# After margin call, locked to 1x for next N predictions
+MARGIN_CALL_COOLDOWN = 1
+
+# Carry cost: DD deducted on submission for using leverage
+# Formula: round((leverage - 1.0) * CARRY_COST_PER_X)
+CARRY_COST_PER_X = 10
+
+# HOLD leverage behavior: halved (2x → 1.5x effective)
+HOLD_LEVERAGE_FACTOR = 0.5  # applied as: 1 + (leverage - 1) * factor
+
+# Notoriety bonus for high-leverage correct picks
+LEVERAGE_NOTORIETY_BONUS_THRESHOLD = 3.0  # leverage >= this
+LEVERAGE_NOTORIETY_BONUS = 0.5

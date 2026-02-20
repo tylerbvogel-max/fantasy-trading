@@ -60,7 +60,7 @@ export function useSubmitPrediction() {
   return useMutation<
     BountySubmitResponse,
     Error,
-    { bounty_window_id: string; prediction: string; bet_amount: number; symbol: string }
+    { bounty_window_id: string; prediction: string; bet_amount: number; symbol: string; leverage: number }
   >({
     mutationFn: (data) => bounty.predict(data),
     onSuccess: () => {

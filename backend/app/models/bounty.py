@@ -66,6 +66,8 @@ class BountyPrediction(Base):
     insurance_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
     base_points: Mapped[int] = mapped_column(Integer, default=0)
     wanted_multiplier_used: Mapped[int] = mapped_column(Integer, default=1)
+    leverage: Mapped[float] = mapped_column(Float, default=1.0)
+    margin_call_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class SpyPriceLog(Base):
@@ -98,6 +100,7 @@ class BountyPlayerStats(Base):
     skip_count_this_window: Mapped[int] = mapped_column(Integer, default=0)
     is_busted: Mapped[bool] = mapped_column(Boolean, default=False)
     bust_count: Mapped[int] = mapped_column(Integer, default=0)
+    margin_call_cooldown: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class BountyPlayerIron(Base):

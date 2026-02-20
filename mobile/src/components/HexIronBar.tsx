@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Animated, PanResponder } from "react-native";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Animated, PanResponder, Easing, LayoutChangeEvent } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Polygon, Defs, LinearGradient, Stop, Rect } from "react-native-svg";
 import { Colors, FontSize, FontFamily, Spacing, Radius } from "../utils/theme";
@@ -23,7 +23,7 @@ const FLING_VELOCITY_MULT = 25;      // velocity multiplier for flick gestures
 const BOOST_HEARTBEAT_MS = 700;
 
 const BET_SLIDER_HEIGHT = 150;
-const BET_SLIDER_WIDTH = 44;
+const BET_SLIDER_WIDTH = 56;
 const THUMB_HEIGHT = 28;
 
 interface Props {
@@ -34,6 +34,10 @@ interface Props {
   onBetAmountChange: (value: number) => void;
   boostedIronId: string | null;
   onBoostSelected: (ironId: string | null) => void;
+  leverage: number;
+  onLeverageChange: (v: number) => void;
+  maxLeverage: number;
+  marginCallCooldown: number;
 }
 
 const rarityColor = (rarity: string) =>
@@ -102,21 +106,24 @@ function HexSlot({ cx, cy, iron, unlocked, onPress, isBoosted, boostScale }: Hex
   const left = cx - HEX_R;
   const top = cy - HEX_H / 2;
 
-  const strokeColor = !unlocked
-    ? Colors.textMuted + "60"
-    : !iron
-      ? Colors.textMuted + "90"
-      : isBoosted
-        ? Colors.orange
-        : rarityColor(iron.rarity) + "CC";
-  const fillColor = !unlocked
-    ? Colors.card + "80"
-    : !iron
-      ? Colors.surface + "30"
-      : isBoosted
-        ? Colors.orange + "50"
-        : rarityColor(iron.rarity) + "35";
-  const dashArray = !unlocked || iron ? undefined : "3,3";
+  // Iron always takes priority over lock state — if an iron exists, show it
+  const hasIron = !!iron;
+
+  const strokeColor = hasIron
+    ? isBoosted
+      ? Colors.orange
+      : rarityColor(iron!.rarity) + "CC"
+    : !unlocked
+      ? Colors.textMuted + "65"
+      : Colors.textMuted + "90";
+  const fillColor = hasIron
+    ? isBoosted
+      ? Colors.orange + "50"
+      : rarityColor(iron!.rarity) + "35"
+    : !unlocked
+      ? Colors.card + "85"
+      : Colors.surface + "30";
+  const dashArray = hasIron ? undefined : "3,3";
 
   if (isBoosted && iron) {
     return (
@@ -135,7 +142,7 @@ function HexSlot({ cx, cy, iron, unlocked, onPress, isBoosted, boostScale }: Hex
             />
           </Svg>
           <Ionicons
-            name={iron.rarity === "rare" ? "star" : iron.rarity === "uncommon" ? "diamond" : "ellipse"}
+            name={iron.rarity === "legendary" ? "flash" : iron.rarity === "rare" ? "star" : iron.rarity === "uncommon" ? "diamond" : "ellipse"}
             size={16}
             color={Colors.orange}
           />
@@ -150,40 +157,145 @@ function HexSlot({ cx, cy, iron, unlocked, onPress, isBoosted, boostScale }: Hex
   return (
     <TouchableOpacity
       style={[styles.hexSlot, { left, top, width: HEX_W, height: HEX_H }]}
-      onPress={iron ? onPress : undefined}
-      activeOpacity={iron ? 0.7 : 1}
-      disabled={!iron}
+      onPress={hasIron ? onPress : undefined}
+      activeOpacity={hasIron ? 0.7 : 1}
+      disabled={!hasIron}
     >
       <Svg width={HEX_W} height={HEX_H} style={StyleSheet.absoluteFill}>
         <Polygon
           points={hexPoints(HEX_R, HEX_H / 2, HEX_R - 1)}
           fill={fillColor}
           stroke={strokeColor}
-          strokeWidth={iron ? 1.5 : 1}
+          strokeWidth={hasIron ? 1.5 : 1}
           strokeDasharray={dashArray}
         />
       </Svg>
-      {!unlocked && (
-        <Ionicons name="lock-closed" size={16} color={Colors.textMuted + "90"} />
-      )}
-      {unlocked && !iron && (
-        <Ionicons name="ellipse-outline" size={14} color={Colors.textMuted + "BB"} />
-      )}
-      {unlocked && iron && (
+      {/* Iron always visible if equipped, regardless of lock state */}
+      {hasIron ? (
         <>
           <Ionicons
-            name={iron.rarity === "rare" ? "star" : iron.rarity === "uncommon" ? "diamond" : "ellipse"}
+            name={iron!.rarity === "legendary" ? "flash" : iron!.rarity === "rare" ? "star" : iron!.rarity === "uncommon" ? "diamond" : "ellipse"}
             size={16}
-            color={rarityColor(iron.rarity)}
+            color={rarityColor(iron!.rarity)}
           />
-          <Text style={[styles.hexLabel, { color: rarityColor(iron.rarity) }]} numberOfLines={1}>
-            {iron.name}
+          <Text style={[styles.hexLabel, { color: rarityColor(iron!.rarity) }]} numberOfLines={1}>
+            {iron!.name}
           </Text>
         </>
+      ) : !unlocked ? (
+        <Ionicons name="lock-closed" size={14} color={Colors.textMuted + "90"} />
+      ) : (
+        <Ionicons name="ellipse-outline" size={14} color={Colors.textMuted + "BB"} />
       )}
     </TouchableOpacity>
   );
 }
+
+// ── Slider flame particles ──
+
+const FLAME_BASE = "#FA8057";
+const FLAME_MID = "#FAD009";
+const FLAME_TIP = "#ED2EA5";
+const SLIDER_PARTICLE_COUNT = 18;
+
+interface SliderParticleConfig {
+  x: number;
+  startY: number;
+  size: number;
+  color: string;
+  delay: number;
+  duration: number;
+  driftX: number;
+  driftY: number;
+  maxOpacity: number;
+}
+
+function generateSliderParticles(): SliderParticleConfig[] {
+  const particles: SliderParticleConfig[] = [];
+  for (let i = 0; i < SLIDER_PARTICLE_COUNT; i++) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const colors = [FLAME_BASE, FLAME_MID, FLAME_TIP];
+    particles.push({
+      x: BET_SLIDER_WIDTH / 2 + side * (Math.random() * (BET_SLIDER_WIDTH / 2 + 6)),
+      startY: 0,
+      size: 2 + Math.random() * 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      delay: Math.random() * 600,
+      duration: 400 + Math.random() * 400,
+      driftX: (Math.random() - 0.5) * 10,
+      driftY: -(8 + Math.random() * 14),
+      maxOpacity: 0.6 + Math.random() * 0.3,
+    });
+  }
+  return particles;
+}
+
+const SliderFlameParticle = React.memo(function SliderFlameParticle({
+  config,
+  thumbY,
+  masterOpacity,
+}: {
+  config: SliderParticleConfig;
+  thumbY: number;
+  masterOpacity: number;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const driftX = useRef(new Animated.Value(0)).current;
+  const driftY = useRef(new Animated.Value(0)).current;
+  const thumbYRef = useRef(thumbY);
+  const masterOpRef = useRef(masterOpacity);
+  thumbYRef.current = thumbY;
+  masterOpRef.current = masterOpacity;
+
+  useEffect(() => {
+    let cancelled = false;
+    let currentAnim: Animated.CompositeAnimation | null = null;
+
+    const animate = () => {
+      if (cancelled) return;
+      driftX.setValue(0);
+      driftY.setValue(0);
+      opacity.setValue(0);
+
+      const peakOpacity = config.maxOpacity * masterOpRef.current;
+      if (peakOpacity < 0.01) {
+        const t = setTimeout(animate, config.duration + config.delay);
+        return () => clearTimeout(t);
+      }
+
+      currentAnim = Animated.parallel([
+        Animated.sequence([
+          Animated.timing(opacity, { toValue: peakOpacity, duration: config.duration * 0.25, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0, duration: config.duration * 0.75, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        ]),
+        Animated.timing(driftX, { toValue: config.driftX, duration: config.duration, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(driftY, { toValue: config.driftY, duration: config.duration, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]);
+      currentAnim.start(({ finished }) => { if (finished && !cancelled) animate(); });
+    };
+
+    const timeout = setTimeout(animate, config.delay);
+    return () => { cancelled = true; clearTimeout(timeout); currentAnim?.stop(); };
+  }, []);
+
+  const baseTop = thumbY + config.startY - config.size / 2 + (Math.random() - 0.5) * 10;
+
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        left: config.x - config.size / 2,
+        top: baseTop,
+        width: config.size,
+        height: config.size,
+        borderRadius: 1,
+        backgroundColor: config.color,
+        opacity,
+        transform: [{ translateX: driftX as unknown as number }, { translateY: driftY as unknown as number }],
+      }}
+    />
+  );
+});
 
 function BetSlider({
   betAmount,
@@ -193,76 +305,323 @@ function BetSlider({
   onBetAmountChange: (v: number) => void;
 }) {
   const trackRef = useRef<View>(null);
-  const dragStartVal = useRef(betAmount);
+  const onBetAmountChangeRef = useRef(onBetAmountChange);
+  onBetAmountChangeRef.current = onBetAmountChange;
 
   const sliderPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
-        dragStartVal.current = betAmount;
-        // Tap to set — measure position
         trackRef.current?.measure((_x, _y, _w, h, _px, py) => {
           const touchY = evt.nativeEvent.pageY - py;
           const pct = 1 - Math.max(0, Math.min(1, touchY / h));
-          onBetAmountChange(Math.round(pct * 100));
+          onBetAmountChangeRef.current(Math.round(pct * 100));
         });
       },
       onPanResponderMove: (evt) => {
         trackRef.current?.measure((_x, _y, _w, h, _px, py) => {
           const touchY = evt.nativeEvent.pageY - py;
           const pct = 1 - Math.max(0, Math.min(1, touchY / h));
-          onBetAmountChange(Math.round(pct * 100));
+          onBetAmountChangeRef.current(Math.round(pct * 100));
         });
       },
     })
   ).current;
 
+  // ── Erratic shake (random jitter — feels like it's about to burst) ──
+  const shakeX = useRef(new Animated.Value(0)).current;
+  const shakeRot = useRef(new Animated.Value(0)).current;
+  const shakeRaf = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // t: 0 at bet=0, 1 at bet=100 — squared for gentler ramp (calmer at mid-range)
+  const tLinear = Math.max(0, (betAmount - 10) / 90);
+  const t = tLinear * tLinear;
+
+  useEffect(() => {
+    if (shakeRaf.current) { clearTimeout(shakeRaf.current); shakeRaf.current = null; }
+    if (betAmount < 10) {
+      shakeX.setValue(0);
+      shakeRot.setValue(0);
+      return;
+    }
+
+    const ampX = t * 2.5;
+    const ampRot = t * 3;
+    const interval = Math.max(30, 90 - t * 55);
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      shakeX.setValue((Math.random() * 2 - 1) * ampX);
+      shakeRot.setValue((Math.random() * 2 - 1) * ampRot);
+      shakeRaf.current = setTimeout(tick, interval + Math.random() * 20);
+    };
+    tick();
+
+    return () => { cancelled = true; if (shakeRaf.current) clearTimeout(shakeRaf.current); shakeX.setValue(0); shakeRot.setValue(0); };
+  }, [betAmount]);
+
+  // ── Flame particles ──
+  const flameParticles = useMemo(() => generateSliderParticles(), []);
+  // Flame visibility: 0 at bet≤15, 1 at bet=100
+  const flameOpacity = betAmount <= 15 ? 0 : (betAmount - 15) / 85;
+
   const thumbBottom = (betAmount / 100) * (BET_SLIDER_HEIGHT - THUMB_HEIGHT);
+  const thumbTop = BET_SLIDER_HEIGHT - THUMB_HEIGHT - thumbBottom;
   const tierColor =
     betAmount <= 33 ? Colors.text : betAmount <= 66 ? Colors.yellow : Colors.orange;
 
   return (
     <View style={styles.sliderColumn}>
-      <Text style={styles.sliderTopLabel}>$$100</Text>
-      <View
-        ref={trackRef}
-        style={styles.sliderTrack}
-        {...sliderPan.panHandlers}
+      {/* Spacer to match leverage slider's label area above */}
+      <View style={{ height: 13 }} />
+      <Animated.View
+        style={[styles.sliderOuter, { transform: [
+          { translateX: shakeX as unknown as number },
+          { rotate: shakeRot.interpolate({ inputRange: [-10, 10], outputRange: ["-10deg", "10deg"] }) as unknown as string },
+        ] }]}
       >
-        {/* Gradient background */}
-        <Svg width={BET_SLIDER_WIDTH} height={BET_SLIDER_HEIGHT} style={StyleSheet.absoluteFill}>
-          <Defs>
-            <LinearGradient id="betGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={Colors.orange} stopOpacity="0.9" />
-              <Stop offset="0.5" stopColor={Colors.yellow} stopOpacity="0.5" />
-              <Stop offset="1" stopColor={Colors.surface} stopOpacity="0.3" />
-            </LinearGradient>
-          </Defs>
-          <Rect
-            x={0}
-            y={0}
-            width={BET_SLIDER_WIDTH}
-            height={BET_SLIDER_HEIGHT}
-            rx={Radius.md}
-            fill="url(#betGrad)"
-          />
-        </Svg>
+        {/* Flame particles behind the track */}
+        {flameOpacity > 0 && (
+          <View style={styles.flameContainer} pointerEvents="none">
+            {flameParticles.map((p, i) => (
+              <SliderFlameParticle key={i} config={p} thumbY={thumbTop + THUMB_HEIGHT / 2} masterOpacity={flameOpacity} />
+            ))}
+          </View>
+        )}
 
-        {/* Thumb */}
         <View
-          style={[
-            styles.sliderThumb,
-            {
-              bottom: thumbBottom,
-              backgroundColor: tierColor,
-            },
-          ]}
+          ref={trackRef}
+          style={styles.sliderTrack}
+          {...sliderPan.panHandlers}
         >
-          <Text style={styles.sliderThumbText}>$${ betAmount }</Text>
+          {/* Gradient background */}
+          <Svg width={BET_SLIDER_WIDTH} height={BET_SLIDER_HEIGHT} style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="betGrad" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={Colors.orange} stopOpacity="0.9" />
+                <Stop offset="0.5" stopColor={Colors.yellow} stopOpacity="0.5" />
+                <Stop offset="1" stopColor={Colors.surface} stopOpacity="0.3" />
+              </LinearGradient>
+            </Defs>
+            <Rect
+              x={0}
+              y={0}
+              width={BET_SLIDER_WIDTH}
+              height={BET_SLIDER_HEIGHT}
+              rx={Radius.md}
+              fill="url(#betGrad)"
+            />
+          </Svg>
+
+          {/* Thumb */}
+          <View
+            style={[
+              styles.sliderThumb,
+              {
+                bottom: thumbBottom,
+                backgroundColor: tierColor,
+              },
+            ]}
+          >
+            <Text style={styles.sliderThumbText}>$${ betAmount }</Text>
+          </View>
         </View>
-      </View>
-      <Text style={styles.sliderBottomLabel}>$$0</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+// Leverage slider uses same dimensions as bet slider for visual consistency
+const LEV_FLAME_BASE = "#FF4040";
+const LEV_FLAME_MID = "#FF8800";
+const LEV_FLAME_TIP = "#ED2EA5";
+
+function generateLeverageParticles(): SliderParticleConfig[] {
+  const particles: SliderParticleConfig[] = [];
+  for (let i = 0; i < SLIDER_PARTICLE_COUNT; i++) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const colors = [LEV_FLAME_BASE, LEV_FLAME_MID, LEV_FLAME_TIP];
+    particles.push({
+      x: BET_SLIDER_WIDTH / 2 + side * (Math.random() * (BET_SLIDER_WIDTH / 2 + 6)),
+      startY: 0,
+      size: 2 + Math.random() * 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      delay: Math.random() * 600,
+      duration: 400 + Math.random() * 400,
+      driftX: (Math.random() - 0.5) * 10,
+      driftY: -(8 + Math.random() * 14),
+      maxOpacity: 0.6 + Math.random() * 0.3,
+    });
+  }
+  return particles;
+}
+
+function LeverageSlider({
+  leverage,
+  onLeverageChange,
+  maxLeverage,
+  marginCallCooldown,
+}: {
+  leverage: number;
+  onLeverageChange: (v: number) => void;
+  maxLeverage: number;
+  marginCallCooldown: number;
+}) {
+  const trackRef = useRef<View>(null);
+  const isLocked = marginCallCooldown > 0;
+  const onLeverageChangeRef = useRef(onLeverageChange);
+  onLeverageChangeRef.current = onLeverageChange;
+  const isLockedRef = useRef(isLocked);
+  isLockedRef.current = isLocked;
+  const maxLeverageRef = useRef(maxLeverage);
+  maxLeverageRef.current = maxLeverage;
+
+  const sliderPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        if (isLockedRef.current) return;
+        trackRef.current?.measure((_x, _y, _w, h, _px, py) => {
+          const touchY = evt.nativeEvent.pageY - py;
+          const pct = 1 - Math.max(0, Math.min(1, touchY / h));
+          const range = maxLeverageRef.current - 1.0;
+          const raw = 1.0 + pct * range;
+          // Round to 2 decimal places for smooth but clean values
+          onLeverageChangeRef.current(Math.min(maxLeverageRef.current, Math.round(raw * 100) / 100));
+        });
+      },
+      onPanResponderMove: (evt) => {
+        if (isLockedRef.current) return;
+        trackRef.current?.measure((_x, _y, _w, h, _px, py) => {
+          const touchY = evt.nativeEvent.pageY - py;
+          const pct = 1 - Math.max(0, Math.min(1, touchY / h));
+          const range = maxLeverageRef.current - 1.0;
+          const raw = 1.0 + pct * range;
+          onLeverageChangeRef.current(Math.min(maxLeverageRef.current, Math.round(raw * 100) / 100));
+        });
+      },
+    })
+  ).current;
+
+  // ── Erratic shake (mirrors BetSlider) ──
+  const shakeX = useRef(new Animated.Value(0)).current;
+  const shakeRot = useRef(new Animated.Value(0)).current;
+  const shakeRaf = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // t: 0 at 1x, 1 at maxLeverage — squared for gentler ramp (calmer at mid-range)
+  const levRange = maxLeverage - 1.0 || 1;
+  const tLinear = Math.max(0, (leverage - 1.0) / levRange);
+  const t = tLinear * tLinear;
+
+  useEffect(() => {
+    if (shakeRaf.current) { clearTimeout(shakeRaf.current); shakeRaf.current = null; }
+    if (leverage <= 1.05) {
+      shakeX.setValue(0);
+      shakeRot.setValue(0);
+      return;
+    }
+
+    const ampX = t * 2.5;
+    const ampRot = t * 3;
+    const interval = Math.max(30, 90 - t * 55);
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      shakeX.setValue((Math.random() * 2 - 1) * ampX);
+      shakeRot.setValue((Math.random() * 2 - 1) * ampRot);
+      shakeRaf.current = setTimeout(tick, interval + Math.random() * 20);
+    };
+    tick();
+
+    return () => { cancelled = true; if (shakeRaf.current) clearTimeout(shakeRaf.current); shakeX.setValue(0); shakeRot.setValue(0); };
+  }, [leverage]);
+
+  // ── Flame particles ──
+  const flameParticles = useMemo(() => generateLeverageParticles(), []);
+  // Flame visibility: 0 at leverage <= 1.1, 1 at maxLeverage
+  const flameOpacity = leverage <= 1.1 ? 0 : Math.min(1, (leverage - 1.1) / (maxLeverage - 1.1 || 1));
+
+  const range = maxLeverage - 1.0;
+  const normalizedPct = range > 0 ? (leverage - 1.0) / range : 0;
+  const thumbBottom = normalizedPct * (BET_SLIDER_HEIGHT - THUMB_HEIGHT);
+  const thumbTop = BET_SLIDER_HEIGHT - THUMB_HEIGHT - thumbBottom;
+
+  // Color: primary at 1x → orange mid → accent at max
+  const thumbColor = isLocked
+    ? Colors.textMuted
+    : leverage <= 1.0
+      ? Colors.primary
+      : t <= 0.5
+        ? Colors.orange
+        : Colors.accent;
+
+  const carryCost = Math.round((leverage - 1.0) * 10);
+
+  return (
+    <View style={styles.sliderColumn}>
+      {/* Labels above the slider so both bars stay at the same height */}
+      {isLocked ? (
+        <Text style={{ fontFamily: FontFamily.bold, fontSize: 9, color: Colors.accent, marginBottom: 2 }}>
+          COOLDOWN
+        </Text>
+      ) : carryCost > 0 ? (
+        <Text style={{ fontFamily: FontFamily.medium, fontSize: 9, color: Colors.orange, marginBottom: 2 }}>
+          -$${carryCost}
+        </Text>
+      ) : (
+        <View style={{ height: 13 }} />
+      )}
+      <Animated.View
+        style={[styles.sliderOuter, { transform: [
+          { translateX: shakeX as unknown as number },
+          { rotate: shakeRot.interpolate({ inputRange: [-10, 10], outputRange: ["-10deg", "10deg"] }) as unknown as string },
+        ] }]}
+      >
+        {/* Flame particles behind the track */}
+        {flameOpacity > 0 && (
+          <View style={styles.flameContainer} pointerEvents="none">
+            {flameParticles.map((p, i) => (
+              <SliderFlameParticle key={i} config={p} thumbY={thumbTop + THUMB_HEIGHT / 2} masterOpacity={flameOpacity} />
+            ))}
+          </View>
+        )}
+
+        <View
+          ref={trackRef}
+          style={styles.sliderTrack}
+          {...sliderPan.panHandlers}
+        >
+          <Svg width={BET_SLIDER_WIDTH} height={BET_SLIDER_HEIGHT} style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="levGrad" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={Colors.accent} stopOpacity="0.9" />
+                <Stop offset="0.5" stopColor={Colors.orange} stopOpacity="0.5" />
+                <Stop offset="1" stopColor={Colors.surface} stopOpacity="0.3" />
+              </LinearGradient>
+            </Defs>
+            <Rect x={0} y={0} width={BET_SLIDER_WIDTH} height={BET_SLIDER_HEIGHT} rx={Radius.md} fill="url(#levGrad)" />
+          </Svg>
+
+          {/* Thumb */}
+          <View
+            style={[
+              styles.sliderThumb,
+              {
+                bottom: thumbBottom,
+                backgroundColor: thumbColor,
+              },
+            ]}
+          >
+            <Text style={styles.sliderThumbText}>
+              {isLocked ? "1.0x" : `${leverage.toFixed(2)}x`}
+            </Text>
+          </View>
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -275,6 +634,10 @@ export default function HexIronBar({
   onBetAmountChange,
   boostedIronId,
   onBoostSelected,
+  leverage,
+  onLeverageChange,
+  maxLeverage,
+  marginCallCooldown,
 }: Props) {
   const [modalIron, setModalIron] = useState<BountyEquippedIron | null>(null);
   const [spinDeg, setSpinDeg] = useState(0);
@@ -399,27 +762,55 @@ export default function HexIronBar({
 
   useEffect(() => () => stopMomentum(), []);
 
-  const dragStartDeg = useRef(0);
   const lastMoveTime = useRef(0);
   const lastMoveDeg = useRef(0);
+  // Angular tracking: store the angle of the initial touch and the page-coordinates of the ring center
+  const touchStartAngle = useRef(0);
+  const spinAtTouchStart = useRef(0);
+  const ringCenterPage = useRef({ px: 0, py: 0 });
+  const hexGridRef = useRef<View>(null);
+
+  /** Angle (degrees) from ring center to a page-coordinate point */
+  const angleFromCenter = (pageX: number, pageY: number) => {
+    const dx = pageX - ringCenterPage.current.px;
+    const dy = pageY - ringCenterPage.current.py;
+    return Math.atan2(dy, dx) * (180 / Math.PI);
+  };
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) =>
         Math.abs(g.dx) > SWIPE_THRESHOLD || Math.abs(g.dy) > SWIPE_THRESHOLD,
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (evt) => {
         stopMomentum();
         isSnapping.current = false;
         isSwiping.current = true;
-        dragStartDeg.current = spinRef.current;
         velocityRef.current = 0;
         lastMoveTime.current = Date.now();
         lastMoveDeg.current = spinRef.current;
+
+        // Measure ring center on screen, then compute start angle
+        hexGridRef.current?.measure((_x, _y, w, h, px, py) => {
+          ringCenterPage.current = { px: px + w / 2, py: py + h / 2 };
+          touchStartAngle.current = angleFromCenter(
+            evt.nativeEvent.pageX,
+            evt.nativeEvent.pageY,
+          );
+          spinAtTouchStart.current = spinRef.current;
+        });
       },
-      onPanResponderMove: (_, g) => {
-        const newDeg = dragStartDeg.current + g.dx * SPIN_DRAG_SENSITIVITY;
-        // Track velocity manually for more accurate flick detection
+      onPanResponderMove: (evt) => {
+        const currentAngle = angleFromCenter(
+          evt.nativeEvent.pageX,
+          evt.nativeEvent.pageY,
+        );
+        let delta = currentAngle - touchStartAngle.current;
+        // Wrap around ±180
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+        const newDeg = spinAtTouchStart.current + delta;
+
         const now = Date.now();
         const dt = now - lastMoveTime.current;
         if (dt > 0) {
@@ -432,7 +823,6 @@ export default function HexIronBar({
       },
       onPanResponderRelease: (_, g) => {
         isSwiping.current = false;
-        // Also factor in gesture velocity for flicks
         const gestureVel = g.vx * FLING_VELOCITY_MULT;
         if (Math.abs(gestureVel) > Math.abs(velocityRef.current)) {
           velocityRef.current = gestureVel;
@@ -452,38 +842,81 @@ export default function HexIronBar({
     return { index: i, iron, unlocked };
   });
 
+  // Find the currently boosted iron for the info label
+  const boostedIron = boostedIronId
+    ? irons.find((ir) => ir.iron_id === boostedIronId)
+    : null;
+
   return (
     <View style={styles.bar}>
       {/* Left: Hex cylinder — spinnable */}
-      <View
-        style={[styles.hexGrid, { width: GRID_SIZE, height: GRID_SIZE }]}
-        {...panResponder.panHandlers}
-      >
-        {/* Top marker arrow */}
-        <View style={styles.topMarker}>
-          <Ionicons name="caret-down" size={14} color={Colors.orange + "90"} />
+      <View style={styles.revolverColumn}>
+        <View
+          ref={hexGridRef}
+          style={[styles.hexGrid, { width: GRID_SIZE, height: GRID_SIZE }]}
+          {...panResponder.panHandlers}
+        >
+          {/* Top marker arrow */}
+          <View style={styles.topMarker}>
+            <Ionicons name="caret-down" size={14} color={Colors.orange + "90"} />
+          </View>
+
+          {/* Render locked/empty slots first, then equipped irons on top */}
+          {[...slots]
+            .sort((a, b) => {
+              // Irons render last (highest z), boosted iron last of all
+              const aWeight = a.iron ? (a.iron.iron_id === boostedIronId ? 2 : 1) : 0;
+              const bWeight = b.iron ? (b.iron.iron_id === boostedIronId ? 2 : 1) : 0;
+              return aWeight - bWeight;
+            })
+            .map(({ index, iron, unlocked }) => {
+              const { x, y } = getSlotCenter(index, spinDeg);
+              const isBoosted = !!iron && iron.iron_id === boostedIronId;
+              return (
+                <HexSlot
+                  key={index}
+                  cx={x}
+                  cy={y}
+                  iron={iron}
+                  unlocked={unlocked}
+                  onPress={() => iron && setModalIron(iron)}
+                  isBoosted={isBoosted}
+                  boostScale={boostScale}
+                />
+              );
+            })}
         </View>
 
-        {slots.map(({ index, iron, unlocked }) => {
-          const { x, y } = getSlotCenter(index, spinDeg);
-          const isBoosted = !!iron && iron.iron_id === boostedIronId;
-          return (
-            <HexSlot
-              key={index}
-              cx={x}
-              cy={y}
-              iron={iron}
-              unlocked={unlocked}
-              onPress={() => iron && setModalIron(iron)}
-              isBoosted={isBoosted}
-              boostScale={boostScale}
+        {/* Iron info label — always visible */}
+        {boostedIron ? (
+          <TouchableOpacity onPress={() => setModalIron(boostedIron)} activeOpacity={0.7} style={styles.ironInfoLabel}>
+            <Ionicons
+              name={boostedIron.rarity === "legendary" ? "flash" : boostedIron.rarity === "rare" ? "star" : boostedIron.rarity === "uncommon" ? "diamond" : "ellipse"}
+              size={11}
+              color={boostedIron.rarity === "legendary" ? Colors.orange : rarityColor(boostedIron.rarity)}
             />
-          );
-        })}
+            <Text style={[styles.ironInfoName, { color: boostedIron.rarity === "legendary" ? Colors.orange : rarityColor(boostedIron.rarity) }]} numberOfLines={1}>
+              {boostedIron.name}
+            </Text>
+            <Text style={styles.ironInfoDesc} numberOfLines={1}>
+              {boostedIron.description}
+            </Text>
+          </TouchableOpacity>
+        ) : irons.length === 0 ? (
+          <Text style={styles.ironInfoEmpty}>No irons</Text>
+        ) : null}
       </View>
 
-      {/* Right: Bet amount slider */}
+      {/* Center: Bet amount slider */}
       <BetSlider betAmount={betAmount} onBetAmountChange={onBetAmountChange} />
+
+      {/* Right: Leverage slider */}
+      <LeverageSlider
+        leverage={leverage}
+        onLeverageChange={onLeverageChange}
+        maxLeverage={maxLeverage}
+        marginCallCooldown={marginCallCooldown}
+      />
 
       {/* Iron detail modal */}
       <Modal
@@ -538,8 +971,36 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
   },
 
+  revolverColumn: {
+    alignItems: "center",
+  },
   hexGrid: {
     position: "relative",
+  },
+  ironInfoLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: GRID_SIZE,
+    paddingHorizontal: 4,
+    marginTop: -4,
+  },
+  ironInfoName: {
+    fontFamily: FontFamily.bold,
+    fontSize: 9,
+    flexShrink: 0,
+  },
+  ironInfoDesc: {
+    fontFamily: FontFamily.regular,
+    fontSize: 8,
+    color: Colors.textMuted,
+    flexShrink: 1,
+  },
+  ironInfoEmpty: {
+    fontFamily: FontFamily.regular,
+    fontSize: 9,
+    color: Colors.textMuted + "80",
+    marginTop: -4,
   },
   hexSlot: {
     position: "absolute",
@@ -564,9 +1025,24 @@ const styles = StyleSheet.create({
   },
 
   sliderColumn: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     gap: Spacing.xs,
-    width: BET_SLIDER_WIDTH + 16,
+  },
+  sliderOuter: {
+    width: BET_SLIDER_WIDTH,
+    height: BET_SLIDER_HEIGHT,
+    position: "relative",
+  },
+  flameContainer: {
+    position: "absolute",
+    top: -20,
+    left: -10,
+    right: -10,
+    bottom: 0,
+    overflow: "visible",
+    zIndex: -1,
   },
   sliderTrack: {
     width: BET_SLIDER_WIDTH,
@@ -588,16 +1064,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: FontSize.sm,
     color: Colors.background,
-  },
-  sliderTopLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xs,
-    color: Colors.orange,
-  },
-  sliderBottomLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
   },
 
   modalOverlay: {

@@ -117,6 +117,8 @@ class BountyPickResponse(BaseModel):
     insurance_triggered: bool = False
     base_points: int = 0
     wanted_multiplier_used: int = 1
+    leverage: float = 1.0
+    margin_call_triggered: bool = False
 
 
 class BountyEquippedIron(BaseModel):
@@ -138,6 +140,7 @@ class BountyStatsResponse(BaseModel):
     chambers: int = 2
     is_busted: bool = False
     bust_count: int = 0
+    margin_call_cooldown: int = 0
     equipped_irons: list[BountyEquippedIron] = []
     pending_offering: bool = False
 
@@ -164,6 +167,7 @@ class BountyStatusResponse(BaseModel):
     stocks: list[BountyStockStatus] = []
     ante_cost: int = 75
     skip_cost: int = 25
+    max_leverage: float = 2.0
 
 
 class BountySubmitRequest(BaseModel):
@@ -171,6 +175,7 @@ class BountySubmitRequest(BaseModel):
     prediction: str = Field(..., pattern="^(UP|DOWN|HOLD)$")
     bet_amount: int = Field(..., ge=0, le=100)
     symbol: str = "SPY"
+    leverage: float = Field(1.0, ge=1.0, le=5.0)
 
 
 class BountySubmitResponse(BaseModel):
@@ -178,6 +183,7 @@ class BountySubmitResponse(BaseModel):
     bet_amount: int
     message: str
     symbol: str = "SPY"
+    leverage: float = 1.0
 
 
 class BountyIronFullDef(BaseModel):
