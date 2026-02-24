@@ -11,10 +11,11 @@ DIR_SCORING = {
 }
 
 # Holster picks (HOLD): { confidence: { "win": pts, "lose": pts } }
+# Tier-1 balance fix: Reduced holster wins to prevent Cautious Turtle overpowering
 HOL_SCORING = {
-    1: {"win": 8, "lose": 6},
-    2: {"win": 19, "lose": 15},
-    3: {"win": 35, "lose": 30},
+    1: {"win": 7, "lose": 6},
+    2: {"win": 16, "lose": 15},
+    3: {"win": 30, "lose": 30},
 }
 
 # ── Wanted level multiplier table ──
@@ -113,8 +114,11 @@ CONFIDENCE_LABELS = {1: "Draw", 2: "Quick Draw", 3: "Dead Eye"}
 
 
 def skip_cost(n: int, balance: int) -> int:
-    """Cost of the nth skip in a window. Scales with balance."""
-    return math.ceil(25 * math.pow(2.5, n - 1) * max(1, balance / 5000))
+    """Cost of the nth skip in a window. Scales with balance.
+    
+    Tier-1 balance fix: Reduced from 2.5× to 1.8× scaling to help Comeback Grinder archetype.
+    """
+    return math.ceil(25 * math.pow(1.8, n - 1) * max(1, balance / 5000))
 
 
 # ── Iron definitions (75 total — mirrors tools/bounty-sim/irons.mjs) ──
