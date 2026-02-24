@@ -1,13 +1,22 @@
 // ── Bounty Hunter Simulation — Configuration ──
-// All tunable constants in one place. Change values here, re-run sim.
+// 30-Minute Rolling Window Edition (Continuous Gameplay)
 
 // ── Run parameters ──
-export const NUM_RUNS = 200;
-export const NUM_ROUNDS = 30;
-export const PICKS_PER_ROUND = 5;
-export const STARTING_BALANCE = 5000;
+export const NUM_RUNS = 500;
+
+// Legacy: kept for backward compatibility with existing archetypes
+export const NUM_ROUNDS = 336; // 14 days × 8 hours × 2 windows per hour
+
+// ── Window parameters (replaces round-based batching) ──
+export const WINDOW_DURATION_MINUTES = 30;
+export const TOTAL_SIMULATION_DAYS = 14;
 export const STOCK_POOL_SIZE = 25;
-export const BATCHES_PER_CYCLE = 5;
+
+// Player engagement: 3-5 app checks per day
+// With 14 days of 30-min windows, we expect ~3-5 picks per window for realistic engagement
+export const MIN_PICKS_PER_WINDOW = 1;
+export const MAX_PICKS_PER_WINDOW = 10; // Player can pick 1-10 stocks per window at own pace
+export const EXPECTED_PICKS_PER_WINDOW = 3; // Design target
 
 // ── Chambers (Iron slots) ──
 export const STARTING_CHAMBERS = 2;
@@ -43,20 +52,23 @@ export function wantedMultiplier(level) {
 
 // ── Notoriety ──
 export const NOTORIETY_WEIGHT = { 1: 1, 2: 1.5, 3: 2 };
-export const NOTORIETY_UP_THRESHOLD = 2.5;   // roundNotoriety >= this → wanted +1
-export const NOTORIETY_DOWN_THRESHOLD = -3;  // roundNotoriety <= this → wanted -1
+export const NOTORIETY_UP_THRESHOLD = 2.5;   // windowNotoriety >= this → wanted +1
+export const NOTORIETY_DOWN_THRESHOLD = -3;  // windowNotoriety <= this → wanted -1
 
 // ── Skip cost ──
-// cost = 25 * 2.5^(n-1) * max(1, balance/5000)
+// cost = 25 * 2.0^(n-1) * max(1, balance/8000)
 export function skipCost(n, balance) {
   return Math.ceil(25 * Math.pow(2.0, n - 1) * Math.max(1, balance / 8000));
 }
 
-// ── Round ante ──
-export const ANTE_BASE = 60;
-export function roundAnte(roundNum, wantedLevel) {
+// ── Window ante (per 30-min window, not per round) ──
+export const ANTE_BASE = 15; // Scaled down for 30-min windows (was 60 for 2h rounds)
+export function windowAnte(windowNum, wantedLevel) {
   return ANTE_BASE;
 }
+
+// ── Starting balance ──
+export const STARTING_BALANCE = 5000;
 
 // ── Chart config ──
 export const SAMPLE_RUNS = 5; // runs per archetype to chart
