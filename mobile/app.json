@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Fantasy Trading",
+    "slug": "fantasy-trading",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.fantasytrading.app"
+    },
+    "android": {
+      "package": "com.fantasytrading.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-audio"
+    ],
+    "extra": {
+      "apiUrl": "https://fantasy-trading-api.onrender.com",
+      "router": {},
+      "eas": {
+        "projectId": "e9a3e42d-e832-4b41-b771-389e8ec9b2de"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e9a3e42d-e832-4b41-b771-389e8ec9b2de"
+    }
+  }
+}

@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strategy Lab — Walk-Forward Backtest</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #000; color: #e0e0e0; font-family: 'Space Grotesk', monospace, sans-serif; display: flex; flex-direction: column; }
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; border-bottom: 1px solid #222; flex-shrink: 0; }
+  .header h1 { font-size: 20px; font-weight: 700; color: #FA8057; }
+  .header h1 span { color: #6172C5; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn { background: #FA8057; color: #000; border: none; padding: 6px 16px; border-radius: 6px; font-family: inherit; font-weight: 600; font-size: 13px; cursor: pointer; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.reset { background: #333; color: #aaa; }
+  select { background: #1A1A1A; color: #e0e0e0; border: 1px solid #333; padding: 6px 10px; border-radius: 6px; font-family: inherit; font-size: 12px; }
+  .status-text { font-size: 12px; color: #888; min-width: 160px; text-align: right; }
+
+  /* Main layout: sidebar | content */
+  .main-layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* Left sidebar — full height */
+  .sidebar { width: 280px; min-width: 280px; border-right: 1px solid #222; overflow-y: auto; padding: 12px 16px; flex-shrink: 0; }
+  .sidebar h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .sidebar h3.regime-title { color: #FAD009; }
+  .sidebar h3.perf { color: #6172C5; margin-top: 14px; }
+  .sidebar h3.signals { color: #ED2EA5; margin-top: 14px; }
+  .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid #111; }
+  .stat-label { color: #888; }
+  .stat-value { font-weight: 600; color: #e0e0e0; }
+  .stat-value.positive { color: #38A169; }
+  .stat-value.negative { color: #E53E3E; }
+  .signal-bar { display: flex; align-items: center; gap: 5px; padding: 2px 0; font-size: 11px; }
+  .signal-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .signal-dot.on { background: #38A169; }
+  .signal-dot.off { background: #333; }
+  .signal-name { color: #888; flex: 1; }
+  .signal-score { color: #aaa; font-weight: 600; width: 45px; text-align: right; }
+  .conviction-bar { height: 3px; background: #111; border-radius: 2px; margin-top: 4px; margin-bottom: 2px; }
+  .conviction-fill { height: 100%; border-radius: 2px; transition: width 0.2s; }
+
+  /* Right content area */
+  .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #chart-container { width: 100%; flex: 1; min-height: 0; padding: 0 4px; }
+  .log-panel { padding: 10px 16px; overflow-y: auto; height: 200px; border-top: 1px solid #222; flex-shrink: 0; }
+  .log-panel h3 { font-size: 12px; color: #ED2EA5; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; position: sticky; top: 0; background: #000; padding-bottom: 4px; }
+  .log-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .log-table th { text-align: left; color: #666; font-weight: 500; padding: 3px 6px; border-bottom: 1px solid #222; position: sticky; top: 22px; background: #000; }
+  .log-table td { padding: 3px 6px; border-bottom: 1px solid #0a0a0a; }
+  .log-table .buy { color: #38A169; }
+  .log-table .sell { color: #E53E3E; }
+  .log-table .reason { color: #888; font-style: italic; max-width: 300px; }
+
+  .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; font-size: 16px; color: #FA8057; flex-direction: column; gap: 8px; }
+  .loading-overlay.hidden { display: none; }
+
+  /* Regime badge */
+  .regime-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .regime-badge.risk_on { background: rgba(56,161,105,0.15); color: #38A169; border: 1px solid rgba(56,161,105,0.3); }
+  .regime-badge.neutral { background: rgba(250,208,9,0.15); color: #FAD009; border: 1px solid rgba(250,208,9,0.3); }
+  .regime-badge.risk_off { background: rgba(229,62,62,0.15); color: #E53E3E; border: 1px solid rgba(229,62,62,0.3); }
+  .regime-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .regime-badge.risk_on .regime-dot { background: #38A169; }
+  .regime-badge.neutral .regime-dot { background: #FAD009; }
+  .regime-badge.risk_off .regime-dot { background: #E53E3E; }
+
+  /* Regime sidebar section */
+  .regime-narrative { font-size: 10px; color: #666; font-style: italic; margin-top: 4px; line-height: 1.3; }
+  .regime-quant { font-size: 10px; color: #555; margin-top: 4px; }
+
+  /* Disabled signals */
+  .signal-disabled { opacity: 0.35; }
+  .signal-disabled .signal-name { text-decoration: line-through; }
+  .signal-off-label { color: #E53E3E; font-size: 8px; font-weight: 700; margin-left: 3px; }
+
+  .divider { height: 1px; background: #222; margin: 10px 0; }
+
+  /* Sample selector */
+  .sample-select { max-width: 200px; }
+
+  /* Tab switcher */
+  .tab-bar { display: flex; gap: 0; margin-right: 16px; }
+  .tab-btn { background: #111; color: #666; border: 1px solid #222; padding: 5px 16px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .tab-btn:first-child { border-radius: 6px 0 0 6px; }
+  .tab-btn:last-child { border-radius: 0 6px 6px 0; }
+  .tab-btn.active { background: #FA8057; color: #000; border-color: #FA8057; }
+  .tab-btn:hover:not(.active) { color: #aaa; background: #1a1a1a; }
+
+  /* Comparison view */
+  .comparison-view { flex: 1; overflow: auto; padding: 20px; display: none; }
+  .comparison-view.active { display: block; }
+  .comparison-progress { text-align: center; padding: 60px 20px; }
+  .comparison-progress .progress-label { font-size: 14px; color: #888; margin-bottom: 12px; }
+  .comparison-progress .progress-bar { width: 300px; height: 4px; background: #222; border-radius: 2px; margin: 0 auto; overflow: hidden; }
+  .comparison-progress .progress-fill { height: 100%; background: #FA8057; border-radius: 2px; transition: width 0.3s; }
+
+  .comparison-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .comparison-table th { padding: 8px 10px; text-align: center; color: #888; font-weight: 500; border-bottom: 1px solid #333; white-space: nowrap; }
+  .comparison-table th:first-child { text-align: left; min-width: 140px; position: sticky; left: 0; background: #000; z-index: 1; }
+  .comparison-table td { padding: 7px 10px; text-align: center; border-bottom: 1px solid #111; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .comparison-table td:first-child { text-align: left; color: #888; font-weight: 500; position: sticky; left: 0; background: #000; z-index: 1; }
+  .comparison-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .comparison-table tr:hover td:first-child { background: #0a0a0a; }
+
+  .run-comparison-btn { margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">
+  <div>Loading SPY + VIX data...</div>
+  <div style="font-size:12px;color:#666" id="loadingDetail"></div>
+</div>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:12px">
+    <h1>Strategy <span>Lab</span></h1>
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="backtest">Backtest</button>
+      <button class="tab-btn" data-tab="comparison">Comparison</button>
+    </div>
+    <div class="regime-badge neutral" id="regimeBadge"><div class="regime-dot"></div><span id="regimeLabel">Loading...</span></div>
+  </div>
+  <div class="controls">
+    <label style="color:#888;font-size:12px;">Sample:
+      <select id="sampleSelect" class="sample-select">
+        <optgroup label="2019">
+          <option value="late_bull_2019">Late Bull (2019 H2)</option>
+        </optgroup>
+        <optgroup label="2020">
+          <option value="covid_crash">COVID Crash (Q1)</option>
+          <option value="covid_recovery">COVID Recovery (Q2-Q3)</option>
+          <option value="vaccine_rally">Vaccine Rally (Q4)</option>
+        </optgroup>
+        <optgroup label="2021">
+          <option value="meme_mania">Meme Mania (Q1)</option>
+          <option value="grind_up_2021">Low-Vol Grind (Q2-Q3)</option>
+          <option value="topping_2021">Topping (Q3-Q4)</option>
+        </optgroup>
+        <optgroup label="2022">
+          <option value="rate_hike_2022">Rate Hike Sell-off (H1)</option>
+          <option value="bear_2022">Bear Market (H2)</option>
+        </optgroup>
+        <optgroup label="2023">
+          <option value="ai_rally_2023">AI Rally (H1)</option>
+          <option value="sideways_2023">Sideways Chop (Q3)</option>
+          <option value="meltup_2023">Q4 Melt-Up</option>
+        </optgroup>
+        <optgroup label="2024">
+          <option value="soft_landing">Soft Landing (H1)</option>
+          <option value="aug_flash_2024">Aug Flash Crash (Q3)</option>
+          <option value="election_2024">Election Rally (Q4)</option>
+        </optgroup>
+        <optgroup label="2025">
+          <option value="tariff_2025">Tariff Shock (H1)</option>
+          <option value="recent" selected>Recent (Q2-Q3)</option>
+        </optgroup>
+      </select>
+    </label>
+    <button class="btn" id="runBtn" disabled>&#9654; Run</button>
+    <button class="btn reset" id="resetBtn" disabled>Reset</button>
+    <label style="color:#888;font-size:12px;">Speed:
+      <select id="speedSelect">
+        <option value="200">1&times;</option>
+        <option value="100">2&times;</option>
+        <option value="40">5&times;</option>
+        <option value="20">10&times;</option>
+        <option value="0" selected>Instant</option>
+      </select>
+    </label>
+    <span class="status-text" id="statusText">Loading data...</span>
+  </div>
+</div>
+
+<div class="main-layout">
+  <!-- Left sidebar: Regime + Signals + Performance -->
+  <div class="sidebar">
+    <h3 class="regime-title">Regime</h3>
+    <div class="stat-row"><span class="stat-label">Current</span><span class="stat-value" id="statRegime">—</span></div>
+    <div class="stat-row"><span class="stat-label">Confidence</span><span class="stat-value" id="statRegimeConf">—</span></div>
+    <div class="stat-row"><span class="stat-label">Updated</span><span class="stat-value" id="statRegimeTime" style="font-size:10px">—</span></div>
+    <div class="regime-narrative" id="regimeNarrative"></div>
+    <div class="regime-quant" id="regimeQuant"></div>
+
+    <div class="divider"></div>
+
+    <h3 class="signals">Live Signals</h3>
+    <div style="font-size:10px;color:#555;margin-bottom:4px">Conviction: <span id="convictionLabel">—</span></div>
+    <div class="conviction-bar"><div class="conviction-fill" id="convictionFill" style="width:0;background:#333"></div></div>
+    <div id="signalList" style="margin-top:6px"></div>
+
+    <div class="divider"></div>
+
+    <h3 class="perf">Performance</h3>
+    <div class="stat-row"><span class="stat-label">Total Return</span><span class="stat-value" id="statReturn">—</span></div>
+    <div class="stat-row"><span class="stat-label">vs Buy &amp; Hold</span><span class="stat-value" id="statBH">—</span></div>
+    <div class="stat-row"><span class="stat-label">Win Rate</span><span class="stat-value" id="statWinRate">—</span></div>
+    <div class="stat-row"><span class="stat-label">Max Drawdown</span><span class="stat-value" id="statDrawdown">—</span></div>
+    <div class="stat-row"><span class="stat-label"># Trades</span><span class="stat-value" id="statTrades">—</span></div>
+    <div class="stat-row"><span class="stat-label">Avg Hold (days)</span><span class="stat-value" id="statHold">—</span></div>
+    <div class="stat-row"><span class="stat-label">Sharpe Ratio</span><span class="stat-value" id="statSharpe">—</span></div>
+    <div class="stat-row" style="border-top:1px solid #222;margin-top:4px;padding-top:4px"><span class="stat-label" style="color:#FF0000">MC Median (50)</span><span class="stat-value" id="statMC">—</span></div>
+  </div>
+
+  <!-- Right: Chart + Decision Log -->
+  <div class="content">
+    <div id="chart-container"></div>
+    <div class="log-panel" id="logPanel">
+      <h3>Decision Log</h3>
+      <table class="log-table">
+        <thead><tr><th>Date</th><th>Action</th><th>Price</th><th>Reason</th><th>P&amp;L</th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Comparison view (hidden by default) -->
+<div class="comparison-view" id="comparisonView">
+  <div id="comparisonContent">
+    <div style="text-align:center;padding:60px 20px;color:#666">
+      <div style="font-size:14px;margin-bottom:12px">Run all 17 scenarios to compare performance across market environments.</div>
+      <button class="btn run-comparison-btn" id="runComparisonBtn">&#9654; Run All Scenarios</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// SAMPLE DEFINITIONS — different market environments
+// ══════════════════════════════════════════════════════════════
+const SAMPLES = {
+  // 2019
+  late_bull_2019:  { train: ['2019-03-01','2019-05-31'], test: ['2019-06-03','2019-12-31'], label: '2019 Late Bull', fetchRange: '10y' },
+  // 2020
+  covid_crash:     { train: ['2019-09-01','2019-12-31'], test: ['2020-01-02','2020-04-30'], label: 'COVID Crash', fetchRange: '10y' },
+  covid_recovery:  { train: ['2020-02-01','2020-04-30'], test: ['2020-05-01','2020-09-30'], label: 'COVID Recovery', fetchRange: '10y' },
+  vaccine_rally:   { train: ['2020-07-01','2020-09-30'], test: ['2020-10-01','2020-12-31'], label: '2020 Vaccine Rally', fetchRange: '10y' },
+  // 2021
+  meme_mania:      { train: ['2020-10-01','2020-12-31'], test: ['2021-01-04','2021-03-31'], label: '2021 Meme Mania', fetchRange: '10y' },
+  grind_up_2021:   { train: ['2021-01-01','2021-03-31'], test: ['2021-04-01','2021-09-30'], label: '2021 Low-Vol Grind', fetchRange: '10y' },
+  topping_2021:    { train: ['2021-06-01','2021-08-31'], test: ['2021-09-01','2021-12-31'], label: '2021 Topping', fetchRange: '10y' },
+  // 2022
+  rate_hike_2022:  { train: ['2021-09-01','2021-12-31'], test: ['2022-01-03','2022-06-30'], label: '2022 Rate Hikes', fetchRange: '5y' },
+  bear_2022:       { train: ['2022-04-01','2022-06-30'], test: ['2022-07-01','2022-12-30'], label: '2022 Bear', fetchRange: '5y' },
+  // 2023
+  ai_rally_2023:   { train: ['2022-10-01','2022-12-30'], test: ['2023-01-03','2023-06-30'], label: '2023 AI Rally', fetchRange: '5y' },
+  sideways_2023:   { train: ['2023-04-01','2023-07-31'], test: ['2023-08-01','2023-10-31'], label: '2023 Sideways Chop', fetchRange: '5y' },
+  meltup_2023:     { train: ['2023-07-01','2023-10-31'], test: ['2023-11-01','2023-12-29'], label: '2023 Q4 Melt-Up', fetchRange: '5y' },
+  // 2024
+  soft_landing:    { train: ['2023-10-01','2023-12-29'], test: ['2024-01-02','2024-06-28'], label: '2024 Soft Landing', fetchRange: '5y' },
+  aug_flash_2024:  { train: ['2024-04-01','2024-06-30'], test: ['2024-07-01','2024-09-30'], label: '2024 Aug Flash Crash', fetchRange: '2y' },
+  election_2024:   { train: ['2024-06-01','2024-08-30'], test: ['2024-09-03','2024-12-31'], label: '2024 Election', fetchRange: '2y' },
+  // 2025
+  tariff_2025:     { train: ['2024-10-01','2024-12-31'], test: ['2025-01-02','2025-06-30'], label: '2025 Tariffs', fetchRange: '2y' },
+  recent:          { train: ['2025-03-01','2025-05-31'], test: ['2025-06-01','2025-08-31'], label: 'Recent', fetchRange: '2y' },
+};
+
+// ══════════════════════════════════════════════════════════════
+// CONFIG — derived from walk-forward research
+// ══════════════════════════════════════════════════════════════
+let TRAIN_START, TRAIN_END, TEST_START, TEST_END;
+const TRAILING_STOP_PCT = 0.03;
+const MIN_BUY_SIGNALS = 2;
+const MIN_SELL_SIGNALS = 2;
+const MIN_NET_SCORE = 0.05;
+
+// FOMC, CPI, NFP dates (2020-2025)
+const EVENT_DATES = new Set([
+  // 2020 FOMC
+  '2020-01-29','2020-03-03','2020-03-15','2020-04-29','2020-06-10','2020-07-29','2020-09-16','2020-11-05','2020-12-16',
+  // 2021 FOMC
+  '2021-01-27','2021-03-17','2021-04-28','2021-06-16','2021-07-28','2021-09-22','2021-11-03','2021-12-15',
+  // 2022 FOMC
+  '2022-01-26','2022-03-16','2022-05-04','2022-06-15','2022-07-27','2022-09-21','2022-11-02','2022-12-14',
+  // 2023 FOMC
+  '2023-02-01','2023-03-22','2023-05-03','2023-06-14','2023-07-26','2023-09-20','2023-11-01','2023-12-13',
+  // 2024 FOMC
+  '2024-01-31','2024-03-20','2024-05-01','2024-06-12','2024-07-31','2024-09-18','2024-11-07','2024-12-18',
+  // 2025 FOMC
+  '2025-01-29','2025-03-19','2025-05-07','2025-06-18','2025-07-30','2025-09-17','2025-10-29','2025-12-17',
+  // CPI 2024-2025
+  '2024-01-11','2024-02-13','2024-03-12','2024-04-10','2024-05-15','2024-06-12','2024-07-11','2024-08-14',
+  '2024-09-11','2024-10-10','2024-11-13','2024-12-11',
+  '2025-01-15','2025-02-12','2025-03-12','2025-04-10','2025-05-13','2025-06-11','2025-07-10','2025-08-12',
+  '2025-09-10','2025-10-14','2025-11-12','2025-12-10',
+  // NFP 2024-2025
+  '2024-01-05','2024-02-02','2024-03-08','2024-04-05','2024-05-03','2024-06-07','2024-07-05','2024-08-02',
+  '2024-09-06','2024-10-04','2024-11-01','2024-12-06',
+  '2025-01-10','2025-02-07','2025-03-07','2025-04-04','2025-05-02','2025-06-06','2025-07-03','2025-08-01',
+  '2025-09-05','2025-10-03','2025-11-07','2025-12-05',
+]);
+
+// Signal definitions with edges/consistency from research
+const BUY_SIGNAL_DEFS = [
+  { name: 'Price < MA20 − 2%',      edge: 2.281, cons: 1.00, test: f => f.price_vs_ma20 < -2 },
+  { name: 'VIX > 20',               edge: 1.930, cons: 1.00, test: f => f.vix > 20 },
+  { name: 'RSI < 40',               edge: 2.044, cons: 1.00, test: f => f.rsi !== null && f.rsi < 40 },
+  { name: 'MA20 < MA50 (bearish)',   edge: 1.780, cons: 0.75, test: f => f.ma20 !== null && f.ma50 !== null && f.ma20 < f.ma50 },
+  { name: '5d momentum < −2%',      edge: 1.667, cons: 1.00, test: f => f.roc_5 < -2 },
+  { name: '10d momentum < −3%',     edge: 1.542, cons: 1.00, test: f => f.roc_10 < -3 },
+  { name: 'OBV below MA',           edge: 1.340, cons: 0.88, test: f => f.obv_trend < -2 },
+  { name: 'MACD bearish',           edge: 0.894, cons: 1.00, test: f => f.macd_hist < 0 },
+  { name: 'Bollinger %B < 0.1',     edge: 2.267, cons: 0.80, test: f => f.bb_pct_b !== null && f.bb_pct_b < 0.1 },
+  { name: 'ATR > 1.5%',             edge: 1.692, cons: 1.00, test: f => f.atr_pct > 1.5 },
+  { name: 'Vol risk premium < 0',   edge: 1.128, cons: 1.00, test: f => f.vol_risk_premium !== null && f.vol_risk_premium < 0 },
+  { name: 'Volume > 1.5× avg',      edge: 1.497, cons: 0.83, test: f => f.vol_ratio > 1.5 },
+  { name: '3+ down days',           edge: 1.004, cons: 1.00, test: f => f.consec_days <= -3 },
+];
+
+const SELL_SIGNAL_DEFS = [
+  { name: 'Near 52w high (<2%)',     edge: 1.697, cons: 0.86, test: f => f.dist_from_high > -2 },
+  { name: 'RSI > 60',               edge: 1.501, cons: 0.86, test: f => f.rsi !== null && f.rsi > 60 },
+  { name: 'Trend + Momentum',       edge: 1.028, cons: 1.00, test: f => f.ma20 > f.ma50 && f.macd_hist > 0 },
+  { name: 'MACD bullish',           edge: 0.894, cons: 1.00, test: f => f.macd_hist > 0 },
+  { name: 'Low VIX + No events',    edge: 1.051, cons: 1.00, test: f => f.vix < 16 && f.days_to_event > 4 },
+  { name: 'Near high + Low VIX',    edge: 0.962, cons: 0.86, test: f => f.dist_from_high > -2 && f.vix < 16 },
+  { name: 'Bollinger %B > 0.9',     edge: 1.129, cons: 0.83, test: f => f.bb_pct_b !== null && f.bb_pct_b > 0.9 },
+  { name: 'Low VIX + RSI high',     edge: 1.057, cons: 0.83, test: f => f.vix < 16 && f.rsi > 60 },
+];
+
+// ══════════════════════════════════════════════════════════════
+// REGIME CONFIG — signal activation table per regime
+// ══════════════════════════════════════════════════════════════
+const REGIME_CONFIG = {
+  risk_on: {
+    label: 'Risk-On',
+    minNetScore: 0.03,
+    minBuySignals: 2,
+    disabledBuySignals: new Set(),
+  },
+  neutral: {
+    label: 'Neutral',
+    minNetScore: 0.05,
+    minBuySignals: 2,
+    disabledBuySignals: new Set([
+      '5d momentum < −2%',
+      'ATR > 1.5%',
+      'Vol risk premium < 0',
+      'Volume > 1.5× avg',
+    ]),
+  },
+  risk_off: {
+    label: 'Risk-Off',
+    minNetScore: 0.10,
+    minBuySignals: 3,
+    disabledBuySignals: new Set([
+      '5d momentum < −2%',
+      'ATR > 1.5%',
+      'Vol risk premium < 0',
+      'Volume > 1.5× avg',
+      'OBV below MA',
+      'MACD bearish',
+      'MA20 < MA50 (bearish)',
+    ]),
+  },
+};
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let allCandles = [];
+let vixData = {};
+let trainIdx = { start: 0, end: 0 };
+let testIdx  = { start: 0, end: 0 };
+let animTimer = null;
+let isRunning = false;
+let currentRegime = 'neutral';
+let regimeData = null;
+let currentFetchRange = '2y';
+
+const $ = id => document.getElementById(id);
+const runBtn = $('runBtn'), resetBtn = $('resetBtn');
+const speedSelect = $('speedSelect'), statusText = $('statusText');
+const logBody = $('logBody'), logPanel = $('logPanel');
+const sampleSelect = $('sampleSelect');
+
+// ══════════════════════════════════════════════════════════════
+// DATA LOADING
+// ══════════════════════════════════════════════════════════════
+function applySample(key) {
+  const s = SAMPLES[key];
+  if (!s) return;
+  TRAIN_START = s.train[0]; TRAIN_END = s.train[1];
+  TEST_START = s.test[0]; TEST_END = s.test[1];
+  currentFetchRange = s.fetchRange;
+}
+
+async function loadData() {
+  try {
+    $('loadingDetail').textContent = 'Fetching SPY + VIX...';
+    const range = currentFetchRange;
+    const [spyResp, vixResp] = await Promise.all([
+      fetch(`/stocks/historical/SPY?range=${range}&interval=1d`),
+      fetch(`/stocks/historical/%5EVIX?range=${range}&interval=1d`),
+    ]);
+    if (!spyResp.ok) throw new Error(`SPY: HTTP ${spyResp.status}`);
+    if (!vixResp.ok) throw new Error(`VIX: HTTP ${vixResp.status}`);
+
+    const spyData = await spyResp.json();
+    const vixJson = await vixResp.json();
+
+    vixData = {};
+    for (const c of vixJson.candles) {
+      const d = new Date(c.timestamp * 1000).toISOString().slice(0, 10);
+      vixData[d] = { close: c.close, high: c.high, low: c.low };
+    }
+
+    allCandles = spyData.candles
+      .map(c => {
+        const d = new Date(c.timestamp * 1000).toISOString().slice(0, 10);
+        const v = vixData[d];
+        if (!v) return null;
+        return { date: d, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, vix: v.close };
+      })
+      .filter(Boolean);
+
+    trainIdx.start = allCandles.findIndex(c => c.date >= TRAIN_START);
+    trainIdx.end   = allCandles.findIndex(c => c.date > TRAIN_END) - 1;
+    testIdx.start  = allCandles.findIndex(c => c.date >= TEST_START);
+    testIdx.end    = allCandles.findIndex(c => c.date > TEST_END);
+    if (testIdx.end === -1) testIdx.end = allCandles.length - 1;
+    if (trainIdx.start === -1 || testIdx.start === -1) throw new Error(`Date range not found in ${range} data (need ${TRAIN_START} to ${TEST_END})`);
+
+    // Fetch current regime (non-blocking)
+    try {
+      const regimeResp = await fetch('/regime/current');
+      if (regimeResp.ok) {
+        regimeData = await regimeResp.json();
+        currentRegime = regimeData.final_regime || 'neutral';
+        updateRegimeUI(regimeData);
+      }
+    } catch (e) {
+      console.warn('Regime fetch failed, using neutral:', e);
+    }
+
+    $('loading').classList.add('hidden');
+    statusText.textContent = `Ready — ${testIdx.end - testIdx.start + 1} test days`;
+    runBtn.disabled = false;
+    renderInitialChart();
+  } catch (e) {
+    $('loading').innerHTML = `<div style="color:#E53E3E">Error: ${e.message}</div><div style="font-size:12px;color:#666;margin-top:8px">Try a different sample or check the backend.</div>`;
+    console.error(e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// INDICATOR FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+function computeSMA(values, period) {
+  const r = new Array(values.length).fill(null);
+  for (let i = period - 1; i < values.length; i++) {
+    let s = 0; for (let j = i - period + 1; j <= i; j++) s += values[j];
+    r[i] = s / period;
+  }
+  return r;
+}
+
+function computeEMA(values, period) {
+  const r = new Array(values.length).fill(null);
+  const k = 2 / (period + 1);
+  if (values.length < period) return r;
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += values[i];
+  r[period - 1] = sum / period;
+  for (let i = period; i < values.length; i++) r[i] = values[i] * k + r[i-1] * (1 - k);
+  return r;
+}
+
+function computeRSI(closes, period) {
+  const r = new Array(closes.length).fill(null);
+  if (closes.length < period + 1) return r;
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i-1];
+    if (d > 0) avgGain += d; else avgLoss -= d;
+  }
+  avgGain /= period; avgLoss /= period;
+  r[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i-1];
+    avgGain = (avgGain * (period - 1) + Math.max(d, 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + Math.max(-d, 0)) / period;
+    r[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return r;
+}
+
+function computeATR(highs, lows, closes, period) {
+  const r = new Array(highs.length).fill(null);
+  const trs = [];
+  for (let i = 0; i < highs.length; i++) {
+    trs.push(i === 0 ? highs[i] - lows[i] :
+      Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i-1]), Math.abs(lows[i] - closes[i-1])));
+    if (i >= period - 1) {
+      let s = 0; for (let j = i - period + 1; j <= i; j++) s += trs[j];
+      r[i] = s / period;
+    }
+  }
+  return r;
+}
+
+function computeRealizedVol(closes, period) {
+  const r = new Array(closes.length).fill(null);
+  const logRets = [0];
+  for (let i = 1; i < closes.length; i++)
+    logRets.push(closes[i] > 0 && closes[i-1] > 0 ? Math.log(closes[i] / closes[i-1]) : 0);
+  for (let i = period; i < closes.length; i++) {
+    const w = logRets.slice(i - period + 1, i + 1);
+    const mean = w.reduce((a,b) => a+b, 0) / w.length;
+    const variance = w.reduce((a,b) => a + (b - mean) ** 2, 0) / (w.length - 1);
+    r[i] = Math.sqrt(variance) * Math.sqrt(252) * 100;
+  }
+  return r;
+}
+
+function computeBollinger(closes, period, nStd) {
+  const mid = computeSMA(closes, period);
+  const pctB = new Array(closes.length).fill(null);
+  for (let i = period - 1; i < closes.length; i++) {
+    const w = closes.slice(i - period + 1, i + 1);
+    const mean = mid[i];
+    const std = Math.sqrt(w.reduce((s,v) => s + (v - mean) ** 2, 0) / (w.length - 1));
+    const bw = 2 * nStd * std;
+    pctB[i] = bw > 0 ? (closes[i] - (mean - nStd * std)) / bw : 0.5;
+  }
+  return pctB;
+}
+
+function computeOBV(closes, volumes) {
+  const obv = [0];
+  for (let i = 1; i < closes.length; i++) {
+    if (closes[i] > closes[i-1]) obv.push(obv[i-1] + volumes[i]);
+    else if (closes[i] < closes[i-1]) obv.push(obv[i-1] - volumes[i]);
+    else obv.push(obv[i-1]);
+  }
+  return obv;
+}
+
+// ══════════════════════════════════════════════════════════════
+// FEATURE COMPUTATION
+// ══════════════════════════════════════════════════════════════
+function computeFeatures(endIdx) {
+  const slice = allCandles.slice(0, endIdx + 1);
+  const n = slice.length;
+  const closes = slice.map(c => c.close);
+  const highs = slice.map(c => c.high);
+  const lows = slice.map(c => c.low);
+  const volumes = slice.map(c => c.volume);
+  const vixArr = slice.map(c => c.vix);
+
+  const ma20 = computeSMA(closes, 20);
+  const ma50 = computeSMA(closes, 50);
+  const ema12 = computeEMA(closes, 12);
+  const ema26 = computeEMA(closes, 26);
+  const rsi = computeRSI(closes, 14);
+  const atr = computeATR(highs, lows, closes, 14);
+  const realVol = computeRealizedVol(closes, 20);
+  const bbPctB = computeBollinger(closes, 20, 2);
+  const volSMA = computeSMA(volumes, 20);
+  const obv = computeOBV(closes, volumes);
+  const obvSMA = computeSMA(obv, 20);
+
+  const i = n - 1;
+  const price = closes[i];
+
+  let macdHist = null;
+  if (ema12[i] !== null && ema26[i] !== null) {
+    const macdLine = ema12[i] - ema26[i];
+    const macdVals = [];
+    for (let j = Math.max(0, i - 20); j <= i; j++) {
+      if (ema12[j] !== null && ema26[j] !== null) macdVals.push(ema12[j] - ema26[j]);
+    }
+    const macdSig = macdVals.length >= 9
+      ? computeEMA(macdVals, 9)[macdVals.length - 1]
+      : macdVals[macdVals.length - 1];
+    macdHist = macdLine - (macdSig || 0);
+  }
+
+  const roc5 = i >= 5 ? (price / closes[i - 5] - 1) * 100 : 0;
+  const roc10 = i >= 10 ? (price / closes[i - 10] - 1) * 100 : 0;
+
+  let consec = 0;
+  if (i > 0) {
+    const dir = closes[i] > closes[i - 1] ? 1 : -1;
+    consec = dir;
+    for (let j = i - 1; j > Math.max(i - 10, 0); j--) {
+      if (j === 0) break;
+      if ((closes[j] > closes[j-1] && dir > 0) || (closes[j] < closes[j-1] && dir < 0)) consec += dir;
+      else break;
+    }
+  }
+
+  const lookback = Math.min(i + 1, 252);
+  let high52 = 0;
+  for (let j = i - lookback + 1; j <= i; j++) if (highs[j] > high52) high52 = highs[j];
+  const distFromHigh = (price / high52 - 1) * 100;
+
+  let daysToEvent = 30;
+  const dateObj = new Date(slice[i].date);
+  for (let d = 0; d < 30; d++) {
+    const check = new Date(dateObj.getTime() + d * 86400000).toISOString().slice(0, 10);
+    if (EVENT_DATES.has(check)) { daysToEvent = d; break; }
+  }
+
+  return {
+    date: slice[i].date, price,
+    ma20: ma20[i], ma50: ma50[i], rsi: rsi[i],
+    atr_pct: atr[i] ? atr[i] / price * 100 : null,
+    bb_pct_b: bbPctB[i], macd_hist: macdHist,
+    price_vs_ma20: ma20[i] ? (price / ma20[i] - 1) * 100 : 0,
+    vix: vixArr[i],
+    vol_risk_premium: realVol[i] !== null ? vixArr[i] - realVol[i] : null,
+    vol_ratio: volSMA[i] && volSMA[i] > 0 ? volumes[i] / volSMA[i] : 1,
+    obv_trend: obvSMA[i] && obvSMA[i] !== 0 ? (obv[i] / obvSMA[i] - 1) * 100 : 0,
+    roc_5: roc5, roc_10: roc10, consec_days: consec,
+    dist_from_high: distFromHigh, days_to_event: daysToEvent,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// DECISION TREE STRATEGY ENGINE
+// ══════════════════════════════════════════════════════════════
+function evaluateSignals(features, regime) {
+  regime = regime || currentRegime;
+  const config = REGIME_CONFIG[regime] || REGIME_CONFIG.neutral;
+  const disabled = config.disabledBuySignals;
+
+  let buyScore = 0, sellScore = 0;
+  const buyReasons = [], sellReasons = [];
+  const buySignalStates = [], sellSignalStates = [];
+
+  for (const sig of BUY_SIGNAL_DEFS) {
+    const isDisabled = disabled.has(sig.name);
+    const fires = !isDisabled && sig.test(features);
+    buySignalStates.push({ name: sig.name, on: fires, weight: sig.edge * sig.cons, disabled: isDisabled });
+    if (fires) { buyScore += sig.edge * sig.cons; buyReasons.push(sig.name); }
+  }
+  for (const sig of SELL_SIGNAL_DEFS) {
+    const fires = sig.test(features);
+    sellSignalStates.push({ name: sig.name, on: fires, weight: sig.edge * sig.cons });
+    if (fires) { sellScore += sig.edge * sig.cons; sellReasons.push(sig.name); }
+  }
+  return { buyScore, sellScore, buyReasons, sellReasons, buySignalStates, sellSignalStates };
+}
+
+function decideAction(signals, position, peakPrice, price, regime) {
+  regime = regime || currentRegime;
+  const config = REGIME_CONFIG[regime] || REGIME_CONFIG.neutral;
+  const { buyScore, sellScore, buyReasons, sellReasons } = signals;
+  const minNet = config.minNetScore;
+  const minBuy = config.minBuySignals;
+
+  if (position === 'LONG') {
+    if (price < peakPrice * (1 - TRAILING_STOP_PCT))
+      return { action: 'SELL', reason: `Trailing stop (peak $${peakPrice.toFixed(2)})` };
+    if (sellScore > buyScore && sellScore > minNet && sellReasons.length >= MIN_SELL_SIGNALS) {
+      const top = sellReasons.slice(0, 3).join(', ');
+      return { action: 'SELL', reason: `Score −${(sellScore - buyScore).toFixed(2)} | ${top}` };
+    }
+    return { action: 'HOLD', reason: '' };
+  }
+  const net = buyScore - sellScore;
+  if (net > minNet && buyReasons.length >= minBuy) {
+    const top = buyReasons.slice(0, 3).join(', ');
+    return { action: 'BUY', reason: `Score +${net.toFixed(2)} | ${top}` };
+  }
+  return { action: 'HOLD', reason: '' };
+}
+
+// ══════════════════════════════════════════════════════════════
+// MONTE CARLO (randomized signal weights)
+// ══════════════════════════════════════════════════════════════
+function runMonteCarloSims() {
+  const totalTestDays = testIdx.end - testIdx.start + 1;
+  const MC_SIMS = 50;
+  const allReturns = [];
+  const config = REGIME_CONFIG[currentRegime] || REGIME_CONFIG.neutral;
+  const disabled = config.disabledBuySignals;
+
+  for (let s = 0; s < MC_SIMS; s++) {
+    const jitteredBuy = BUY_SIGNAL_DEFS
+      .filter(sig => !disabled.has(sig.name))
+      .map(sig => ({ ...sig, edge: sig.edge * (0.7 + Math.random() * 0.6) }));
+    const jitteredSell = SELL_SIGNAL_DEFS.map(sig => ({ ...sig, edge: sig.edge * (0.7 + Math.random() * 0.6) }));
+    const jitteredStop = TRAILING_STOP_PCT * (0.7 + Math.random() * 0.6);
+
+    let pos = 'OUT', entry = 0, peak = 0, cash = 10000, shares = 0;
+    const returns = [];
+    for (let d = 0; d < totalTestDays; d++) {
+      const globalIdx = testIdx.start + d;
+      const features = computeFeatures(globalIdx);
+      if (pos === 'LONG') peak = Math.max(peak, features.price);
+      let bScore = 0, sScore = 0, bCount = 0, sCount = 0;
+      for (const sig of jitteredBuy) if (sig.test(features)) { bScore += sig.edge * sig.cons; bCount++; }
+      for (const sig of jitteredSell) if (sig.test(features)) { sScore += sig.edge * sig.cons; sCount++; }
+      if (pos === 'LONG') {
+        if (features.price < peak * (1 - jitteredStop)) { cash += shares * features.price; pos = 'OUT'; shares = 0; }
+        else if (sScore > bScore && sScore > config.minNetScore && sCount >= 2) { cash += shares * features.price; pos = 'OUT'; shares = 0; }
+      } else {
+        const net = bScore - sScore;
+        if (net > config.minNetScore && bCount >= config.minBuySignals) {
+          shares = Math.floor(cash / features.price); cash -= shares * features.price;
+          entry = features.price; peak = features.price; pos = 'LONG';
+        }
+      }
+      returns.push((cash + shares * features.price) / 10000 * 100 - 100);
+    }
+    allReturns.push(returns);
+  }
+  const median = [];
+  for (let d = 0; d < totalTestDays; d++) {
+    const vals = allReturns.map(r => r[d]).sort((a,b) => a - b);
+    const mid = Math.floor(vals.length / 2);
+    median.push(vals.length % 2 === 0 ? (vals[mid-1] + vals[mid]) / 2 : vals[mid]);
+  }
+  return median;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHART RENDERING
+// ══════════════════════════════════════════════════════════════
+function renderInitialChart() {
+  const trainData = allCandles.slice(trainIdx.start, trainIdx.end + 1);
+  const dates = trainData.map(c => c.date);
+  const allClosesToTrain = allCandles.slice(0, trainIdx.end + 1).map(c => c.close);
+  const ma20Train = computeSMA(allClosesToTrain, 20).slice(trainIdx.start);
+  const ma50Train = computeSMA(allClosesToTrain, 50).slice(trainIdx.start);
+
+  const traces = [
+    { x: dates, open: trainData.map(c=>c.open), high: trainData.map(c=>c.high),
+      low: trainData.map(c=>c.low), close: trainData.map(c=>c.close),
+      type:'candlestick', name:'SPY (Training)',
+      increasing:{line:{color:'rgba(56,161,105,0.45)'},fillcolor:'rgba(56,161,105,0.25)'},
+      decreasing:{line:{color:'rgba(229,62,62,0.45)'},fillcolor:'rgba(229,62,62,0.25)'},
+      xaxis:'x',yaxis:'y' },
+    { x:[],open:[],high:[],low:[],close:[], type:'candlestick',name:'SPY (Test)',
+      increasing:{line:{color:'#38A169'},fillcolor:'#38A169'},
+      decreasing:{line:{color:'#E53E3E'},fillcolor:'#E53E3E'}, xaxis:'x',yaxis:'y' },
+    { x:dates,y:ma20Train, type:'scatter',mode:'lines',name:'20-MA',line:{color:'#4A90D9',width:1.5},xaxis:'x',yaxis:'y'},
+    { x:dates,y:ma50Train, type:'scatter',mode:'lines',name:'50-MA',line:{color:'#FA8057',width:1.5},xaxis:'x',yaxis:'y'},
+    { x:[],y:[],type:'scatter',mode:'markers',name:'Buy',marker:{symbol:'triangle-up',size:12,color:'#38A169',line:{width:1,color:'#fff'}},xaxis:'x',yaxis:'y'},
+    { x:[],y:[],type:'scatter',mode:'markers',name:'Sell',marker:{symbol:'triangle-down',size:12,color:'#E53E3E',line:{width:1,color:'#fff'}},xaxis:'x',yaxis:'y'},
+    { x:[],y:[],type:'scatter',mode:'lines',name:'Trailing Stop',line:{color:'#FAD009',width:1,dash:'dot'},xaxis:'x',yaxis:'y'},
+    { x:[],y:[],type:'scatter',mode:'lines',name:'Strategy',line:{color:'#38A169',width:2},xaxis:'x',yaxis:'y2',fill:'tozeroy',fillcolor:'rgba(56,161,105,0.1)'},
+    { x:[],y:[],type:'scatter',mode:'lines',name:'Buy & Hold',line:{color:'#888',width:1.5,dash:'dash'},xaxis:'x',yaxis:'y2'},
+    { x:[],y:[],type:'scatter',mode:'lines',name:'MC Median',line:{color:'#FF0000',width:2.5},xaxis:'x',yaxis:'y2'},
+    { x:dates, y:trainData.map(c=>c.vix), type:'scatter',mode:'lines',name:'VIX',
+      line:{color:'#ED2EA5',width:1,dash:'dot'},xaxis:'x',yaxis:'y3',opacity:0.7},
+  ];
+
+  const boundaryDate = allCandles[testIdx.start]?.date || TEST_START;
+  const layout = {
+    paper_bgcolor:'#000', plot_bgcolor:'#0a0a0a',
+    font:{family:'Space Grotesk, monospace',color:'#aaa',size:11},
+    showlegend:true,
+    legend:{orientation:'h',x:0.5,xanchor:'center',y:1.02,bgcolor:'rgba(0,0,0,0)',font:{size:9}},
+    margin:{l:50,r:45,t:10,b:25},
+    xaxis:{ type:'date',rangeslider:{visible:false},gridcolor:'#111',linecolor:'#222' },
+    yaxis:{ title:'Price ($)',domain:[0.32,1],gridcolor:'#111',linecolor:'#222',side:'left' },
+    yaxis2:{ title:'Return %',domain:[0,0.26],gridcolor:'#111',linecolor:'#222',side:'left',zeroline:true,zerolinecolor:'#333' },
+    yaxis3:{ title:'VIX',overlaying:'y',side:'right',showgrid:false,linecolor:'#333',
+             range:[10,45],tickfont:{color:'#ED2EA5',size:9} },
+    shapes:[{type:'line',x0:boundaryDate,x1:boundaryDate,y0:0,y1:1,yref:'paper',line:{color:'#6172C5',width:1.5,dash:'dashdot'}}],
+    annotations:[{x:boundaryDate,y:1.01,yref:'paper',xanchor:'center',text:'Train | Test',showarrow:false,font:{color:'#6172C5',size:10}}],
+  };
+
+  Plotly.newPlot('chart-container', traces, layout, {responsive:true,displayModeBar:false});
+}
+
+// ══════════════════════════════════════════════════════════════
+// WALK-FORWARD ENGINE
+// ══════════════════════════════════════════════════════════════
+function runBacktest() {
+  if (isRunning) return;
+  isRunning = true;
+  runBtn.disabled = true;
+  resetBtn.disabled = true;
+  sampleSelect.disabled = true;
+
+  const speed = parseInt(speedSelect.value);
+  const totalTestDays = testIdx.end - testIdx.start + 1;
+
+  let currentTestDay = 0;
+  let position = 'OUT', entryPrice = 0, peakPrice = 0;
+  let cash = 10000, shares = 0;
+  const trades = [], equityCurve = [];
+  const bhStart = allCandles[testIdx.start].close;
+
+  const testDates=[],testOpens=[],testHighs=[],testLows=[],testCloses=[];
+  const ma20D=[],ma20V=[],ma50D=[],ma50V=[];
+  const buyX=[],buyY=[],sellX=[],sellY=[];
+  const stopX=[],stopY=[];
+  const pnlX=[],pnlY=[],bhX=[],bhY=[];
+  const mcX=[],mcY=[];
+  const vixX=[],vixY=[];
+
+  statusText.textContent = 'Running 50 Monte Carlo sims...';
+  const mcMedianReturns = runMonteCarloSims();
+
+  const trainDates = allCandles.slice(trainIdx.start, trainIdx.end+1).map(c=>c.date);
+  const trainCloses = allCandles.slice(0, trainIdx.end+1).map(c=>c.close);
+  const ma20Train = computeSMA(trainCloses,20).slice(trainIdx.start);
+  const ma50Train = computeSMA(trainCloses,50).slice(trainIdx.start);
+
+  function processDay() {
+    const globalIdx = testIdx.start + currentTestDay;
+    const candle = allCandles[globalIdx];
+
+    testDates.push(candle.date); testOpens.push(candle.open);
+    testHighs.push(candle.high); testLows.push(candle.low); testCloses.push(candle.close);
+
+    const allCloses = allCandles.slice(0, globalIdx+1).map(c=>c.close);
+    const ma20Full = computeSMA(allCloses, 20);
+    const ma50Full = computeSMA(allCloses, 50);
+    ma20D.push(candle.date); ma20V.push(ma20Full[globalIdx]);
+    ma50D.push(candle.date); ma50V.push(ma50Full[globalIdx]);
+    vixX.push(candle.date); vixY.push(candle.vix);
+
+    if (position === 'LONG') peakPrice = Math.max(peakPrice, candle.close);
+
+    const features = computeFeatures(globalIdx);
+    const signals = evaluateSignals(features, currentRegime);
+    const decision = decideAction(signals, position, peakPrice, candle.close, currentRegime);
+    updateSignalDisplay(signals, position);
+
+    if (decision.action === 'BUY' && position === 'OUT') {
+      position = 'LONG'; entryPrice = candle.close; peakPrice = candle.close;
+      shares = Math.floor(cash / candle.close); cash -= shares * candle.close;
+      buyX.push(candle.date); buyY.push(candle.close);
+      trades.push({date:candle.date,action:'BUY',price:candle.close,reason:decision.reason});
+      addLogRow(candle.date,'BUY',candle.close,decision.reason,null);
+    } else if (decision.action === 'SELL' && position === 'LONG') {
+      cash += shares * candle.close;
+      const pnl = (candle.close / entryPrice - 1) * 100;
+      trades.push({date:candle.date,action:'SELL',price:candle.close,reason:decision.reason,pnl});
+      position = 'OUT'; shares = 0;
+      sellX.push(candle.date); sellY.push(candle.close);
+      addLogRow(candle.date,'SELL',candle.close,decision.reason,pnl);
+    }
+
+    if (position === 'LONG') { stopX.push(candle.date); stopY.push(peakPrice*(1-TRAILING_STOP_PCT)); }
+    else { stopX.push(candle.date); stopY.push(null); }
+
+    const equity = cash + shares * candle.close;
+    const stratReturn = (equity / 10000 - 1) * 100;
+    const bhReturn = (candle.close / bhStart - 1) * 100;
+    pnlX.push(candle.date); pnlY.push(stratReturn);
+    bhX.push(candle.date); bhY.push(bhReturn);
+    mcX.push(candle.date); mcY.push(mcMedianReturns[currentTestDay]);
+    equityCurve.push(equity);
+
+    currentTestDay++;
+    return { stratReturn, bhReturn };
+  }
+
+  function updateChart(stratReturn, bhReturn) {
+    Plotly.update('chart-container', {
+      x: [undefined,testDates, [...trainDates,...ma20D],[...trainDates,...ma50D],
+          buyX,sellX,stopX, pnlX,bhX,mcX, [...trainDates.slice(0,trainDates.length),...vixX]],
+      open:[undefined,testOpens], high:[undefined,testHighs], low:[undefined,testLows], close:[undefined,testCloses],
+      y: [undefined,undefined, [...ma20Train,...ma20V],[...ma50Train,...ma50V],
+          buyY,sellY,stopY, pnlY,bhY,mcY,
+          [...allCandles.slice(trainIdx.start,trainIdx.end+1).map(c=>c.vix),...vixY]],
+    }, {}, [0,1,2,3,4,5,6,7,8,9,10]);
+    updateStats(trades, equityCurve, stratReturn, bhReturn, mcY[mcY.length-1]);
+    statusText.textContent = `Day ${currentTestDay} / ${totalTestDays}`;
+  }
+
+  function finalize() {
+    isRunning = false; resetBtn.disabled = false; sampleSelect.disabled = false;
+    const n = trades.filter(t=>t.action==='BUY').length;
+    statusText.textContent = `Complete — ${n} trade${n!==1?'s':''}`;
+  }
+
+  if (speed === 0) {
+    let last;
+    while (currentTestDay < totalTestDays) last = processDay();
+    if (last) updateChart(last.stratReturn, last.bhReturn);
+    finalize();
+  } else {
+    function tick() {
+      if (currentTestDay >= totalTestDays) { finalize(); return; }
+      const r = processDay();
+      updateChart(r.stratReturn, r.bhReturn);
+      if (currentTestDay < totalTestDays) animTimer = setTimeout(tick, speed);
+      else finalize();
+    }
+    tick();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════════════════════════════
+function updateSignalDisplay(signals, position) {
+  const { buyScore, sellScore, buySignalStates, sellSignalStates } = signals;
+  const config = REGIME_CONFIG[currentRegime] || REGIME_CONFIG.neutral;
+  const net = buyScore - sellScore;
+  const label = $('convictionLabel');
+  const fill = $('convictionFill');
+
+  if (position === 'LONG') {
+    const danger = sellScore > buyScore;
+    label.textContent = danger ? `SELL pressure: ${sellScore.toFixed(1)}` : `Holding (sell: ${sellScore.toFixed(1)})`;
+    label.style.color = danger ? '#E53E3E' : '#888';
+    fill.style.width = Math.min(100, sellScore * 10) + '%';
+    fill.style.background = danger ? '#E53E3E' : '#333';
+  } else {
+    label.textContent = net > 0 ? `BUY conviction: +${net.toFixed(1)}` : `Flat (net: ${net.toFixed(1)})`;
+    label.style.color = net > config.minNetScore ? '#38A169' : '#888';
+    fill.style.width = Math.min(100, Math.max(0, net * 10)) + '%';
+    fill.style.background = net > config.minNetScore ? '#38A169' : '#333';
+  }
+
+  const list = $('signalList');
+  let html = '<div style="color:#555;font-size:9px;margin-bottom:3px">BUY SIGNALS</div>';
+  for (const s of buySignalStates) {
+    const disabledCls = s.disabled ? ' signal-disabled' : '';
+    const offLabel = s.disabled ? '<span class="signal-off-label">OFF</span>' : '';
+    html += `<div class="signal-bar${disabledCls}"><div class="signal-dot ${s.on?'on':'off'}"></div>
+      <span class="signal-name">${s.name}${offLabel}</span>
+      <span class="signal-score" style="color:${s.on?'#38A169':'#333'}">${s.on?'+'+s.weight.toFixed(1):''}</span></div>`;
+  }
+  html += '<div style="color:#555;font-size:9px;margin:5px 0 3px">SELL SIGNALS</div>';
+  for (const s of sellSignalStates) {
+    html += `<div class="signal-bar"><div class="signal-dot ${s.on?'on':'off'}" style="${s.on?'background:#E53E3E':''}"></div>
+      <span class="signal-name">${s.name}</span>
+      <span class="signal-score" style="color:${s.on?'#E53E3E':'#333'}">${s.on?'-'+s.weight.toFixed(1):''}</span></div>`;
+  }
+  list.innerHTML = html;
+}
+
+function updateRegimeUI(data) {
+  const regime = data.final_regime || 'neutral';
+  const badge = $('regimeBadge');
+  badge.className = 'regime-badge ' + regime;
+  const labels = { risk_on: 'Risk-On', neutral: 'Neutral', risk_off: 'Risk-Off' };
+  $('regimeLabel').textContent = labels[regime] || regime;
+  $('statRegime').textContent = labels[regime] || regime;
+  $('statRegimeConf').textContent = data.confidence !== null ? `${(data.confidence * 100).toFixed(0)}%` : '—';
+
+  if (data.last_updated) {
+    const d = new Date(data.last_updated);
+    $('statRegimeTime').textContent = d.toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  } else {
+    $('statRegimeTime').textContent = '—';
+  }
+  if (data.is_stale) $('statRegimeTime').textContent += ' (stale)';
+
+  $('regimeNarrative').textContent = data.dominant_narrative || '';
+
+  // Show quant snapshot
+  const parts = [];
+  if (data.quant_vix != null) parts.push(`VIX ${data.quant_vix.toFixed(1)}`);
+  if (data.quant_rate != null) parts.push(`Rate ${data.quant_rate.toFixed(2)}%`);
+  if (data.quant_ma200_slope != null) parts.push(`MA200 ${data.quant_ma200_slope > 0 ? '+' : ''}${data.quant_ma200_slope.toFixed(1)}%`);
+  $('regimeQuant').textContent = parts.join(' · ');
+}
+
+function addLogRow(date, action, price, reason, pnl) {
+  const tr = document.createElement('tr');
+  const cls = action === 'BUY' ? 'buy' : 'sell';
+  const pnlStr = pnl !== null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%` : '—';
+  const pnlCls = pnl !== null ? (pnl >= 0 ? 'buy' : 'sell') : '';
+  tr.innerHTML = `<td>${date}</td><td class="${cls}">${action}</td><td>$${price.toFixed(2)}</td>
+    <td class="reason">${reason}</td><td class="${pnlCls}">${pnlStr}</td>`;
+  logBody.appendChild(tr);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+
+function updateStats(trades, equityCurve, stratReturn, bhReturn, mcReturn) {
+  const el = id => $(id);
+  const retEl = el('statReturn');
+  retEl.textContent = `${stratReturn >= 0?'+':''}${stratReturn.toFixed(2)}%`;
+  retEl.className = 'stat-value ' + (stratReturn >= 0 ? 'positive' : 'negative');
+
+  const diff = stratReturn - bhReturn;
+  const bhEl = el('statBH');
+  bhEl.textContent = `${diff>=0?'+':''}${diff.toFixed(2)}% (BH: ${bhReturn>=0?'+':''}${bhReturn.toFixed(2)}%)`;
+  bhEl.className = 'stat-value ' + (diff >= 0 ? 'positive' : 'negative');
+
+  const completed = trades.filter(t => t.action === 'SELL' && t.pnl !== undefined);
+  const wins = completed.filter(t => t.pnl > 0).length;
+  el('statWinRate').textContent = completed.length > 0
+    ? `${(wins/completed.length*100).toFixed(0)}% (${wins}/${completed.length})` : '—';
+
+  let maxDD = 0, peak = 0;
+  for (const eq of equityCurve) { if (eq > peak) peak = eq; const dd = (peak-eq)/peak; if (dd > maxDD) maxDD = dd; }
+  const ddEl = el('statDrawdown');
+  ddEl.textContent = `-${(maxDD*100).toFixed(2)}%`;
+  ddEl.className = 'stat-value negative';
+
+  el('statTrades').textContent = completed.length;
+
+  const buys = trades.filter(t=>t.action==='BUY');
+  const sells = trades.filter(t=>t.action==='SELL');
+  if (sells.length > 0) {
+    let tot = 0;
+    for (let i = 0; i < sells.length; i++) {
+      if (i < buys.length) tot += (new Date(sells[i].date) - new Date(buys[i].date)) / 86400000;
+    }
+    el('statHold').textContent = (tot / sells.length).toFixed(1);
+  }
+
+  if (equityCurve.length > 2) {
+    const rets = [];
+    for (let i = 1; i < equityCurve.length; i++) rets.push(equityCurve[i]/equityCurve[i-1]-1);
+    const avg = rets.reduce((s,r)=>s+r,0)/rets.length;
+    const std = Math.sqrt(rets.reduce((s,r)=>s+(r-avg)**2,0)/rets.length);
+    el('statSharpe').textContent = (std > 0 ? (avg/std)*Math.sqrt(252) : 0).toFixed(2);
+  }
+
+  if (mcReturn !== undefined) {
+    const mcEl = el('statMC');
+    mcEl.textContent = `${mcReturn>=0?'+':''}${mcReturn.toFixed(2)}%`;
+    mcEl.className = 'stat-value ' + (mcReturn >= 0 ? 'positive' : 'negative');
+  }
+}
+
+function resetBacktest() {
+  if (animTimer) clearTimeout(animTimer);
+  isRunning = false;
+  logBody.innerHTML = '';
+  $('signalList').innerHTML = '';
+  $('convictionLabel').textContent = '—';
+  $('convictionFill').style.width = '0';
+  ['statReturn','statBH','statWinRate','statDrawdown','statTrades','statHold','statSharpe','statMC']
+    .forEach(id => { $(id).textContent = '—'; $(id).className = 'stat-value'; });
+  statusText.textContent = `Ready — ${testIdx.end - testIdx.start + 1} test days`;
+  runBtn.disabled = false; resetBtn.disabled = true;
+  renderInitialChart();
+}
+
+// ══════════════════════════════════════════════════════════════
+// SAMPLE CHANGE HANDLER
+// ══════════════════════════════════════════════════════════════
+async function changeSample() {
+  if (isRunning) return;
+  const key = sampleSelect.value;
+  applySample(key);
+
+  // Show loading overlay
+  $('loading').classList.remove('hidden');
+  $('loading').innerHTML = `<div>Loading ${SAMPLES[key].label} data...</div><div style="font-size:12px;color:#666" id="loadingDetail"></div>`;
+
+  // Clear previous state
+  logBody.innerHTML = '';
+  $('signalList').innerHTML = '';
+  $('convictionLabel').textContent = '—';
+  $('convictionFill').style.width = '0';
+  ['statReturn','statBH','statWinRate','statDrawdown','statTrades','statHold','statSharpe','statMC']
+    .forEach(id => { $(id).textContent = '—'; $(id).className = 'stat-value'; });
+  runBtn.disabled = true; resetBtn.disabled = true;
+
+  await loadData();
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+runBtn.addEventListener('click', runBacktest);
+resetBtn.addEventListener('click', resetBacktest);
+sampleSelect.addEventListener('change', changeSample);
+
+// ══════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ══════════════════════════════════════════════════════════════
+const mainLayout = document.querySelector('.main-layout');
+const comparisonView = $('comparisonView');
+const tabBtns = document.querySelectorAll('.tab-btn');
+const backtestControls = document.querySelector('.controls');
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    tabBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (tab === 'backtest') {
+      mainLayout.style.display = 'flex';
+      comparisonView.classList.remove('active');
+      backtestControls.style.display = 'flex';
+    } else {
+      mainLayout.style.display = 'none';
+      comparisonView.classList.add('active');
+      backtestControls.style.display = 'none';
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// COMPARISON ENGINE — silent backtest across all scenarios
+// ══════════════════════════════════════════════════════════════
+
+async function fetchScenarioData(sampleKey) {
+  const s = SAMPLES[sampleKey];
+  const range = s.fetchRange;
+  const [spyResp, vixResp] = await Promise.all([
+    fetch(`/stocks/historical/SPY?range=${range}&interval=1d`),
+    fetch(`/stocks/historical/%5EVIX?range=${range}&interval=1d`),
+  ]);
+  if (!spyResp.ok) throw new Error(`SPY HTTP ${spyResp.status}`);
+  if (!vixResp.ok) throw new Error(`VIX HTTP ${vixResp.status}`);
+
+  const spyData = await spyResp.json();
+  const vixJson = await vixResp.json();
+
+  const vd = {};
+  for (const c of vixJson.candles) {
+    const d = new Date(c.timestamp * 1000).toISOString().slice(0, 10);
+    vd[d] = { close: c.close, high: c.high, low: c.low };
+  }
+
+  const candles = spyData.candles
+    .map(c => {
+      const d = new Date(c.timestamp * 1000).toISOString().slice(0, 10);
+      const v = vd[d];
+      if (!v) return null;
+      return { date: d, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, vix: v.close };
+    })
+    .filter(Boolean);
+
+  return candles;
+}
+
+function runSilentBacktest(candles, sampleKey, regime) {
+  const s = SAMPLES[sampleKey];
+  const trnStart = candles.findIndex(c => c.date >= s.train[0]);
+  const trnEnd = candles.findIndex(c => c.date > s.train[1]) - 1;
+  const tstStart = candles.findIndex(c => c.date >= s.test[0]);
+  let tstEnd = candles.findIndex(c => c.date > s.test[1]);
+  if (tstEnd === -1) tstEnd = candles.length - 1; else tstEnd--;
+  if (trnStart === -1 || tstStart === -1) return null;
+
+  const config = REGIME_CONFIG[regime] || REGIME_CONFIG.neutral;
+  const disabled = config.disabledBuySignals;
+
+  // Feature computation using local candles
+  function localFeatures(endIdx) {
+    const slice = candles.slice(0, endIdx + 1);
+    const n = slice.length;
+    const closes = slice.map(c => c.close);
+    const highs = slice.map(c => c.high);
+    const lows = slice.map(c => c.low);
+    const volumes = slice.map(c => c.volume);
+    const vixArr = slice.map(c => c.vix);
+
+    const ma20 = computeSMA(closes, 20);
+    const ma50 = computeSMA(closes, 50);
+    const ema12 = computeEMA(closes, 12);
+    const ema26 = computeEMA(closes, 26);
+    const rsi = computeRSI(closes, 14);
+    const atr = computeATR(highs, lows, closes, 14);
+    const realVol = computeRealizedVol(closes, 20);
+    const bbPctB = computeBollinger(closes, 20, 2);
+    const volSMA = computeSMA(volumes, 20);
+    const obv = computeOBV(closes, volumes);
+    const obvSMA = computeSMA(obv, 20);
+
+    const i = n - 1;
+    const price = closes[i];
+
+    let macdHist = null;
+    if (ema12[i] !== null && ema26[i] !== null) {
+      const macdLine = ema12[i] - ema26[i];
+      const macdVals = [];
+      for (let j = Math.max(0, i - 20); j <= i; j++) {
+        if (ema12[j] !== null && ema26[j] !== null) macdVals.push(ema12[j] - ema26[j]);
+      }
+      const macdSig = macdVals.length >= 9 ? computeEMA(macdVals, 9)[macdVals.length - 1] : macdVals[macdVals.length - 1];
+      macdHist = macdLine - (macdSig || 0);
+    }
+
+    const roc5 = i >= 5 ? (price / closes[i - 5] - 1) * 100 : 0;
+    const roc10 = i >= 10 ? (price / closes[i - 10] - 1) * 100 : 0;
+
+    let consec = 0;
+    if (i > 0) {
+      const dir = closes[i] > closes[i - 1] ? 1 : -1;
+      consec = dir;
+      for (let j = i - 1; j > Math.max(i - 10, 0); j--) {
+        if (j === 0) break;
+        if ((closes[j] > closes[j-1] && dir > 0) || (closes[j] < closes[j-1] && dir < 0)) consec += dir;
+        else break;
+      }
+    }
+
+    const lookback = Math.min(i + 1, 252);
+    let high52 = 0;
+    for (let j = i - lookback + 1; j <= i; j++) if (highs[j] > high52) high52 = highs[j];
+    const distFromHigh = (price / high52 - 1) * 100;
+
+    let daysToEvent = 30;
+    const dateObj = new Date(slice[i].date);
+    for (let d = 0; d < 30; d++) {
+      const check = new Date(dateObj.getTime() + d * 86400000).toISOString().slice(0, 10);
+      if (EVENT_DATES.has(check)) { daysToEvent = d; break; }
+    }
+
+    return {
+      date: slice[i].date, price,
+      ma20: ma20[i], ma50: ma50[i], rsi: rsi[i],
+      atr_pct: atr[i] ? atr[i] / price * 100 : null,
+      bb_pct_b: bbPctB[i], macd_hist: macdHist,
+      price_vs_ma20: ma20[i] ? (price / ma20[i] - 1) * 100 : 0,
+      vix: vixArr[i],
+      vol_risk_premium: realVol[i] !== null ? vixArr[i] - realVol[i] : null,
+      vol_ratio: volSMA[i] && volSMA[i] > 0 ? volumes[i] / volSMA[i] : 1,
+      obv_trend: obvSMA[i] && obvSMA[i] !== 0 ? (obv[i] / obvSMA[i] - 1) * 100 : 0,
+      roc_5: roc5, roc_10: roc10, consec_days: consec,
+      dist_from_high: distFromHigh, days_to_event: daysToEvent,
+    };
+  }
+
+  const totalDays = tstEnd - tstStart + 1;
+  let position = 'OUT', entryPrice = 0, peakPrice = 0;
+  let cash = 10000, shares = 0;
+  const trades = [];
+  const equityCurve = [];
+  const bhStart = candles[tstStart].close;
+
+  for (let d = 0; d < totalDays; d++) {
+    const idx = tstStart + d;
+    const c = candles[idx];
+    if (position === 'LONG') peakPrice = Math.max(peakPrice, c.close);
+
+    const features = localFeatures(idx);
+
+    // Evaluate signals with regime
+    let buyScore = 0, sellScore = 0;
+    const buyReasons = [], sellReasons = [];
+    for (const sig of BUY_SIGNAL_DEFS) {
+      if (disabled.has(sig.name)) continue;
+      if (sig.test(features)) { buyScore += sig.edge * sig.cons; buyReasons.push(sig.name); }
+    }
+    for (const sig of SELL_SIGNAL_DEFS) {
+      if (sig.test(features)) { sellScore += sig.edge * sig.cons; sellReasons.push(sig.name); }
+    }
+
+    if (position === 'LONG') {
+      if (c.close < peakPrice * (1 - TRAILING_STOP_PCT)) {
+        const pnl = (c.close / entryPrice - 1) * 100;
+        trades.push({ pnl }); cash += shares * c.close; position = 'OUT'; shares = 0;
+      } else if (sellScore > buyScore && sellScore > config.minNetScore && sellReasons.length >= MIN_SELL_SIGNALS) {
+        const pnl = (c.close / entryPrice - 1) * 100;
+        trades.push({ pnl }); cash += shares * c.close; position = 'OUT'; shares = 0;
+      }
+    } else {
+      const net = buyScore - sellScore;
+      if (net > config.minNetScore && buyReasons.length >= config.minBuySignals) {
+        shares = Math.floor(cash / c.close); cash -= shares * c.close;
+        entryPrice = c.close; peakPrice = c.close; position = 'LONG';
+      }
+    }
+    equityCurve.push(cash + shares * c.close);
+  }
+
+  const finalEquity = equityCurve[equityCurve.length - 1] || 10000;
+  const stratReturn = (finalEquity / 10000 - 1) * 100;
+  const bhReturn = (candles[tstEnd].close / bhStart - 1) * 100;
+  const alpha = stratReturn - bhReturn;
+
+  const wins = trades.filter(t => t.pnl > 0).length;
+  const winRate = trades.length > 0 ? (wins / trades.length * 100) : 0;
+
+  let maxDD = 0, peak = 0;
+  for (const eq of equityCurve) { if (eq > peak) peak = eq; const dd = (peak - eq) / peak; if (dd > maxDD) maxDD = dd; }
+
+  let avgHold = 0; // Simplified — not tracking dates in silent mode
+
+  let sharpe = 0;
+  if (equityCurve.length > 2) {
+    const rets = [];
+    for (let i = 1; i < equityCurve.length; i++) rets.push(equityCurve[i] / equityCurve[i - 1] - 1);
+    const avg = rets.reduce((s, r) => s + r, 0) / rets.length;
+    const std = Math.sqrt(rets.reduce((s, r) => s + (r - avg) ** 2, 0) / rets.length);
+    sharpe = std > 0 ? (avg / std) * Math.sqrt(252) : 0;
+  }
+
+  return {
+    stratReturn, bhReturn, alpha, winRate,
+    maxDrawdown: maxDD * 100, trades: trades.length, sharpe,
+    testDays: totalDays,
+  };
+}
+
+async function runAllScenarios() {
+  const btn = $('runComparisonBtn');
+  if (btn) btn.disabled = true;
+
+  const content = $('comparisonContent');
+  content.innerHTML = `<div class="comparison-progress">
+    <div class="progress-label" id="compProgressLabel">Running scenarios... 0 / ${Object.keys(SAMPLES).length}</div>
+    <div class="progress-bar"><div class="progress-fill" id="compProgressFill" style="width:0%"></div></div>
+  </div>`;
+
+  const keys = Object.keys(SAMPLES);
+  const results = {};
+  let done = 0;
+
+  // Use a shared data cache — some scenarios share the same fetchRange
+  const dataCache = {};
+
+  for (const key of keys) {
+    const s = SAMPLES[key];
+    $('compProgressLabel').textContent = `Running ${s.label}... ${done} / ${keys.length}`;
+
+    try {
+      // Cache data by fetchRange to avoid re-fetching
+      if (!dataCache[s.fetchRange]) {
+        dataCache[s.fetchRange] = await fetchScenarioData(key);
+      }
+      const candles = dataCache[s.fetchRange];
+      const result = runSilentBacktest(candles, key, currentRegime);
+      results[key] = result;
+    } catch (e) {
+      console.error(`Scenario ${key} failed:`, e);
+      results[key] = null;
+    }
+
+    done++;
+    $('compProgressFill').style.width = `${(done / keys.length) * 100}%`;
+    // Yield to UI
+    await new Promise(r => setTimeout(r, 10));
+  }
+
+  renderComparisonTable(results);
+}
+
+function renderComparisonTable(results) {
+  const content = $('comparisonContent');
+  const keys = Object.keys(SAMPLES);
+  const validKeys = keys.filter(k => results[k] !== null);
+
+  if (validKeys.length === 0) {
+    content.innerHTML = '<div style="text-align:center;padding:40px;color:#E53E3E">All scenarios failed. Check the backend.</div>';
+    return;
+  }
+
+  // Define metrics: { label, key, format, higherIsBetter }
+  const metrics = [
+    { label: 'Strategy Return', key: 'stratReturn', format: v => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, higherIsBetter: true },
+    { label: 'Buy & Hold Return', key: 'bhReturn', format: v => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, higherIsBetter: true },
+    { label: 'vs B&H (Alpha)', key: 'alpha', format: v => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, higherIsBetter: true },
+    { label: 'Win Rate', key: 'winRate', format: v => `${v.toFixed(0)}%`, higherIsBetter: true },
+    { label: 'Max Drawdown', key: 'maxDrawdown', format: v => `-${v.toFixed(2)}%`, higherIsBetter: false },
+    { label: '# Trades', key: 'trades', format: v => `${v}`, higherIsBetter: null },
+    { label: 'Sharpe Ratio', key: 'sharpe', format: v => v.toFixed(2), higherIsBetter: true },
+    { label: 'Test Days', key: 'testDays', format: v => `${v}`, higherIsBetter: null },
+  ];
+
+  // Build header
+  let html = '<table class="comparison-table"><thead><tr><th>Metric</th>';
+  for (const k of keys) {
+    const s = SAMPLES[k];
+    html += `<th>${s.label}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  // Build rows with color gradient
+  for (const metric of metrics) {
+    const values = keys.map(k => results[k] ? results[k][metric.key] : null);
+    const validVals = values.filter(v => v !== null);
+
+    let minVal = Math.min(...validVals);
+    let maxVal = Math.max(...validVals);
+
+    html += `<tr><td>${metric.label}</td>`;
+    for (let i = 0; i < keys.length; i++) {
+      const v = values[i];
+      if (v === null) {
+        html += '<td style="color:#333">—</td>';
+        continue;
+      }
+
+      // Compute color intensity (0 = worst, 1 = best)
+      let intensity = 0.5;
+      if (maxVal !== minVal && metric.higherIsBetter !== null) {
+        const normalized = (v - minVal) / (maxVal - minVal);
+        intensity = metric.higherIsBetter ? normalized : (1 - normalized);
+      }
+
+      // Color: interpolate from dim (#333) to bright green for good, bright red for bad-metric best
+      let color;
+      if (metric.higherIsBetter === null) {
+        // Neutral metrics (# trades, test days) — use white scale
+        const brightness = Math.round(80 + intensity * 120);
+        color = `rgb(${brightness}, ${brightness}, ${brightness})`;
+      } else if (metric.key === 'maxDrawdown') {
+        // Drawdown: best (lowest) = green, worst (highest) = red
+        const r = Math.round(229 - intensity * 180);
+        const g = Math.round(62 + intensity * 99);
+        const b = Math.round(62 - intensity * 10);
+        color = `rgb(${r}, ${g}, ${b})`;
+      } else {
+        // Regular: best = green, worst = red
+        const r = Math.round(229 - intensity * 180);
+        const g = Math.round(62 + intensity * 99);
+        const b = Math.round(62 - intensity * 10);
+        color = `rgb(${r}, ${g}, ${b})`;
+      }
+
+      // Background intensity — subtle glow on best values
+      const bgAlpha = (0.03 + intensity * 0.08).toFixed(2);
+      const bgColor = metric.higherIsBetter !== false
+        ? `rgba(56, 161, 105, ${bgAlpha})`
+        : `rgba(56, 161, 105, ${bgAlpha})`;
+
+      html += `<td style="color:${color};background:${bgColor}">${metric.format(v)}</td>`;
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+  html += '<div style="text-align:center;margin-top:16px"><button class="btn run-comparison-btn" id="runComparisonBtn">&#8635; Re-run All</button></div>';
+
+  content.innerHTML = html;
+  $('runComparisonBtn').addEventListener('click', runAllScenarios);
+}
+
+$('runComparisonBtn').addEventListener('click', runAllScenarios);
+
+// Load default sample
+applySample(sampleSelect.value);
+loadData();
+</script>
+</body>
+</html>
