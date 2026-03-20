@@ -10,29 +10,31 @@ export const STOCK_POOL_SIZE = 25;
 export const BATCHES_PER_CYCLE = 5;
 
 // ── Chambers (Iron slots) ──
-export const STARTING_CHAMBERS = 2;
+export const STARTING_CHAMBERS = 1;
 export const MAX_CHAMBERS = 6;
 
 // ── Scoring tables ──
 // Directional picks (rise/fall): { confidence: { win, lose } }
+// MUST match backend/app/services/bounty_config.py — backend is source of truth
 export const DIR_SCORING = {
-  1: { win: 18, lose: 10 },
-  2: { win: 38, lose: 25 },
-  3: { win: 65, lose: 48 },
+  1: { win: 13, lose: 11 },
+  2: { win: 31, lose: 28 },
+  3: { win: 57, lose: 70 },
 };
 
 // Holster picks: { confidence: { win, lose } }
 export const HOL_SCORING = {
-  1: { win: 12, lose: 5 },
-  2: { win: 24, lose: 13 },
-  3: { win: 40, lose: 22 },
+  1: { win: 8, lose: 6 },
+  2: { win: 19, lose: 15 },
+  3: { win: 35, lose: 30 },
 };
 
 // ── Wanted level multiplier table ──
 // Levels 1-10 are explicit, 11+ use exponential formula
+// MUST match backend/app/services/bounty_config.py
 export const WANTED_MULT = {
-  1: 1, 2: 3, 3: 7, 4: 15, 5: 30,
-  6: 60, 7: 130, 8: 280, 9: 620, 10: 1400,
+  1: 1, 2: 2, 3: 4, 4: 8, 5: 18,
+  6: 42, 7: 100, 8: 230, 9: 530, 10: 1200,
 };
 export const WANTED_OVERFLOW_BASE = 2.3; // multiplier per level above 10
 
@@ -42,18 +44,20 @@ export function wantedMultiplier(level) {
 }
 
 // ── Notoriety ──
+// MUST match backend/app/services/bounty_config.py
 export const NOTORIETY_WEIGHT = { 1: 1, 2: 1.5, 3: 2 };
-export const NOTORIETY_UP_THRESHOLD = 2.5;   // roundNotoriety >= this → wanted +1
-export const NOTORIETY_DOWN_THRESHOLD = -3;  // roundNotoriety <= this → wanted -1
+export const NOTORIETY_UP_THRESHOLD = 3.0;   // roundNotoriety >= this → wanted +1
+export const NOTORIETY_DOWN_THRESHOLD = -2.0;  // roundNotoriety <= this → wanted -1
 
 // ── Skip cost ──
 // cost = 25 * 2.5^(n-1) * max(1, balance/5000)
+// MUST match backend/app/services/bounty_config.py skip_cost()
 export function skipCost(n, balance) {
-  return Math.ceil(25 * Math.pow(2.0, n - 1) * Math.max(1, balance / 8000));
+  return Math.ceil(25 * Math.pow(2.5, n - 1) * Math.max(1, balance / 5000));
 }
 
 // ── Round ante ──
-export const ANTE_BASE = 60;
+export const ANTE_BASE = 75;
 export function roundAnte(roundNum, wantedLevel) {
   return ANTE_BASE;
 }

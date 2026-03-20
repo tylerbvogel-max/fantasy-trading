@@ -143,6 +143,16 @@ class BountyStatsResponse(BaseModel):
     margin_call_cooldown: int = 0
     equipped_irons: list[BountyEquippedIron] = []
     pending_offering: bool = False
+    # P1 additions
+    peak_dd: int = 0
+    peak_wanted_level: int = 0
+    best_run_score: int = 0
+    current_streak: int = 0
+    longest_streak: int = 0
+    streak_shield: bool = False
+    active_title: str = "Drifter"
+    lifetime_dd_earned: int = 0
+    runs_completed: int = 0
 
 
 class BountyStockStatus(BaseModel):
@@ -282,3 +292,5 @@ class BountyBoardEntry(BaseModel):
     accuracy_pct: float
     wanted_level: int
     total_predictions: int
+    best_run_score: int = 0
+    title: str = "Drifter"

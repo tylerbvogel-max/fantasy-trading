@@ -210,6 +210,16 @@ export interface BountyStatsResponse {
   margin_call_cooldown: number;
   equipped_irons: BountyEquippedIron[];
   pending_offering: boolean;
+  // P1 additions
+  peak_dd: number;
+  peak_wanted_level: number;
+  best_run_score: number;
+  current_streak: number;
+  longest_streak: number;
+  streak_shield: boolean;
+  active_title: string;
+  lifetime_dd_earned: number;
+  runs_completed: number;
 }
 
 export interface SpyCandlePoint {
@@ -341,6 +351,94 @@ export interface BountyBoardEntry {
   accuracy_pct: number;
   wanted_level: number;
   total_predictions: number;
+  best_run_score: number;
+  title: string;
+}
+
+// P1-A: Run History
+export interface BountyRunHistoryEntry {
+  id: string;
+  peak_dd: number;
+  peak_wanted_level: number;
+  accuracy: number;
+  rounds_played: number;
+  run_score: number;
+  end_reason: string;
+  ended_at: string;
+}
+
+// P1-B: Badges
+export interface BountyBadge {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  earned: boolean;
+  earned_at: string | null;
+}
+
+export interface BountyBadgeProgress {
+  earned_count: number;
+  total_count: number;
+  progress: Record<string, any>;
+}
+
+// P1-C: Titles
+export interface BountyTitle {
+  id: string;
+  name: string;
+  order: number;
+  description: string;
+  unlocked: boolean;
+  unlocked_at: string | null;
+}
+
+// P1-D: Streaks
+export interface BountyStreakInfo {
+  current_streak: number;
+  longest_streak: number;
+  last_streak_date: string | null;
+  streak_shield: boolean;
+  at_risk: boolean;
+  next_milestone: { day: number; reward: any } | null;
+}
+
+// P2-A: Iron Combos
+export interface BountyIronCombo {
+  id: string;
+  name: string;
+  description: string;
+  irons: string[] | { id: string; name: string }[];
+}
+
+// P2-C: Settlement Analysis
+export interface BountySettlementAnalysis {
+  settled: boolean;
+  window_id?: string;
+  stocks?: any[];
+  prediction_aggregates?: Record<string, Record<string, number>>;
+  my_predictions?: any[];
+}
+
+// P2-D: Performance Analytics
+export interface BountyPerformanceAnalytics {
+  confidence_stats: Record<number, { total: number; correct: number; win_rate: number }>;
+  leverage_stats: Record<string, { total: number; correct: number; win_rate: number }>;
+  time_stats: { time_slot: string; total: number; correct: number; win_rate: number }[];
+  action_stats: Record<string, { total: number; correct: number; win_rate: number }>;
+  rolling_trend: { date: string; total: number; correct: number; win_rate: number }[];
+  alpha_vs_random: number;
+  total_predictions: number;
+  overall_accuracy: number;
+}
+
+// P3-B: Activity Feed
+export interface BountyActivityEvent {
+  id: string;
+  alias: string;
+  event_type: string;
+  event_data: Record<string, any>;
+  created_at: string;
 }
 
 export const bounty = {
@@ -382,4 +480,42 @@ export const bounty = {
     request<BountyResetResponse>("/bounty/reset", {
       method: "POST",
     }),
+
+  // P1-A: Run History
+  runs: (limit?: number) =>
+    request<BountyRunHistoryEntry[]>(`/bounty/runs?limit=${limit ?? 20}`),
+
+  // P1-B: Badges
+  badges: () => request<BountyBadge[]>("/bounty/badges"),
+  badgeProgress: () => request<BountyBadgeProgress>("/bounty/badges/progress"),
+
+  // P1-C: Titles
+  titles: () => request<BountyTitle[]>("/bounty/titles"),
+  equipTitle: (titleId: string) =>
+    request<{ title_id: string; title_name: string }>("/bounty/titles/equip", {
+      method: "POST",
+      body: JSON.stringify({ title_id: titleId }),
+    }),
+
+  // P1-D: Streaks
+  streak: () => request<BountyStreakInfo>("/bounty/streak"),
+
+  // P2-A: Iron Combos
+  activeCombos: () => request<BountyIronCombo[]>("/bounty/combos"),
+  allCombos: () => request<BountyIronCombo[]>("/bounty/combos/all"),
+
+  // P2-C: Settlement Analysis
+  analysis: (windowId: string) =>
+    request<BountySettlementAnalysis>(`/bounty/analysis/${windowId}`),
+
+  // P2-D: Performance Analytics
+  analytics: () => request<BountyPerformanceAnalytics>("/bounty/analytics"),
+
+  // P3-A: Share Cards
+  shareCard: (eventType: string) =>
+    request<Record<string, any>>(`/bounty/share/${eventType}`),
+
+  // P3-B: Activity Feed
+  feed: (limit?: number) =>
+    request<BountyActivityEvent[]>(`/bounty/feed?limit=${limit ?? 50}`),
 };

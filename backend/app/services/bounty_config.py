@@ -658,6 +658,9 @@ IRON_DEFS_BY_ID = {iron["id"]: iron for iron in IRON_DEFS}
 # Rarity weights for offering rolls
 RARITY_WEIGHTS = {"common": 45, "uncommon": 30, "rare": 18, "legendary": 7}
 
+# Iron tier gating: minimum wanted level to appear in offerings
+RARITY_MIN_LEVEL = {"common": 1, "uncommon": 3, "rare": 6, "legendary": 8}
+
 # ── Leverage ──
 LEVERAGE_MIN = 1.0
 LEVERAGE_MAX = 5.0
@@ -710,3 +713,223 @@ HOLD_LEVERAGE_FACTOR = 0.5  # applied as: 1 + (leverage - 1) * factor
 # Notoriety bonus for high-leverage correct picks
 LEVERAGE_NOTORIETY_BONUS_THRESHOLD = 3.0  # leverage >= this
 LEVERAGE_NOTORIETY_BONUS = 0.5
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-A: Run Score
+# ══════════════════════════════════════════════════════════════════════════════
+
+def compute_run_score(peak_dd: int, peak_level: int, accuracy: float, rounds: int) -> int:
+    """Composite metric: Peak DD × (1 + level×0.1) × (0.5 + accuracy×0.5) × completion_bonus."""
+    level_mult = 1 + peak_level * 0.1
+    accuracy_mult = 0.5 + accuracy * 0.5
+    completion_bonus = min(2.0, 1.0 + rounds * 0.02)  # 2% per round, cap 2x
+    return round(peak_dd * level_mult * accuracy_mult * completion_bonus)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-B: Badges (16 total)
+# ══════════════════════════════════════════════════════════════════════════════
+
+BADGE_DEFS = [
+    # ── Wanted Level ──
+    {"id": "drifter", "name": "Drifter", "category": "wanted_level",
+     "description": "Reach Wanted Level 3", "requirement": {"type": "wanted_level", "value": 3}},
+    {"id": "desperado", "name": "Desperado", "category": "wanted_level",
+     "description": "Reach Wanted Level 5", "requirement": {"type": "wanted_level", "value": 5}},
+    {"id": "most_wanted", "name": "Most Wanted", "category": "wanted_level",
+     "description": "Reach Wanted Level 8", "requirement": {"type": "wanted_level", "value": 8}},
+    {"id": "legendary_outlaw", "name": "Legendary Outlaw", "category": "wanted_level",
+     "description": "Reach Wanted Level 10", "requirement": {"type": "wanted_level", "value": 10}},
+    # ── Accuracy ──
+    {"id": "sharpshooter", "name": "Sharpshooter", "category": "accuracy",
+     "description": "10 correct predictions in a row", "requirement": {"type": "correct_streak", "value": 10}},
+    {"id": "quick_on_the_draw", "name": "Quick on the Draw", "category": "accuracy",
+     "description": "5 Quick Draw correct in a row", "requirement": {"type": "qd_streak", "value": 5}},
+    {"id": "dead_eye_legend", "name": "Dead Eye Legend", "category": "accuracy",
+     "description": "3 Dead Eye correct in a row", "requirement": {"type": "de_streak", "value": 3}},
+    # ── Economy ──
+    {"id": "high_roller", "name": "High Roller", "category": "economy",
+     "description": "Reach 25,000 DD in a single run", "requirement": {"type": "peak_dd", "value": 25000}},
+    {"id": "tycoon", "name": "Tycoon", "category": "economy",
+     "description": "Reach 100,000 DD in a single run", "requirement": {"type": "peak_dd", "value": 100000}},
+    {"id": "millionaire", "name": "Millionaire", "category": "economy",
+     "description": "Reach 1,000,000 DD in a single run", "requirement": {"type": "peak_dd", "value": 1000000}},
+    # ── Special ──
+    {"id": "no_mercy", "name": "No Mercy", "category": "special",
+     "description": "5 rounds with zero skips", "requirement": {"type": "no_skip_rounds", "value": 5}},
+    {"id": "iron_man", "name": "Iron Man", "category": "special",
+     "description": "Fill all 6 chambers", "requirement": {"type": "chambers_full", "value": 6}},
+    {"id": "holster_king", "name": "Holster King", "category": "special",
+     "description": "10 HOLD wins in a single run", "requirement": {"type": "hold_wins_run", "value": 10}},
+    {"id": "the_ghost", "name": "The Ghost", "category": "special",
+     "description": "3 Ghost Rider triggers in a single run", "requirement": {"type": "ghost_triggers_run", "value": 3}},
+    {"id": "comeback_kid", "name": "Comeback Kid", "category": "special",
+     "description": "Go from sub-500 DD to 10,000+ DD", "requirement": {"type": "comeback", "low": 500, "high": 10000}},
+    {"id": "streak_master", "name": "Streak Master", "category": "special",
+     "description": "Maintain a 30-day prediction streak", "requirement": {"type": "daily_streak", "value": 30}},
+]
+
+BADGE_DEFS_BY_ID = {b["id"]: b for b in BADGE_DEFS}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-C: Titles (7 tiers)
+# ══════════════════════════════════════════════════════════════════════════════
+
+TITLE_DEFS = [
+    {"id": "drifter", "name": "Drifter", "order": 0,
+     "description": "Default title", "requirements": {}},
+    {"id": "gunslinger", "name": "Gunslinger", "order": 1,
+     "description": "3 runs at Wanted Level 5+",
+     "requirements": {"runs_at_level_5": 3}},
+    {"id": "sharpshooter", "name": "Sharpshooter", "order": 2,
+     "description": "65%+ accuracy over 5 completed runs",
+     "requirements": {"accuracy_over_runs": {"min_accuracy": 0.65, "min_runs": 5}}},
+    {"id": "outlaw", "name": "Outlaw", "order": 3,
+     "description": "Desperado badge + 100k lifetime DD",
+     "requirements": {"badge": "desperado", "lifetime_dd": 100000}},
+    {"id": "bounty_king", "name": "Bounty King", "order": 4,
+     "description": "Wanted Level 8 in 3 runs",
+     "requirements": {"runs_at_level_8": 3}},
+    {"id": "sheriff", "name": "Sheriff", "order": 5,
+     "description": "5+ badges + 500k run score",
+     "requirements": {"badge_count": 5, "best_run_score": 500000}},
+    {"id": "legend", "name": "Legend", "order": 6,
+     "description": "Legendary Outlaw badge + Sheriff title + 1M lifetime DD",
+     "requirements": {"badge": "legendary_outlaw", "title": "sheriff", "lifetime_dd": 1000000}},
+]
+
+TITLE_DEFS_BY_ID = {t["id"]: t for t in TITLE_DEFS}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-D: Daily Streak
+# ══════════════════════════════════════════════════════════════════════════════
+
+STREAK_REWARDS = {
+    3: {"type": "bonus_offering"},               # Bonus iron offering
+    5: {"type": "dd_bonus", "amount": 500},       # +500 DD
+    7: {"type": "guaranteed_uncommon"},            # Guaranteed uncommon+ offering
+    14: {"type": "dd_bonus", "amount": 2000},     # +2000 DD
+    30: {"type": "badge_and_rare", "badge": "streak_master"},  # Badge + guaranteed rare
+}
+
+STREAK_SHIELD_THRESHOLD = 7  # Earn shield at streak 7+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-A: Iron Synergy Combos
+# ══════════════════════════════════════════════════════════════════════════════
+
+IRON_COMBOS = [
+    {
+        "id": "dead_mans_arsenal",
+        "name": "Dead Man's Arsenal",
+        "irons": ["double_barrel", "gatling_gun", "tombstone_ace"],
+        "description": "All Dead Eye effects doubled",
+        "bonus_effects": {"de_win_multiplier": 2.0},
+    },
+    {
+        "id": "the_vault",
+        "name": "The Vault",
+        "irons": ["gold_tooth", "platinum_tooth", "el_dorado"],
+        "description": "+50% to all flat cash bonuses",
+        "bonus_effects": {"flat_cash_multiplier": 1.5},
+    },
+    {
+        "id": "ghost_town",
+        "name": "Ghost Town",
+        "irons": ["ghost_rider", "smoke_bomb", "lucky_horseshoe"],
+        "description": "Guaranteed 1 miss flip per round",
+        "bonus_effects": {"guaranteed_ghost_per_round": True},
+    },
+    {
+        "id": "iron_curtain",
+        "name": "Iron Curtain",
+        "irons": ["thick_skin", "chaps", "campfire"],
+        "description": "All losses capped at 50% base",
+        "bonus_effects": {"loss_cap_pct": 0.5},
+    },
+    {
+        "id": "mavericks_gambit",
+        "name": "Maverick's Gambit",
+        "irons": ["blood_oath", "gold_rush", "moonshine"],
+        "description": "Scoring x5, losses x5",
+        "bonus_effects": {"score_multiplier": 5.0, "loss_multiplier": 5.0},
+    },
+    {
+        "id": "the_lawman",
+        "name": "The Lawman",
+        "irons": ["sheriffs_badge", "tin_star", "bounty_poster"],
+        "description": "+2 wins per wanted level",
+        "bonus_effects": {"per_level_win_bonus": 2},
+    },
+    {
+        "id": "fortune_seekers",
+        "name": "Fortune Seekers",
+        "irons": ["prospectors_pick", "panning_kit", "gold_tooth"],
+        "description": "All income doubled",
+        "bonus_effects": {"income_multiplier": 2.0},
+    },
+    {
+        "id": "quick_silver",
+        "name": "Quick Silver",
+        "irons": ["iron_sights", "twin_revolvers", "pocket_watch"],
+        "description": "Quick Draw scoring uses Dead Eye values + x1.5",
+        "bonus_effects": {"qd_uses_de": True, "qd_combo_mult": 1.5},
+    },
+    {
+        "id": "the_survivor",
+        "name": "The Survivor",
+        "irons": ["saloon_door", "phoenix_feather", "water_trough"],
+        "description": "Revival restores to 2000 DD + keep all irons",
+        "bonus_effects": {"enhanced_revival_dd": 2000, "keep_irons_on_revive": True},
+    },
+    {
+        "id": "high_noon_showdown",
+        "name": "High Noon Showdown",
+        "irons": ["high_noon", "peacemaker", "ace_of_spades"],
+        "description": "Every 3rd pick auto-correct (instead of 5th)",
+        "bonus_effects": {"ace_of_spades_interval_override": 3},
+    },
+    {
+        "id": "snake_eyes",
+        "name": "Snake Eyes",
+        "irons": ["rattlesnake_skin", "rattlesnake_venom", "snake_oil"],
+        "description": "All holster losses = 0, skip cost -50%",
+        "bonus_effects": {"all_holster_losses_zero": True, "skip_discount": 0.5},
+    },
+    {
+        "id": "warpath",
+        "name": "Warpath",
+        "irons": ["war_paint", "war_drum", "dynamite"],
+        "description": "+30 wins after 2 correct, +1.0 notoriety per correct",
+        "bonus_effects": {"war_drum_bonus": 30, "notoriety_bonus": 1.0},
+    },
+]
+
+IRON_COMBOS_BY_ID = {c["id"]: c for c in IRON_COMBOS}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-B: Weekly Stock Events
+# ══════════════════════════════════════════════════════════════════════════════
+
+MAG_7_SYMBOLS = {"AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "META", "TSLA"}
+
+SECTOR_SPOTLIGHT_ROTATION = [
+    {"name": "Semiconductors", "symbols": {"NVDA", "AMD", "INTC", "AVGO", "QCOM", "MU", "TSM"}},
+    {"name": "Pharma & Biotech", "symbols": {"JNJ", "PFE", "ABBV", "MRK", "LLY", "AMGN", "BMY"}},
+    {"name": "Energy", "symbols": {"XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC"}},
+    {"name": "Financials", "symbols": {"JPM", "BAC", "GS", "MS", "WFC", "C", "BLK"}},
+    {"name": "Consumer Tech", "symbols": {"AAPL", "MSFT", "GOOG", "AMZN", "META", "NFLX", "CRM"}},
+]
+
+# Event type → display info
+STOCK_EVENT_TYPES = {
+    "earnings_week": {"name": "Earnings Week", "description": "Companies reporting this week"},
+    "fed_day": {"name": "Fed Day", "description": "Rate-sensitive sector stocks"},
+    "sector_spotlight": {"name": "Sector Spotlight", "description": "Weekly sector rotation"},
+    "mag7_friday": {"name": "Mag 7 Friday", "description": "Only Magnificent 7 stocks"},
+}

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.bounty import (
     BountyWindow, BountyWindowStock, BountyPrediction, BountyPlayerStats,
     SpyPriceLog, BountyPlayerIron, BountyIronOffering,
+    BountyRunHistory, BountyBadge, BountyTitle, BountyActivityEvent,
 )
 from app.models.user import User
 from app.models.stock import StockActive, StockMaster
@@ -21,12 +22,18 @@ from app.services.bounty_config import (
     ANTE_BASE, STARTING_DOUBLE_DOLLARS, STARTING_CHAMBERS, MAX_CHAMBERS,
     HOLD_THRESHOLD_FALLBACK, CONFIDENCE_LABELS, compute_hold_threshold,
     wanted_multiplier, skip_cost as calc_skip_cost,
-    IRON_DEFS, IRON_DEFS_BY_ID, RARITY_WEIGHTS,
+    IRON_DEFS, IRON_DEFS_BY_ID, RARITY_WEIGHTS, RARITY_MIN_LEVEL,
     chambers_for_level, bet_to_tier,
     max_leverage_for_level, margin_call_chance,
     MARGIN_CALL_PENALTY_DD, MARGIN_CALL_WANTED_DROP, MARGIN_CALL_COOLDOWN,
     CARRY_COST_PER_X, HOLD_LEVERAGE_FACTOR,
     LEVERAGE_NOTORIETY_BONUS_THRESHOLD, LEVERAGE_NOTORIETY_BONUS,
+    compute_run_score,
+    BADGE_DEFS, BADGE_DEFS_BY_ID,
+    TITLE_DEFS, TITLE_DEFS_BY_ID,
+    STREAK_REWARDS, STREAK_SHIELD_THRESHOLD,
+    IRON_COMBOS,
+    MAG_7_SYMBOLS, SECTOR_SPOTLIGHT_ROTATION, STOCK_EVENT_TYPES,
 )
 from app.config import get_settings
 
@@ -34,8 +41,9 @@ settings = get_settings()
 
 ET = ZoneInfo("America/New_York")
 
-# Rolling window duration (set to 2 for rapid testing, 120 for production)
-WINDOW_DURATION_MINUTES = 2
+# Rolling window duration: env BOUNTY_WINDOW_MINUTES (default 120 for production, set to 2 for dev)
+import os
+WINDOW_DURATION_MINUTES = int(os.environ.get("BOUNTY_WINDOW_MINUTES", "120"))
 
 # Stocks to create per bounty window
 WINDOW_STOCKS = ["SPY", "NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "GOOG", "PLTR", "SNDK"]
@@ -167,9 +175,13 @@ async def get_equipped_irons(db: AsyncSession, user_id: uuid.UUID) -> list[dict]
 
 # ── Iron offering ──
 
-def roll_iron_offering(equipped_ids: set[str]) -> list[dict]:
-    """Roll 3 unique irons not already equipped, rarity-weighted."""
-    available = [i for i in IRON_DEFS if i["id"] not in equipped_ids]
+def roll_iron_offering(equipped_ids: set[str], wanted_level: int = 1) -> list[dict]:
+    """Roll 3 unique irons not already equipped, rarity-weighted, tier-gated by wanted level."""
+    available = [
+        i for i in IRON_DEFS
+        if i["id"] not in equipped_ids
+        and wanted_level >= RARITY_MIN_LEVEL.get(i["rarity"], 1)
+    ]
     if len(available) <= 3:
         return available[:3]
 
@@ -189,7 +201,8 @@ def roll_iron_offering(equipped_ids: set[str]) -> list[dict]:
 
 
 async def create_iron_offering(
-    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID | None = None
+    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID | None = None,
+    wanted_level: int = 1,
 ) -> BountyIronOffering | None:
     """Create an iron offering for a player after window settlement."""
     equipped_result = await db.execute(
@@ -197,7 +210,7 @@ async def create_iron_offering(
     )
     equipped_ids = {row for row in equipped_result.scalars().all()}
 
-    offerings = roll_iron_offering(equipped_ids)
+    offerings = roll_iron_offering(equipped_ids, wanted_level=wanted_level)
     if not offerings:
         return None
 
@@ -536,6 +549,9 @@ async def submit_prediction(
     stats.total_predictions += 1
     stats.last_prediction_at = now
 
+    # P1-D: Update daily streak
+    streak_reward = await update_streak(db, stats)
+
     await db.commit()
     await db.refresh(pred)
     return pred
@@ -644,6 +660,11 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
                 stock_row.result = "DOWN"
         else:
             stock_row.result = "UP"
+        # P2-C: Store settlement context
+        stock_row.settlement_context = json.dumps({
+            "pct_change": round(pct_change * 100, 4) if stock_row.open_price is not None else None,
+            "hold_threshold": round(hold_threshold * 100, 4) if stock_row.open_price is not None else None,
+        })
         stock_row.is_settled = True
         stock_results[stock_row.symbol] = stock_row.result
 
@@ -768,6 +789,9 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             if is_correct:
                 stats.correct_predictions += 1
 
+            # Badge progress tracking
+            update_badge_progress(stats, is_correct, conf, is_holster, ghost_triggered, False)
+
             # Notoriety accumulation: bet_amount / 33 to scale into ~0-3 range
             notoriety_weight = bet / 33.0 if bet > 0 else 1.0
             notoriety_delta = notoriety_weight * (1 if is_correct else -1)
@@ -784,25 +808,70 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
         elif window_notoriety <= NOTORIETY_DOWN_THRESHOLD:
             stats.wanted_level = max(1, stats.wanted_level - 1)
 
+        old_level = stats.wanted_level
         stats.best_streak = max(stats.best_streak, stats.wanted_level)
         stats.chambers = max(stats.chambers, chambers_for_level(stats.wanted_level))
         stats.notoriety = window_notoriety
 
-        # Check bust
+        # P1-A: Update run tracking peaks
+        stats.rounds_played += 1
+        stats.peak_dd = max(stats.peak_dd, stats.double_dollars)
+        stats.peak_wanted_level = max(stats.peak_wanted_level, stats.wanted_level)
+
+        # P1-B/C: Check badges and titles after settlement
+        await check_badges(db, stats)
+        await check_titles(db, stats)
+
+        # Emit level-up activity event
+        if stats.wanted_level > old_level:
+            await _emit_activity(db, user_id, "level_up", {
+                "new_level": stats.wanted_level,
+                "multiplier": wanted_multiplier(stats.wanted_level),
+            })
+
+        # Check bust — but check revival irons first
         if stats.double_dollars <= 0:
-            await _bust_player(db, stats)
+            revived = False
+            # Saloon Door: first bust per run, survive with $500 (or $1000 boosted)
+            if not stats.saloon_used and fx.get("saloon_door"):
+                stats.saloon_used = True
+                stats.double_dollars = 500
+                revived = True
+            # Phoenix Feather: revive at $1000 (or $2000 boosted)
+            elif not stats.phoenix_used and fx.get("phoenix_feather"):
+                stats.phoenix_used = True
+                stats.double_dollars = 1000
+                revived = True
+
+            if not revived:
+                await _bust_player(db, stats)
+            else:
+                await create_iron_offering(db, user_id, window_id, wanted_level=stats.wanted_level)
         else:
             # Alive — create iron offering
-            await create_iron_offering(db, user_id, window_id)
+            await create_iron_offering(db, user_id, window_id, wanted_level=stats.wanted_level)
 
     await db.commit()
 
 
 async def _bust_player(db: AsyncSession, stats: BountyPlayerStats) -> None:
-    """Mark player as busted, clear irons."""
+    """Mark player as busted, archive run, clear irons."""
+    # Archive the run before resetting
+    await archive_run(db, stats, end_reason="bust")
+
     stats.is_busted = True
     stats.bust_count += 1
     stats.double_dollars = 0
+
+    # Emit bust activity event
+    await _emit_activity(db, stats.user_id, "bust", {
+        "bust_count": stats.bust_count,
+        "peak_dd": stats.peak_dd, "peak_level": stats.peak_wanted_level,
+    })
+
+    # Reset run-specific tracking
+    _reset_run_tracking(stats)
+    reset_run_badge_progress(stats)
 
     # Clear equipped irons
     result = await db.execute(
@@ -816,12 +885,20 @@ async def reset_player(db: AsyncSession, user_id: uuid.UUID) -> dict:
     """Reset a player to start fresh (works whether busted or not)."""
     stats = await get_or_create_player_stats(db, user_id)
 
+    # Archive the current run if not already busted (bust already archives)
+    if not stats.is_busted and stats.rounds_played > 0:
+        await archive_run(db, stats, end_reason="reset")
+
     stats.double_dollars = STARTING_DOUBLE_DOLLARS
     stats.wanted_level = 1
     stats.is_busted = False
     stats.notoriety = 0.0
     stats.skip_count_this_window = 0
     stats.margin_call_cooldown = 0
+    stats.saloon_used = False
+    stats.phoenix_used = False
+    _reset_run_tracking(stats)
+    reset_run_badge_progress(stats)
     # Chambers persist across resets (high-water mark)
 
     # Clear irons (should already be empty but just in case)
@@ -910,6 +987,7 @@ def _stats_to_response(stats: BountyPlayerStats) -> dict:
         if stats.total_predictions > 0
         else 0.0
     )
+    title_name = TITLE_DEFS_BY_ID.get(stats.active_title or "drifter", {}).get("name", "Drifter")
     return {
         "double_dollars": stats.double_dollars,
         "wanted_level": stats.wanted_level,
@@ -923,6 +1001,16 @@ def _stats_to_response(stats: BountyPlayerStats) -> dict:
         "bust_count": stats.bust_count,
         "margin_call_cooldown": stats.margin_call_cooldown,
         "pending_offering": False,  # Set by caller
+        # P1 additions
+        "peak_dd": stats.peak_dd,
+        "peak_wanted_level": stats.peak_wanted_level,
+        "best_run_score": stats.best_run_score,
+        "current_streak": stats.current_streak,
+        "longest_streak": stats.longest_streak,
+        "streak_shield": stats.streak_shield,
+        "active_title": title_name,
+        "lifetime_dd_earned": stats.lifetime_dd_earned,
+        "runs_completed": stats.runs_completed,
     }
 
 
@@ -1087,18 +1175,19 @@ async def get_bounty_board(db: AsyncSession, period: str = "alltime") -> list[di
             })
         return board
     else:
-        # All-time: use bounty_player_stats
+        # All-time: use bounty_player_stats, sorted by best_run_score
         result = await db.execute(
             select(User.alias, BountyPlayerStats)
             .join(BountyPlayerStats, User.id == BountyPlayerStats.user_id)
             .where(BountyPlayerStats.total_predictions > 0)
-            .order_by(BountyPlayerStats.double_dollars.desc())
+            .order_by(BountyPlayerStats.best_run_score.desc())
         )
         rows = result.all()
 
         board = []
         for i, row in enumerate(rows, start=1):
             stats = row[1]
+            title_name = TITLE_DEFS_BY_ID.get(stats.active_title or "drifter", {}).get("name", "Drifter")
             board.append({
                 "rank": i,
                 "alias": row.alias,
@@ -1108,6 +1197,8 @@ async def get_bounty_board(db: AsyncSession, period: str = "alltime") -> list[di
                 ) if stats.total_predictions > 0 else 0.0,
                 "wanted_level": stats.wanted_level,
                 "total_predictions": stats.total_predictions,
+                "best_run_score": stats.best_run_score,
+                "title": title_name,
             })
         return board
 
@@ -1336,4 +1427,796 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
             "max_level": WANTED_LEVEL_CAP,
             "progress_pct": progress_pct,
         },
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-A: Run Score & Run History
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def archive_run(
+    db: AsyncSession, stats: BountyPlayerStats, end_reason: str = "bust"
+) -> BountyRunHistory:
+    """Archive the current run to history and compute run score."""
+    accuracy = (
+        stats.correct_predictions / stats.total_predictions
+        if stats.total_predictions > 0 else 0.0
+    )
+    run_score = compute_run_score(
+        peak_dd=stats.peak_dd,
+        peak_level=stats.peak_wanted_level,
+        accuracy=accuracy,
+        rounds=stats.rounds_played,
+    )
+
+    run = BountyRunHistory(
+        user_id=stats.user_id,
+        peak_dd=stats.peak_dd,
+        peak_wanted_level=stats.peak_wanted_level,
+        total_predictions=stats.total_predictions,
+        correct_predictions=stats.correct_predictions,
+        accuracy=round(accuracy, 4),
+        rounds_played=stats.rounds_played,
+        run_score=run_score,
+        end_reason=end_reason,
+    )
+    db.add(run)
+
+    # Update best run score (lifetime high water mark)
+    if run_score > stats.best_run_score:
+        stats.best_run_score = run_score
+
+    # Update lifetime stats
+    stats.lifetime_dd_earned += stats.peak_dd
+    stats.runs_completed += 1
+
+    # Emit activity event for notable runs
+    if run_score > 0:
+        await _emit_activity(db, stats.user_id, "run_complete", {
+            "run_score": run_score, "peak_dd": stats.peak_dd,
+            "peak_level": stats.peak_wanted_level, "end_reason": end_reason,
+        })
+
+    return run
+
+
+def _reset_run_tracking(stats: BountyPlayerStats) -> None:
+    """Reset per-run tracking columns (called on bust/reset)."""
+    stats.peak_dd = STARTING_DOUBLE_DOLLARS
+    stats.peak_wanted_level = 1
+    stats.rounds_played = 0
+
+
+async def get_run_history(
+    db: AsyncSession, user_id: uuid.UUID, limit: int = 20
+) -> list[dict]:
+    """Get a player's run history, newest first."""
+    result = await db.execute(
+        select(BountyRunHistory)
+        .where(BountyRunHistory.user_id == user_id)
+        .order_by(BountyRunHistory.ended_at.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "id": str(r.id),
+            "peak_dd": r.peak_dd,
+            "peak_wanted_level": r.peak_wanted_level,
+            "accuracy": round(r.accuracy * 100, 1),
+            "rounds_played": r.rounds_played,
+            "run_score": r.run_score,
+            "end_reason": r.end_reason,
+            "ended_at": r.ended_at.isoformat(),
+        }
+        for r in result.scalars().all()
+    ]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-B: Badges
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def check_badges(
+    db: AsyncSession, stats: BountyPlayerStats, settlement_context: dict | None = None
+) -> list[str]:
+    """Check all badge conditions and award any newly earned badges. Returns list of newly earned badge IDs."""
+    # Load already-earned badges
+    result = await db.execute(
+        select(BountyBadge.badge_id).where(BountyBadge.user_id == stats.user_id)
+    )
+    earned_ids = set(result.scalars().all())
+    newly_earned = []
+
+    # Load badge progress
+    progress = json.loads(stats.badge_progress) if stats.badge_progress else {}
+
+    for badge_def in BADGE_DEFS:
+        bid = badge_def["id"]
+        if bid in earned_ids:
+            continue
+
+        req = badge_def["requirement"]
+        earned = False
+
+        if req["type"] == "wanted_level":
+            earned = stats.wanted_level >= req["value"]
+        elif req["type"] == "peak_dd":
+            earned = stats.peak_dd >= req["value"]
+        elif req["type"] == "chambers_full":
+            earned = stats.chambers >= req["value"]
+        elif req["type"] == "correct_streak":
+            earned = progress.get("current_correct_streak", 0) >= req["value"]
+        elif req["type"] == "qd_streak":
+            earned = progress.get("current_qd_streak", 0) >= req["value"]
+        elif req["type"] == "de_streak":
+            earned = progress.get("current_de_streak", 0) >= req["value"]
+        elif req["type"] == "no_skip_rounds":
+            earned = progress.get("no_skip_rounds", 0) >= req["value"]
+        elif req["type"] == "hold_wins_run":
+            earned = progress.get("hold_wins_run", 0) >= req["value"]
+        elif req["type"] == "ghost_triggers_run":
+            earned = progress.get("ghost_triggers_run", 0) >= req["value"]
+        elif req["type"] == "comeback":
+            earned = (progress.get("hit_low", False) and stats.double_dollars >= req["high"])
+        elif req["type"] == "daily_streak":
+            earned = stats.current_streak >= req["value"]
+
+        if earned:
+            badge = BountyBadge(
+                user_id=stats.user_id,
+                badge_id=bid,
+                run_context=json.dumps({
+                    "dd": stats.double_dollars, "level": stats.wanted_level,
+                    "peak_dd": stats.peak_dd,
+                }),
+            )
+            db.add(badge)
+            newly_earned.append(bid)
+            await _emit_activity(db, stats.user_id, "badge_earned", {
+                "badge_id": bid, "badge_name": badge_def["name"],
+            })
+
+    # Save updated progress
+    stats.badge_progress = json.dumps(progress)
+
+    return newly_earned
+
+
+def update_badge_progress(
+    stats: BountyPlayerStats, pred_is_correct: bool, confidence: int,
+    is_holster: bool, ghost_triggered: bool, was_skip: bool
+) -> None:
+    """Update badge progress counters after a prediction/settlement."""
+    progress = json.loads(stats.badge_progress) if stats.badge_progress else {}
+
+    # Correct streak
+    if pred_is_correct:
+        progress["current_correct_streak"] = progress.get("current_correct_streak", 0) + 1
+    else:
+        progress["current_correct_streak"] = 0
+
+    # QD streak
+    if pred_is_correct and confidence == 2:
+        progress["current_qd_streak"] = progress.get("current_qd_streak", 0) + 1
+    elif confidence == 2:
+        progress["current_qd_streak"] = 0
+
+    # DE streak
+    if pred_is_correct and confidence == 3:
+        progress["current_de_streak"] = progress.get("current_de_streak", 0) + 1
+    elif confidence == 3:
+        progress["current_de_streak"] = 0
+
+    # Hold wins this run
+    if pred_is_correct and is_holster:
+        progress["hold_wins_run"] = progress.get("hold_wins_run", 0) + 1
+
+    # Ghost triggers this run
+    if ghost_triggered:
+        progress["ghost_triggers_run"] = progress.get("ghost_triggers_run", 0) + 1
+
+    # Comeback tracking
+    if stats.double_dollars < 500:
+        progress["hit_low"] = True
+
+    stats.badge_progress = json.dumps(progress)
+
+
+def reset_run_badge_progress(stats: BountyPlayerStats) -> None:
+    """Reset per-run badge progress counters (called on bust/reset)."""
+    progress = json.loads(stats.badge_progress) if stats.badge_progress else {}
+    progress["hold_wins_run"] = 0
+    progress["ghost_triggers_run"] = 0
+    progress["hit_low"] = False
+    progress["no_skip_rounds"] = 0
+    # Keep streak counters — they span predictions, not runs
+    stats.badge_progress = json.dumps(progress)
+
+
+async def get_player_badges(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+    """Get all badges with earned status."""
+    result = await db.execute(
+        select(BountyBadge).where(BountyBadge.user_id == user_id)
+    )
+    earned_map = {b.badge_id: b for b in result.scalars().all()}
+
+    badges = []
+    for badge_def in BADGE_DEFS:
+        earned = earned_map.get(badge_def["id"])
+        badges.append({
+            "id": badge_def["id"],
+            "name": badge_def["name"],
+            "category": badge_def["category"],
+            "description": badge_def["description"],
+            "earned": earned is not None,
+            "earned_at": earned.earned_at.isoformat() if earned else None,
+        })
+    return badges
+
+
+async def get_badge_progress(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """Get badge progress for a player."""
+    stats = await get_or_create_player_stats(db, user_id)
+    progress = json.loads(stats.badge_progress) if stats.badge_progress else {}
+
+    # Count earned badges
+    result = await db.execute(
+        select(func.count()).select_from(BountyBadge).where(BountyBadge.user_id == user_id)
+    )
+    earned_count = result.scalar() or 0
+
+    return {
+        "earned_count": earned_count,
+        "total_count": len(BADGE_DEFS),
+        "progress": progress,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-C: Titles
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def check_titles(db: AsyncSession, stats: BountyPlayerStats) -> list[str]:
+    """Check and unlock any newly qualified titles. Returns list of newly unlocked title IDs."""
+    # Load already-unlocked titles
+    result = await db.execute(
+        select(BountyTitle.title_id).where(BountyTitle.user_id == stats.user_id)
+    )
+    unlocked_ids = set(result.scalars().all())
+
+    # Load earned badges
+    badge_result = await db.execute(
+        select(BountyBadge.badge_id).where(BountyBadge.user_id == stats.user_id)
+    )
+    earned_badges = set(badge_result.scalars().all())
+
+    # Load run history for cross-run requirements
+    run_result = await db.execute(
+        select(BountyRunHistory).where(BountyRunHistory.user_id == stats.user_id)
+    )
+    runs = list(run_result.scalars().all())
+
+    newly_unlocked = []
+
+    for title_def in TITLE_DEFS:
+        tid = title_def["id"]
+        if tid == "drifter" or tid in unlocked_ids:
+            continue
+
+        reqs = title_def["requirements"]
+        qualified = True
+
+        # Check each requirement
+        if "runs_at_level_5" in reqs:
+            count = sum(1 for r in runs if r.peak_wanted_level >= 5)
+            if count < reqs["runs_at_level_5"]:
+                qualified = False
+
+        if "runs_at_level_8" in reqs:
+            count = sum(1 for r in runs if r.peak_wanted_level >= 8)
+            if count < reqs["runs_at_level_8"]:
+                qualified = False
+
+        if "accuracy_over_runs" in reqs:
+            aor = reqs["accuracy_over_runs"]
+            if len(runs) < aor["min_runs"]:
+                qualified = False
+            else:
+                avg_acc = sum(r.accuracy for r in runs[-aor["min_runs"]:]) / aor["min_runs"]
+                if avg_acc < aor["min_accuracy"]:
+                    qualified = False
+
+        if "badge" in reqs:
+            if reqs["badge"] not in earned_badges:
+                qualified = False
+
+        if "lifetime_dd" in reqs:
+            if stats.lifetime_dd_earned < reqs["lifetime_dd"]:
+                qualified = False
+
+        if "badge_count" in reqs:
+            if len(earned_badges) < reqs["badge_count"]:
+                qualified = False
+
+        if "best_run_score" in reqs:
+            if stats.best_run_score < reqs["best_run_score"]:
+                qualified = False
+
+        if "title" in reqs:
+            if reqs["title"] not in unlocked_ids:
+                qualified = False
+
+        if qualified:
+            title = BountyTitle(user_id=stats.user_id, title_id=tid)
+            db.add(title)
+            unlocked_ids.add(tid)
+            newly_unlocked.append(tid)
+            await _emit_activity(db, stats.user_id, "title_unlocked", {
+                "title_id": tid, "title_name": title_def["name"],
+            })
+
+    return newly_unlocked
+
+
+async def get_player_titles(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+    """Get all titles with unlocked status."""
+    result = await db.execute(
+        select(BountyTitle).where(BountyTitle.user_id == user_id)
+    )
+    unlocked_map = {t.title_id: t for t in result.scalars().all()}
+
+    titles = []
+    for title_def in TITLE_DEFS:
+        unlocked = unlocked_map.get(title_def["id"])
+        titles.append({
+            "id": title_def["id"],
+            "name": title_def["name"],
+            "order": title_def["order"],
+            "description": title_def["description"],
+            "unlocked": title_def["id"] == "drifter" or unlocked is not None,
+            "unlocked_at": unlocked.unlocked_at.isoformat() if unlocked else None,
+        })
+    return titles
+
+
+async def equip_title(db: AsyncSession, user_id: uuid.UUID, title_id: str) -> dict:
+    """Equip a title (must be unlocked or 'drifter')."""
+    if title_id != "drifter":
+        result = await db.execute(
+            select(BountyTitle).where(
+                BountyTitle.user_id == user_id,
+                BountyTitle.title_id == title_id,
+            )
+        )
+        if not result.scalars().first():
+            raise BountyError("Title not unlocked")
+
+    if title_id not in TITLE_DEFS_BY_ID:
+        raise BountyError("Unknown title")
+
+    stats = await get_or_create_player_stats(db, user_id)
+    stats.active_title = title_id
+    await db.commit()
+
+    return {"title_id": title_id, "title_name": TITLE_DEFS_BY_ID[title_id]["name"]}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-D: Daily Streak
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def update_streak(db: AsyncSession, stats: BountyPlayerStats) -> dict | None:
+    """Update daily streak on prediction. Returns streak reward if milestone hit."""
+    today_et = datetime.now(ET).date()
+
+    if stats.last_streak_date == today_et:
+        return None  # Already counted today
+
+    if stats.last_streak_date is not None:
+        days_since = (today_et - stats.last_streak_date).days
+        if days_since == 1:
+            # Consecutive day
+            stats.current_streak += 1
+        elif days_since == 2 and stats.streak_shield:
+            # Shield forgives one missed day
+            stats.streak_shield = False
+            stats.current_streak += 1
+        else:
+            # Streak broken
+            stats.current_streak = 1
+    else:
+        stats.current_streak = 1
+
+    stats.last_streak_date = today_et
+    stats.longest_streak = max(stats.longest_streak, stats.current_streak)
+
+    # Award shield at threshold
+    if stats.current_streak >= STREAK_SHIELD_THRESHOLD and not stats.streak_shield:
+        stats.streak_shield = True
+
+    # Check for milestone reward
+    reward = STREAK_REWARDS.get(stats.current_streak)
+    if reward:
+        reward_result = {"streak": stats.current_streak, "reward": reward}
+        # Apply DD bonus immediately
+        if reward.get("type") == "dd_bonus":
+            stats.double_dollars += reward["amount"]
+        return reward_result
+
+    return None
+
+
+async def get_streak_info(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """Get current streak information."""
+    stats = await get_or_create_player_stats(db, user_id)
+    today_et = datetime.now(ET).date()
+
+    # Check if streak is at risk (no prediction today, had one yesterday)
+    at_risk = False
+    if stats.last_streak_date and stats.current_streak > 0:
+        days_since = (today_et - stats.last_streak_date).days
+        if days_since == 1:
+            at_risk = True  # Haven't predicted today yet
+
+    return {
+        "current_streak": stats.current_streak,
+        "longest_streak": stats.longest_streak,
+        "last_streak_date": stats.last_streak_date.isoformat() if stats.last_streak_date else None,
+        "streak_shield": stats.streak_shield,
+        "at_risk": at_risk,
+        "next_milestone": _next_streak_milestone(stats.current_streak),
+    }
+
+
+def _next_streak_milestone(current: int) -> dict | None:
+    """Find the next streak milestone."""
+    for day, reward in sorted(STREAK_REWARDS.items()):
+        if day > current:
+            return {"day": day, "reward": reward}
+    return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-A: Iron Synergy Combos
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def get_active_combos(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+    """Check which iron synergy combos are currently active."""
+    result = await db.execute(
+        select(BountyPlayerIron.iron_id).where(BountyPlayerIron.user_id == user_id)
+    )
+    equipped_ids = set(result.scalars().all())
+
+    active = []
+    for combo in IRON_COMBOS:
+        if all(iron_id in equipped_ids for iron_id in combo["irons"]):
+            active.append({
+                "id": combo["id"],
+                "name": combo["name"],
+                "description": combo["description"],
+                "irons": combo["irons"],
+            })
+    return active
+
+
+def get_combo_effects(equipped_ids: set[str]) -> dict:
+    """Get aggregated bonus effects from all active combos."""
+    effects = {}
+    for combo in IRON_COMBOS:
+        if all(iron_id in equipped_ids for iron_id in combo["irons"]):
+            for key, val in combo["bonus_effects"].items():
+                if isinstance(val, bool):
+                    effects[key] = True
+                elif isinstance(val, (int, float)):
+                    effects[key] = effects.get(key, 0) + val
+    return effects
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P3-A: Share Cards
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def get_share_card_data(
+    db: AsyncSession, user_id: uuid.UUID, event_type: str
+) -> dict:
+    """Generate share card data for a notable event."""
+    stats = await get_or_create_player_stats(db, user_id)
+
+    # Get user alias
+    user = await db.get(User, user_id)
+    alias = user.alias if user else "Unknown"
+    title_name = TITLE_DEFS_BY_ID.get(stats.active_title or "drifter", {}).get("name", "Drifter")
+
+    base = {
+        "alias": alias,
+        "title": title_name,
+        "wanted_level": stats.wanted_level,
+        "double_dollars": stats.double_dollars,
+        "accuracy_pct": round(
+            stats.correct_predictions / stats.total_predictions * 100, 1
+        ) if stats.total_predictions > 0 else 0.0,
+        "event_type": event_type,
+    }
+
+    if event_type == "level_up":
+        base["multiplier"] = wanted_multiplier(stats.wanted_level)
+    elif event_type == "high_score":
+        base["best_run_score"] = stats.best_run_score
+    elif event_type == "bust":
+        base["bust_count"] = stats.bust_count
+        base["peak_dd"] = stats.peak_dd
+
+    return base
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P3-B: Activity Feed
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def _emit_activity(
+    db: AsyncSession, user_id: uuid.UUID, event_type: str, data: dict
+) -> None:
+    """Create an activity event."""
+    event = BountyActivityEvent(
+        user_id=user_id,
+        event_type=event_type,
+        event_data=json.dumps(data),
+    )
+    db.add(event)
+
+
+async def get_activity_feed(db: AsyncSession, limit: int = 50) -> list[dict]:
+    """Get recent community activity events."""
+    result = await db.execute(
+        select(BountyActivityEvent, User.alias)
+        .join(User, BountyActivityEvent.user_id == User.id)
+        .order_by(BountyActivityEvent.created_at.desc())
+        .limit(limit)
+    )
+    events = []
+    for event, alias in result.all():
+        event_data = json.loads(event.event_data) if event.event_data else {}
+        events.append({
+            "id": str(event.id),
+            "alias": alias,
+            "event_type": event.event_type,
+            "event_data": event_data,
+            "created_at": event.created_at.isoformat(),
+        })
+    return events
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-B: Weekly Stock Events
+# ══════════════════════════════════════════════════════════════════════════════
+
+def detect_stock_event() -> tuple[str | None, str | None]:
+    """Detect if today has a special stock event. Returns (event_type, event_name) or (None, None)."""
+    now_et = datetime.now(ET)
+    weekday = now_et.weekday()  # 0=Monday, 4=Friday
+
+    # Mag 7 Friday
+    if weekday == 4:
+        return "mag7_friday", "Mag 7 Friday"
+
+    # Sector Spotlight: rotate weekly (use ISO week number)
+    week_num = now_et.isocalendar()[1]
+    sector_idx = week_num % len(SECTOR_SPOTLIGHT_ROTATION)
+    sector = SECTOR_SPOTLIGHT_ROTATION[sector_idx]
+
+    # Mid-week spotlight (Wednesday)
+    if weekday == 2:
+        return "sector_spotlight", f"Sector Spotlight: {sector['name']}"
+
+    # Default: no event
+    return None, None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-C: Post-Settlement Analysis
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def get_settlement_analysis(
+    db: AsyncSession, window_id: uuid.UUID, user_id: uuid.UUID
+) -> dict:
+    """Get post-settlement analysis for a window."""
+    window = await db.get(BountyWindow, window_id)
+    if not window or not window.is_settled:
+        return {"settled": False}
+
+    # Get per-stock results
+    stock_result = await db.execute(
+        select(BountyWindowStock).where(BountyWindowStock.bounty_window_id == window_id)
+    )
+    stocks = []
+    for sr in stock_result.scalars().all():
+        pct_change = None
+        if sr.open_price and sr.close_price:
+            pct_change = round(
+                (float(sr.close_price) - float(sr.open_price)) / float(sr.open_price) * 100, 3
+            )
+
+        context = json.loads(sr.settlement_context) if sr.settlement_context else {}
+        stocks.append({
+            "symbol": sr.symbol,
+            "open_price": float(sr.open_price) if sr.open_price else None,
+            "close_price": float(sr.close_price) if sr.close_price else None,
+            "pct_change": pct_change,
+            "result": sr.result,
+            "context": context,
+        })
+
+    # Get aggregate prediction stats for this window
+    agg_result = await db.execute(
+        select(
+            BountyPrediction.symbol,
+            BountyPrediction.prediction,
+            func.count().label("cnt"),
+        )
+        .where(BountyPrediction.bounty_window_id == window_id)
+        .group_by(BountyPrediction.symbol, BountyPrediction.prediction)
+    )
+    prediction_aggs = {}
+    for row in agg_result.all():
+        sym = row.symbol
+        if sym not in prediction_aggs:
+            prediction_aggs[sym] = {}
+        prediction_aggs[sym][row.prediction] = row.cnt
+
+    # Get user's predictions for this window
+    user_pred_result = await db.execute(
+        select(BountyPrediction).where(
+            BountyPrediction.bounty_window_id == window_id,
+            BountyPrediction.user_id == user_id,
+        )
+    )
+    user_predictions = []
+    for p in user_pred_result.scalars().all():
+        user_predictions.append({
+            "symbol": p.symbol,
+            "prediction": p.prediction,
+            "confidence": p.confidence,
+            "is_correct": p.is_correct,
+            "payout": p.payout,
+            "leverage": p.leverage,
+        })
+
+    return {
+        "settled": True,
+        "window_id": str(window_id),
+        "stocks": stocks,
+        "prediction_aggregates": prediction_aggs,
+        "my_predictions": user_predictions,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-D: Performance Analytics Dashboard
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def get_performance_analytics(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """Extended analytics: accuracy by sector, confidence, leverage, rolling trends."""
+    stats = await get_or_create_player_stats(db, user_id)
+    now_utc = datetime.now(timezone.utc)
+    seven_days_ago = now_utc - timedelta(days=7)
+
+    # All user predictions
+    all_preds_result = await db.execute(
+        select(BountyPrediction)
+        .where(BountyPrediction.user_id == user_id)
+        .order_by(BountyPrediction.created_at.desc())
+    )
+    all_preds = list(all_preds_result.scalars().all())
+
+    # Accuracy by confidence tier
+    conf_stats = {}
+    for conf in [1, 2, 3]:
+        tier_preds = [p for p in all_preds if p.confidence == conf]
+        total = len(tier_preds)
+        correct = sum(1 for p in tier_preds if p.is_correct)
+        conf_stats[conf] = {
+            "total": total,
+            "correct": correct,
+            "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
+        }
+
+    # Accuracy with leverage vs without
+    lev_preds = [p for p in all_preds if p.leverage > 1.0]
+    no_lev_preds = [p for p in all_preds if p.leverage <= 1.0]
+    leverage_stats = {
+        "with_leverage": {
+            "total": len(lev_preds),
+            "correct": sum(1 for p in lev_preds if p.is_correct),
+            "win_rate": round(
+                sum(1 for p in lev_preds if p.is_correct) / len(lev_preds) * 100, 1
+            ) if lev_preds else 0.0,
+        },
+        "without_leverage": {
+            "total": len(no_lev_preds),
+            "correct": sum(1 for p in no_lev_preds if p.is_correct),
+            "win_rate": round(
+                sum(1 for p in no_lev_preds if p.is_correct) / len(no_lev_preds) * 100, 1
+            ) if no_lev_preds else 0.0,
+        },
+    }
+
+    # Accuracy by time of day (2-hour ET buckets)
+    time_buckets = {}
+    for p in all_preds:
+        et_time = p.created_at.astimezone(ET) if p.created_at else None
+        if not et_time:
+            continue
+        bucket = (et_time.hour // 2) * 2  # 8, 10, 12, 14
+        label = f"{bucket}:00-{bucket + 2}:00 ET"
+        if label not in time_buckets:
+            time_buckets[label] = {"total": 0, "correct": 0}
+        time_buckets[label]["total"] += 1
+        if p.is_correct:
+            time_buckets[label]["correct"] += 1
+
+    time_stats = []
+    for label, data in sorted(time_buckets.items()):
+        time_stats.append({
+            "time_slot": label,
+            "total": data["total"],
+            "correct": data["correct"],
+            "win_rate": round(data["correct"] / data["total"] * 100, 1) if data["total"] > 0 else 0.0,
+        })
+
+    # Accuracy by action type (directional vs holster)
+    dir_preds = [p for p in all_preds if p.action_type == "directional"]
+    hol_preds = [p for p in all_preds if p.action_type == "holster"]
+    action_stats = {
+        "directional": {
+            "total": len(dir_preds),
+            "correct": sum(1 for p in dir_preds if p.is_correct),
+            "win_rate": round(
+                sum(1 for p in dir_preds if p.is_correct) / len(dir_preds) * 100, 1
+            ) if dir_preds else 0.0,
+        },
+        "holster": {
+            "total": len(hol_preds),
+            "correct": sum(1 for p in hol_preds if p.is_correct),
+            "win_rate": round(
+                sum(1 for p in hol_preds if p.is_correct) / len(hol_preds) * 100, 1
+            ) if hol_preds else 0.0,
+        },
+    }
+
+    # Rolling 7-day accuracy trend
+    recent_preds = [p for p in all_preds if p.created_at and p.created_at >= seven_days_ago]
+    daily_trend = {}
+    for p in recent_preds:
+        day = p.created_at.astimezone(ET).date().isoformat()
+        if day not in daily_trend:
+            daily_trend[day] = {"total": 0, "correct": 0}
+        daily_trend[day]["total"] += 1
+        if p.is_correct:
+            daily_trend[day]["correct"] += 1
+
+    rolling_trend = [
+        {
+            "date": day,
+            "total": data["total"],
+            "correct": data["correct"],
+            "win_rate": round(data["correct"] / data["total"] * 100, 1) if data["total"] > 0 else 0.0,
+        }
+        for day, data in sorted(daily_trend.items())
+    ]
+
+    # Personal alpha vs 50% random baseline
+    overall_total = len(all_preds)
+    overall_correct = sum(1 for p in all_preds if p.is_correct)
+    overall_accuracy = overall_correct / overall_total if overall_total > 0 else 0.5
+    alpha = round((overall_accuracy - 0.5) * 100, 2)  # percentage points above/below 50%
+
+    return {
+        "confidence_stats": conf_stats,
+        "leverage_stats": leverage_stats,
+        "time_stats": time_stats,
+        "action_stats": action_stats,
+        "rolling_trend": rolling_trend,
+        "alpha_vs_random": alpha,
+        "total_predictions": overall_total,
+        "overall_accuracy": round(overall_accuracy * 100, 1),
     }

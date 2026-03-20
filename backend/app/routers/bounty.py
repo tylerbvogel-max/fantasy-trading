@@ -1,5 +1,6 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.auth_service import get_current_user
@@ -15,8 +16,25 @@ from app.services.bounty_service import (
     pick_iron,
     reset_player,
     BountyError,
+    # P1 additions
+    get_run_history,
+    get_player_badges,
+    get_badge_progress,
+    get_player_titles,
+    equip_title,
+    get_streak_info,
+    # P2 additions
+    get_active_combos,
+    get_settlement_analysis,
+    get_performance_analytics,
+    # P3 additions
+    get_share_card_data,
+    get_activity_feed,
 )
-from app.services.bounty_config import CONFIDENCE_LABELS, IRON_DEFS_BY_ID, IRON_DEFS
+from app.services.bounty_config import (
+    CONFIDENCE_LABELS, IRON_DEFS_BY_ID, IRON_DEFS, RARITY_MIN_LEVEL,
+    BADGE_DEFS, TITLE_DEFS, IRON_COMBOS,
+)
 from app.models.user import User
 from app.schemas import (
     BountyStatusResponse,
@@ -179,3 +197,161 @@ async def bounty_reset(
         return BountyResetResponse(**result)
     except BountyError as e:
         raise HTTPException(status_code=400, detail=e.message)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-A: Run History
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/runs")
+async def bounty_runs(
+    limit: int = Query(20, ge=1, le=100),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_run_history(db, user.id, limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-B: Badges
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/badges")
+async def bounty_badges(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_player_badges(db, user.id)
+
+
+@router.get("/badges/progress")
+async def bounty_badge_progress(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_badge_progress(db, user.id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-C: Titles
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/titles")
+async def bounty_titles(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_player_titles(db, user.id)
+
+
+class TitleEquipRequest(BaseModel):
+    title_id: str
+
+
+@router.post("/titles/equip")
+async def bounty_equip_title(
+    req: TitleEquipRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await equip_title(db, user.id, req.title_id)
+    except BountyError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P1-D: Streaks
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/streak")
+async def bounty_streak(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_streak_info(db, user.id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-A: Iron Combos
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/combos")
+async def bounty_combos(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_active_combos(db, user.id)
+
+
+@router.get("/combos/all")
+async def bounty_combos_all():
+    """Return all possible iron combos for discovery UI."""
+    return [
+        {
+            "id": c["id"],
+            "name": c["name"],
+            "description": c["description"],
+            "irons": [
+                {"id": iid, "name": IRON_DEFS_BY_ID[iid]["name"]}
+                for iid in c["irons"] if iid in IRON_DEFS_BY_ID
+            ],
+        }
+        for c in IRON_COMBOS
+    ]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P3-A: Share Cards
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/share/{event_type}")
+async def bounty_share_card(
+    event_type: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_share_card_data(db, user.id, event_type)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P3-B: Activity Feed
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/feed")
+async def bounty_feed(
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_activity_feed(db, limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-C: Post-Settlement Analysis
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/analysis/{window_id}")
+async def bounty_analysis(
+    window_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from uuid import UUID
+    try:
+        wid = UUID(window_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid window ID")
+    return await get_settlement_analysis(db, wid, user.id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P2-D: Performance Analytics Dashboard
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/analytics")
+async def bounty_analytics(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_performance_analytics(db, user.id)

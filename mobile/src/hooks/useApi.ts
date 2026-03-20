@@ -12,6 +12,15 @@ import type {
   BountyIronOffering,
   BountyResetResponse,
   BountySkipResponse,
+  BountyRunHistoryEntry,
+  BountyBadge,
+  BountyBadgeProgress,
+  BountyTitle,
+  BountyStreakInfo,
+  BountyIronCombo,
+  BountySettlementAnalysis,
+  BountyPerformanceAnalytics,
+  BountyActivityEvent,
 } from "../api/client";
 
 // ── User ──
@@ -65,6 +74,7 @@ export function useSubmitPrediction() {
     mutationFn: (data) => bounty.predict(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyStreak"] });
     },
   });
 }
@@ -114,6 +124,7 @@ export function usePickIron() {
       queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
       queryClient.invalidateQueries({ queryKey: ["bountyIrons"] });
       queryClient.invalidateQueries({ queryKey: ["bountyIronOffering"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyActiveCombos"] });
     },
   });
 }
@@ -127,6 +138,109 @@ export function useBountyReset() {
       queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
       queryClient.invalidateQueries({ queryKey: ["bountyIrons"] });
       queryClient.invalidateQueries({ queryKey: ["bountyIronOffering"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyBadges"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyTitles"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyRuns"] });
     },
+  });
+}
+
+// ── P1-A: Run History ──
+
+export function useBountyRuns(limit?: number) {
+  return useQuery<BountyRunHistoryEntry[]>({
+    queryKey: ["bountyRuns", limit],
+    queryFn: () => bounty.runs(limit),
+  });
+}
+
+// ── P1-B: Badges ──
+
+export function useBountyBadges() {
+  return useQuery<BountyBadge[]>({
+    queryKey: ["bountyBadges"],
+    queryFn: () => bounty.badges(),
+  });
+}
+
+export function useBountyBadgeProgress() {
+  return useQuery<BountyBadgeProgress>({
+    queryKey: ["bountyBadgeProgress"],
+    queryFn: () => bounty.badgeProgress(),
+  });
+}
+
+// ── P1-C: Titles ──
+
+export function useBountyTitles() {
+  return useQuery<BountyTitle[]>({
+    queryKey: ["bountyTitles"],
+    queryFn: () => bounty.titles(),
+  });
+}
+
+export function useEquipTitle() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ title_id: string; title_name: string }, Error, string>({
+    mutationFn: (titleId) => bounty.equipTitle(titleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["bountyTitles"] });
+    },
+  });
+}
+
+// ── P1-D: Streaks ──
+
+export function useBountyStreak() {
+  return useQuery<BountyStreakInfo>({
+    queryKey: ["bountyStreak"],
+    queryFn: () => bounty.streak(),
+  });
+}
+
+// ── P2-A: Iron Combos ──
+
+export function useBountyActiveCombos() {
+  return useQuery<BountyIronCombo[]>({
+    queryKey: ["bountyActiveCombos"],
+    queryFn: () => bounty.activeCombos(),
+  });
+}
+
+export function useBountyAllCombos() {
+  return useQuery<BountyIronCombo[]>({
+    queryKey: ["bountyAllCombos"],
+    queryFn: () => bounty.allCombos(),
+  });
+}
+
+// ── P2-C: Settlement Analysis ──
+
+export function useBountyAnalysis(windowId: string | null) {
+  return useQuery<BountySettlementAnalysis>({
+    queryKey: ["bountyAnalysis", windowId],
+    queryFn: () => bounty.analysis(windowId!),
+    enabled: !!windowId,
+  });
+}
+
+// ── P2-D: Performance Analytics ──
+
+export function useBountyAnalytics() {
+  return useQuery<BountyPerformanceAnalytics>({
+    queryKey: ["bountyAnalytics"],
+    queryFn: () => bounty.analytics(),
+  });
+}
+
+// ── P3-B: Activity Feed ──
+
+export function useBountyFeed(limit?: number) {
+  return useQuery<BountyActivityEvent[]>({
+    queryKey: ["bountyFeed", limit],
+    queryFn: () => bounty.feed(limit),
+    refetchInterval: 60000, // Refresh feed every minute
   });
 }

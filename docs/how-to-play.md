@@ -248,6 +248,90 @@ Reset is always free — the cost is the lost opportunity of your current run's 
 
 ---
 
+## Iron Tier Gating
+
+Not all irons are available from the start. Higher-rarity irons unlock at higher wanted levels:
+
+| Rarity | Min. Wanted Level |
+|--------|-------------------|
+| Common | 1+ (always) |
+| Uncommon | 3+ |
+| Rare | 6+ |
+| Legendary | 8+ |
+
+Locked tiers won't appear in iron offerings until you reach the required level. Pushing to higher levels gives you access to more powerful irons.
+
+---
+
+## Iron Synergy Combos
+
+Equipping specific combinations of 3 irons activates a **synergy combo** with a bonus effect. These are like portfolio construction — the right combination creates alpha beyond individual assets.
+
+**Examples:**
+- **Dead Man's Arsenal** (Double Barrel + Gatling Gun + Tombstone Ace) → Dead Eye effects doubled
+- **The Vault** (Gold Tooth + Platinum Tooth + El Dorado) → +50% to flat cash bonuses
+- **Iron Curtain** (Thick Skin + Chaps + Campfire) → All losses capped at 50% base
+
+12 combos total — experiment with combinations to discover them.
+
+---
+
+## Run Score
+
+Your performance is measured by **Run Score** — a composite metric like a Sharpe ratio for predictions:
+
+`Run Score = Peak DD × (1 + level × 0.1) × (0.5 + accuracy × 0.5) × completion_bonus`
+
+Run Score rewards sustained, high-accuracy play at high wanted levels. The **all-time leaderboard** ranks by best Run Score.
+
+---
+
+## Run History
+
+Every completed run (bust or reset) is archived with its Run Score, peak DD, peak wanted level, and accuracy. View your run history to track improvement over time.
+
+---
+
+## Badges (16 total)
+
+Permanent achievements earned across runs in 4 categories:
+
+**Wanted Level:** Drifter (Lv.3), Desperado (Lv.5), Most Wanted (Lv.8), Legendary Outlaw (Lv.10)
+
+**Accuracy:** Sharpshooter (10 correct streak), Quick on the Draw (5 QD streak), Dead Eye Legend (3 DE streak)
+
+**Economy:** High Roller (25k DD), Tycoon (100k DD), Millionaire (1M DD)
+
+**Special:** No Mercy (5 rounds zero skips), Iron Man (6 chambers full), Holster King (10 HOLD wins/run), The Ghost (3 Ghost Rider triggers/run), Comeback Kid (sub-500 to 10k+ DD), Streak Master (30-day streak)
+
+---
+
+## Titles
+
+7 cosmetic prefixes displayed on the leaderboard, unlocked via cross-run milestones:
+
+Drifter (default) → Gunslinger → Sharpshooter → Outlaw → Bounty King → Sheriff → Legend
+
+Each title has specific requirements (badges, run count, lifetime DD). Equip your title from the profile screen.
+
+---
+
+## Daily Streaks
+
+Predict on at least 1 stock per calendar day (ET) to maintain your streak. Escalating rewards:
+
+| Day | Reward |
+|-----|--------|
+| 3 | Bonus iron offering |
+| 5 | +$$500 |
+| 7 | Guaranteed uncommon+ offering |
+| 14 | +$$2,000 |
+| 30 | "Streak Master" badge + guaranteed rare offering |
+
+At streak 7+, you earn a **streak shield** that forgives one missed day. The shield re-earns at the next 7+ milestone.
+
+---
+
 ## Key Strategy Concepts
 
 1. **Wanted level is everything** — the exponential multiplier means a correct pick at level 7 is worth 100x what it's worth at level 1
@@ -256,3 +340,7 @@ Reset is always free — the cost is the lost opportunity of your current run's 
 4. **Iron synergies matter** — the right combination of irons at the boosted slot can dramatically change your scoring
 5. **Know when to be conservative** — Dead Eye (tier 3) loses more than it wins on base scoring. You need wanted level multipliers to make it profitable
 6. **Skip strategically** — sometimes paying to skip is better than risking a loss that could drop your wanted level
+7. **Build toward iron combos** — 3-iron synergy combos grant powerful bonus effects
+8. **Chase badges for titles** — badges unlock titles which unlock bragging rights on the leaderboard
+9. **Maintain your streak** — daily consistency earns escalating rewards and the Streak Master badge
+10. **Watch the post-settlement analysis** — learn why stocks moved and where your edge is
