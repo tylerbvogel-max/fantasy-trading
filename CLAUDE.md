@@ -1,5 +1,13 @@
 # Bounty Hunter — Stock Prediction Game
 
+## PENDING MIGRATION — RUN BEFORE TESTING
+The P0-P3 feature roadmap has been implemented but the database schema has not been updated yet. **Before starting the backend**, run:
+```bash
+cd backend && source venv/bin/activate
+psql "$DATABASE_URL" < migrations/001_feature_roadmap.sql
+```
+This adds new tables (`bounty_run_history`, `bounty_badges`, `bounty_titles`, `bounty_activity_events`) and new columns on `bounty_player_stats`, `bounty_windows`, and `bounty_window_stocks`. Safe to run multiple times (uses `IF NOT EXISTS` / `IF NOT EXISTS`). **Remove this section after running the migration.**
+
 ## Project Overview
 A mobile stock prediction game where players make directional picks (RISE/FALL/HOLD) on real stocks within 1-hour price windows. Players earn Double Dollars, climb wanted levels with exponential multipliers, collect Irons (gear) that modify gameplay, and use leverage to amplify outcomes. Western outlaw theme throughout.
 
