@@ -12,10 +12,11 @@ DIR_SCORING = MappingProxyType({
 })
 
 # Holster picks (HOLD): { confidence: { "win": pts, "lose": pts } }
+# Tier-1 balance fix: Reduced holster wins to prevent Cautious Turtle overpowering
 HOL_SCORING = MappingProxyType({
-    1: MappingProxyType({"win": 8, "lose": 6}),
-    2: MappingProxyType({"win": 19, "lose": 15}),
-    3: MappingProxyType({"win": 35, "lose": 30}),
+    1: MappingProxyType({"win": 7, "lose": 6}),
+    2: MappingProxyType({"win": 16, "lose": 15}),
+    3: MappingProxyType({"win": 30, "lose": 30}),
 })
 
 # ── Wanted level multiplier table ──
@@ -36,11 +37,11 @@ def wanted_multiplier(level: int) -> int:
 
 # ── Notoriety ──
 NOTORIETY_WEIGHT = MappingProxyType({1: 1.0, 2: 1.5, 3: 2.0})
-NOTORIETY_UP_THRESHOLD = 3.0
-NOTORIETY_DOWN_THRESHOLD = -2.0
+NOTORIETY_UP_THRESHOLD = 2.5
+NOTORIETY_DOWN_THRESHOLD = -3.0
 
 # ── Ante ──
-ANTE_BASE = 75
+ANTE_BASE = 15  # Scaled down for 30-min windows (was 75 for 2h rounds)
 
 # ── Starting values ──
 STARTING_DOUBLE_DOLLARS = 5000
@@ -114,8 +115,11 @@ CONFIDENCE_LABELS = MappingProxyType({1: "Draw", 2: "Quick Draw", 3: "Dead Eye"}
 
 
 def skip_cost(n: int, balance: int) -> int:
-    """Cost of the nth skip in a window. Scales with balance."""
-    return math.ceil(25 * math.pow(2.5, n - 1) * max(1, balance / 5000))
+    """Cost of the nth skip in a window. Scales with balance.
+    
+    Tier-1 balance fix: Reduced from 2.5× to 1.8× scaling to help Comeback Grinder archetype.
+    """
+    return math.ceil(25 * math.pow(1.8, n - 1) * max(1, balance / 5000))
 
 
 # ── Iron definitions (75 total — mirrors tools/bounty-sim/irons.mjs) ──

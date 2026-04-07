@@ -1,0 +1,374 @@
+======================================================================
+STRATEGY LAB — WALK-FORWARD RESEARCH ENGINE
+======================================================================
+Fetching SPY data (2y)...
+  → 502 trading days: 2024-02-21 to 2026-02-20
+Fetching VIX data (2y)...
+  → 503 trading days: 2024-02-20 to 2026-02-20
+  → 502 aligned days
+
+Computing features...
+  → 502 days with 44 features each
+
+======================================================================
+WALK-FORWARD ANALYSIS — Horizon: fwd_5d
+======================================================================
+  8 walk-forward windows (train=100d, test=50d, step=50d)
+    Window 1: Train 2024-02-21 → 2024-07-15  |  Test 2024-07-16 → 2024-09-24
+    Window 2: Train 2024-05-02 → 2024-09-24  |  Test 2024-09-25 → 2024-12-04
+    Window 3: Train 2024-07-16 → 2024-12-04  |  Test 2024-12-05 → 2025-02-19
+    Window 4: Train 2024-09-25 → 2025-02-19  |  Test 2025-02-20 → 2025-05-01
+    Window 5: Train 2024-12-05 → 2025-05-01  |  Test 2025-05-02 → 2025-07-15
+    Window 6: Train 2025-02-20 → 2025-07-15  |  Test 2025-07-16 → 2025-09-24
+    Window 7: Train 2025-05-02 → 2025-09-24  |  Test 2025-09-25 → 2025-12-04
+    Window 8: Train 2025-07-16 → 2025-12-04  |  Test 2025-12-05 → 2026-02-18
+
+======================================================================
+WALK-FORWARD ANALYSIS — Horizon: fwd_1d
+======================================================================
+  8 walk-forward windows (train=100d, test=50d, step=50d)
+    Window 1: Train 2024-02-21 → 2024-07-15  |  Test 2024-07-16 → 2024-09-24
+    Window 2: Train 2024-05-02 → 2024-09-24  |  Test 2024-09-25 → 2024-12-04
+    Window 3: Train 2024-07-16 → 2024-12-04  |  Test 2024-12-05 → 2025-02-19
+    Window 4: Train 2024-09-25 → 2025-02-19  |  Test 2025-02-20 → 2025-05-01
+    Window 5: Train 2024-12-05 → 2025-05-01  |  Test 2025-05-02 → 2025-07-15
+    Window 6: Train 2025-02-20 → 2025-07-15  |  Test 2025-07-16 → 2025-09-24
+    Window 7: Train 2025-05-02 → 2025-09-24  |  Test 2025-09-25 → 2025-12-04
+    Window 8: Train 2025-07-16 → 2025-12-04  |  Test 2025-12-05 → 2026-02-18
+
+======================================================================
+WALK-FORWARD ANALYSIS — Horizon: fwd_10d
+======================================================================
+  8 walk-forward windows (train=100d, test=50d, step=50d)
+    Window 1: Train 2024-02-21 → 2024-07-15  |  Test 2024-07-16 → 2024-09-24
+    Window 2: Train 2024-05-02 → 2024-09-24  |  Test 2024-09-25 → 2024-12-04
+    Window 3: Train 2024-07-16 → 2024-12-04  |  Test 2024-12-05 → 2025-02-19
+    Window 4: Train 2024-09-25 → 2025-02-19  |  Test 2025-02-20 → 2025-05-01
+    Window 5: Train 2024-12-05 → 2025-05-01  |  Test 2025-05-02 → 2025-07-15
+    Window 6: Train 2025-02-20 → 2025-07-15  |  Test 2025-07-16 → 2025-09-24
+    Window 7: Train 2025-05-02 → 2025-09-24  |  Test 2025-09-25 → 2025-12-04
+    Window 8: Train 2025-07-16 → 2025-12-04  |  Test 2025-12-05 → 2026-02-18
+
+======================================================================
+SIGNAL RANKINGS (by out-of-sample consistency × edge)
+======================================================================
+
+  --- 5-DAY HORIZON (primary) ---
+  ★  1. Near 52w high (within 2%)                     SELL  edge=-1.697%  hit=58%  cons=86%  fires=36/window  score=8.675
+  ★  2. Price stretched below MA20 (<-2%)             BUY   edge=+2.281%  hit=82%  cons=100%  fires=13/window  score=8.118
+  ★  3. VIX elevated (>20)                            BUY   edge=+1.930%  hit=87%  cons=100%  fires=13/window  score=7.047
+  ★  4. RSI oversold (<40)                            BUY   edge=+2.044%  hit=79%  cons=100%  fires=9/window  score=6.245
+  ★  5. Bearish MA (20<50)                            BUY   edge=+1.780%  hit=68%  cons=75%  fires=20/window  score=6.008
+  ★  6. RSI overbought (>60)                          SELL  edge=-1.501%  hit=42%  cons=86%  fires=22/window  score=5.995
+  ★  7. Weak 5d momentum (<-2%)                       BUY   edge=+1.667%  hit=75%  cons=100%  fires=10/window  score=5.401
+  ★  8. Weak 10d momentum (<-3%)                      BUY   edge=+1.542%  hit=71%  cons=100%  fires=11/window  score=5.113
+  ★  9. OBV trending down (<-2%)                      BUY   edge=+1.340%  hit=76%  cons=88%  fires=17/window  score=4.799
+  ★ 10. MACD bearish                                  BUY   edge=+0.894%  hit=71%  cons=100%  fires=26/window  score=4.568
+  ★ 11. Bullish trend + Momentum                      SELL  edge=-1.028%  hit=49%  cons=100%  fires=19/window  score=4.465
+  ★ 12. Bollinger oversold (%B<0.1)                   BUY   edge=+2.267%  hit=87%  cons=80%  fires=6/window  score=4.443
+  ★ 13. MACD bullish                                  SELL  edge=-0.894%  hit=49%  cons=100%  fires=24/window  score=4.332
+  ★ 14. Low vol + No events                           SELL  edge=-1.051%  hit=48%  cons=100%  fires=15/window  score=4.071
+  ★ 15. ATR elevated (>1.5%)                          BUY   edge=+1.692%  hit=96%  cons=100%  fires=5/window  score=3.907
+  ★ 16. Vol risk premium inverted (<0)                BUY   edge=+1.128%  hit=77%  cons=100%  fires=11/window  score=3.707
+  ★ 17. High vol + Event day                          BUY   edge=+1.784%  hit=75%  cons=100%  fires=4/window  score=3.569
+  ★ 18. Near 52w high + Low VIX                       SELL  edge=-0.962%  hit=55%  cons=86%  fires=16/window  score=3.297
+  ★ 19. Bollinger overbought (%B>0.9)                 SELL  edge=-1.129%  hit=40%  cons=83%  fires=9/window  score=2.823
+    20. Above MA200                                   SELL  edge=-1.071%  hit=53%  cons=40%  fires=41/window  score=2.743
+  ★ 21. VIX low + RSI high (sell)                     SELL  edge=-1.057%  hit=45%  cons=83%  fires=8/window  score=2.517
+  ★ 22. Volume spike (>1.5x avg)                      BUY   edge=+1.497%  hit=85%  cons=83%  fires=4/window  score=2.443
+  ★ 23. OBV trending up (>2%)                         SELL  edge=-0.721%  hit=58%  cons=62%  fires=28/window  score=2.362
+  ★ 24. 3+ consec down days                           BUY   edge=+1.004%  hit=76%  cons=100%  fires=5/window  score=2.207
+  ★ 25. Bullish trend + Pullback                      BUY   edge=+1.145%  hit=69%  cons=75%  fires=6/window  score=2.103
+
+  --- 1-DAY HORIZON ---
+  ★  1. Near 52w high (within 2%)                     SELL  edge=-0.513%  hit=54%  cons=86%  score=2.630
+  ★  2. Pullback in uptrend + High volume             BUY   edge=+0.673%  hit=75%  cons=100%  score=2.073
+  ★  3. Weak 5d momentum (<-2%)                       BUY   edge=+0.838%  hit=77%  cons=75%  score=2.037
+  ★  4. VIX elevated (>20)                            BUY   edge=+0.520%  hit=69%  cons=100%  score=1.921
+  ★  5. Bearish MA (20<50)                            BUY   edge=+0.346%  hit=62%  cons=100%  score=1.556
+  ★  6. RSI overbought (>60)                          SELL  edge=-0.367%  hit=45%  cons=86%  score=1.467
+  ★  7. Weak 10d momentum (<-3%)                      BUY   edge=+0.429%  hit=60%  cons=100%  score=1.422
+  ★  8. VIX 5d surge (>20%)                           BUY   edge=+0.561%  hit=69%  cons=86%  score=1.311
+  ★  9. Price stretched below MA20 (<-2%)             BUY   edge=+0.443%  hit=57%  cons=67%  score=1.051
+  ★ 10. Low vol + No events                           SELL  edge=-0.262%  hit=48%  cons=100%  score=1.017
+  ★ 11. VIX spike + Oversold BB                       BUY   edge=+0.697%  hit=67%  cons=67%  score=0.967
+  ★ 12. Bollinger oversold (%B<0.1)                   BUY   edge=+0.635%  hit=70%  cons=60%  score=0.934
+  ★ 13. RSI oversold (<40)                            BUY   edge=+0.457%  hit=65%  cons=67%  score=0.930
+  ★ 14. VIX spike (>10% daily)                        BUY   edge=+0.427%  hit=71%  cons=75%  score=0.769
+  ★ 15. Bullish trend + Momentum                      SELL  edge=-0.187%  hit=48%  cons=86%  score=0.695
+
+  --- 10-DAY HORIZON ---
+  ★  1. Price stretched below MA20 (<-2%)             BUY   edge=+3.304%  hit=76%  cons=100%  score=11.761
+  ★  2. VIX elevated (>20)                            BUY   edge=+3.196%  hit=92%  cons=100%  score=11.525
+  ★  3. Near 52w high (within 2%)                     SELL  edge=-2.035%  hit=61%  cons=86%  score=10.320
+  ★  4. RSI oversold (<40)                            BUY   edge=+3.188%  hit=75%  cons=100%  score=9.740
+  ★  5. Weak 10d momentum (<-3%)                      BUY   edge=+2.716%  hit=75%  cons=100%  score=9.009
+  ★  6. RSI overbought (>60)                          SELL  edge=-1.926%  hit=48%  cons=86%  score=7.694
+  ★  7. Weak 5d momentum (<-2%)                       BUY   edge=+2.202%  hit=76%  cons=100%  score=7.136
+  ★  8. Above MA200                                   SELL  edge=-1.579%  hit=59%  cons=60%  score=5.992
+  ★  9. ATR elevated (>1.5%)                          BUY   edge=+2.587%  hit=94%  cons=100%  score=5.975
+  ★ 10. Bullish trend + Momentum                      SELL  edge=-1.540%  hit=54%  cons=86%  score=5.732
+  ★ 11. Near 52w high + Low VIX                       SELL  edge=-1.390%  hit=52%  cons=100%  score=5.558
+  ★ 12. MACD bearish                                  BUY   edge=+1.193%  hit=72%  cons=88%  score=5.272
+  ★ 13. MACD bullish                                  SELL  edge=-1.193%  hit=56%  cons=88%  score=5.061
+  ★ 14. High vol + Event day                          BUY   edge=+2.479%  hit=88%  cons=100%  score=4.958
+  ★ 15. VIX low (<15)                                 SELL  edge=-1.952%  hit=42%  cons=75%  score=4.799
+
+======================================================================
+CROSS-HORIZON CONSISTENCY
+======================================================================
+  Signals consistent across multiple horizons:
+    Near 52w high (within 2%)                     SELL  horizons=[1d, 5d, 10d]  avg_score=7.208
+    Price stretched below MA20 (<-2%)             BUY   horizons=[1d, 5d, 10d]  avg_score=6.977
+    VIX elevated (>20)                            BUY   horizons=[1d, 5d, 10d]  avg_score=6.831
+    RSI oversold (<40)                            BUY   horizons=[1d, 5d, 10d]  avg_score=5.638
+    Weak 10d momentum (<-3%)                      BUY   horizons=[1d, 5d, 10d]  avg_score=5.181
+    RSI overbought (>60)                          SELL  horizons=[1d, 5d, 10d]  avg_score=5.052
+    Weak 5d momentum (<-2%)                       BUY   horizons=[1d, 5d, 10d]  avg_score=4.858
+    Bearish MA (20<50)                            BUY   horizons=[1d, 5d, 10d]  avg_score=4.071
+    Bullish trend + Momentum                      SELL  horizons=[1d, 5d, 10d]  avg_score=3.631
+    Low vol + No events                           SELL  horizons=[1d, 5d, 10d]  avg_score=3.148
+    Bollinger oversold (%B<0.1)                   BUY   horizons=[1d, 5d, 10d]  avg_score=3.139
+    ATR elevated (>1.5%)                          BUY   horizons=[5d, 10d]  avg_score=4.941
+    MACD bearish                                  BUY   horizons=[5d, 10d]  avg_score=4.920
+    MACD bullish                                  SELL  horizons=[5d, 10d]  avg_score=4.697
+    Near 52w high + Low VIX                       SELL  horizons=[5d, 10d]  avg_score=4.428
+    Above MA200                                   SELL  horizons=[5d, 10d]  avg_score=4.368
+    High vol + Event day                          BUY   horizons=[5d, 10d]  avg_score=4.263
+    Bollinger overbought (%B>0.9)                 SELL  horizons=[5d, 10d]  avg_score=3.558
+    OBV trending down (<-2%)                      BUY   horizons=[1d, 5d]  avg_score=2.700
+    Vol risk premium inverted (<0)                BUY   horizons=[1d, 5d]  avg_score=2.176
+
+======================================================================
+DECISION TREE CONSTRUCTION
+======================================================================
+  Top BUY signals (8):
+    Price stretched below MA20 (<-2%)              edge=+2.281%  consistency=100%
+    VIX elevated (>20)                             edge=+1.930%  consistency=100%
+    RSI oversold (<40)                             edge=+2.044%  consistency=100%
+    Bearish MA (20<50)                             edge=+1.780%  consistency=75%
+    Weak 5d momentum (<-2%)                        edge=+1.667%  consistency=100%
+    Weak 10d momentum (<-3%)                       edge=+1.542%  consistency=100%
+    OBV trending down (<-2%)                       edge=+1.340%  consistency=88%
+    MACD bearish                                   edge=+0.894%  consistency=100%
+  Top SELL signals (8):
+    Near 52w high (within 2%)                      edge=-1.697%  consistency=86%
+    RSI overbought (>60)                           edge=-1.501%  consistency=86%
+    Bullish trend + Momentum                       edge=-1.028%  consistency=100%
+    MACD bullish                                   edge=-0.894%  consistency=100%
+    Low vol + No events                            edge=-1.051%  consistency=100%
+    Near 52w high + Low VIX                        edge=-0.962%  consistency=86%
+    Bollinger overbought (%B>0.9)                  edge=-1.129%  consistency=83%
+    VIX low + RSI high (sell)                      edge=-1.057%  consistency=83%
+
+======================================================================
+BACKTESTING: 2025-08-21 → 2026-02-20
+======================================================================
+  Strategy return: +11.91%
+  Buy & hold:      +8.48%
+  Excess return:   +3.43%
+  Trades: 7  Win rate: 100%
+  Avg win: +1.69%  Avg loss: +0.00%
+  Max drawdown: 1.97%
+
+  Decision log:
+    2025-08-21  BUY   $635.55  — Score: +0.612 | OBV trending down (<-2%), MACD bearish
+    2025-08-22  SELL  $645.31  P&L: +1.54%  — Score: -3.431 | Near 52w high (within 2%), RSI overbought (>60), Low vol + No events
+    2025-09-02  BUY   $640.27  — Score: +0.612 | OBV trending down (<-2%), MACD bearish
+    2025-09-04  SELL  $649.12  P&L: +1.38%  — Score: -3.552 | Near 52w high (within 2%), RSI overbought (>60), Near 52w high + Low VIX
+    2025-09-25  BUY   $658.05  — Score: +0.612 | OBV trending down (<-2%), MACD bearish
+    2025-09-26  SELL  $661.82  P&L: +0.57%  — Score: -4.604 | Near 52w high (within 2%), RSI overbought (>60), Low vol + No events
+    2025-10-10  BUY   $653.02  — Score: +5.663 | VIX elevated (>20), Weak 5d momentum (<-2%), OBV trending down (<-2%)
+    2025-10-24  SELL  $677.25  P&L: +3.71%  — Score: -5.604 | Near 52w high (within 2%), RSI overbought (>60), Bullish trend + Momentum
+    2025-11-17  BUY   $665.67  — Score: +4.490 | VIX elevated (>20), Weak 5d momentum (<-2%), MACD bearish
+    2025-11-28  SELL  $683.39  P&L: +2.66%  — Score: -3.377 | Near 52w high (within 2%), Bullish trend + Momentum, MACD bullish
+    2025-12-16  BUY   $678.87  — Score: +0.612 | OBV trending down (<-2%), MACD bearish
+    2025-12-19  SELL  $680.59  P&L: +0.25%  — Score: -1.385 | Near 52w high (within 2%), Near 52w high + Low VIX
+    2026-01-20  BUY   $677.58  — Score: +5.663 | VIX elevated (>20), Weak 5d momentum (<-2%), OBV trending down (<-2%)
+    2026-01-22  SELL  $688.98  P&L: +1.68%  — Score: -2.436 | Near 52w high (within 2%), Low vol + No events, Near 52w high + Low VIX
+    2026-02-03  BUY   $689.53  — Score: +0.612 | OBV trending down (<-2%), MACD bearish
+
+======================================================================
+BACKTESTING: 2025-02-21 → 2025-08-21
+======================================================================
+  Strategy return: +5.77%
+  Buy & hold:      +5.94%
+  Excess return:   -0.17%
+  Trades: 12  Win rate: 58%
+  Avg win: +3.22%  Avg loss: -3.11%
+  Max drawdown: 12.46%
+
+  Decision log:
+    2025-02-21  BUY   $599.94  — Score: +2.066 | OBV trending down (<-2%), MACD bearish
+    2025-03-04  SELL  $576.86  P&L: -3.85%  — Trailing stop hit (peak $599.94)
+    2025-03-05  BUY   $583.06  — Score: +9.863 | Price stretched below MA20 (<-2%), VIX elevated (>20), RSI oversold (<40)
+    2025-03-10  SELL  $560.58  P&L: -3.86%  — Trailing stop hit (peak $583.06)
+    2025-03-11  BUY   $555.92  — Score: +12.865 | Price stretched below MA20 (<-2%), VIX elevated (>20), RSI oversold (<40)
+    2025-03-28  SELL  $555.66  P&L: -0.05%  — Trailing stop hit (peak $575.46)
+    2025-03-31  BUY   $559.39  — Score: +5.210 | VIX elevated (>20), Bearish MA (20<50), Weak 5d momentum (<-2%)
+    2025-04-03  SELL  $536.70  P&L: -4.06%  — Trailing stop hit (peak $564.52)
+    2025-04-04  BUY   $505.28  — Score: +12.865 | Price stretched below MA20 (<-2%), VIX elevated (>20), RSI oversold (<40)
+    2025-04-10  SELL  $524.58  P&L: +3.82%  — Trailing stop hit (peak $548.62)
+    2025-04-11  BUY   $533.94  — Score: +9.154 | Price stretched below MA20 (<-2%), VIX elevated (>20), Bearish MA (20<50)
+    2025-04-21  SELL  $513.88  P&L: -3.76%  — Trailing stop hit (peak $539.12)
+    2025-04-22  BUY   $527.25  — Score: +7.491 | Price stretched below MA20 (<-2%), VIX elevated (>20), Bearish MA (20<50)
+    2025-05-12  SELL  $582.99  P&L: +10.57%  — Score: -1.786 | RSI overbought (>60), MACD bullish, Bollinger overbought (%B>0.9)
+    2025-05-23  BUY   $579.11  — Score: +1.675 | VIX elevated (>20), Weak 5d momentum (<-2%)
+    2025-05-27  SELL  $591.15  P&L: +2.08%  — Score: -3.209 | RSI overbought (>60), Bullish trend + Momentum, MACD bullish
+    2025-06-05  BUY   $593.05  — Score: +0.780 | OBV trending down (<-2%), MACD bearish
+    2025-06-09  SELL  $599.68  P&L: +1.12%  — Score: -1.334 | RSI overbought (>60), Bollinger overbought (%B>0.9)
+    2025-06-13  BUY   $597.00  — Score: +2.824 | VIX elevated (>20), MACD bearish
+    2025-06-16  SELL  $602.68  P&L: +0.95%  — Score: -1.847 | Near 52w high (within 2%), RSI overbought (>60)
+    2025-06-17  BUY   $597.53  — Score: +2.824 | VIX elevated (>20), MACD bearish
+    2025-06-24  SELL  $606.78  P&L: +1.55%  — Score: -2.788 | Near 52w high (within 2%), RSI overbought (>60), Bollinger overbought (%B>0.9)
+    2025-08-01  BUY   $621.72  — Score: +5.663 | VIX elevated (>20), Weak 5d momentum (<-2%), OBV trending down (<-2%)
+    2025-08-08  SELL  $637.18  P&L: +2.49%  — Score: -2.380 | Near 52w high (within 2%), RSI overbought (>60), Near 52w high + Low VIX
+    2025-08-21  BUY   $635.55  — Score: +0.612 | OBV trending down (<-2%), MACD bearish
+
+======================================================================
+BACKTESTING: 2025-06-01 → 2025-08-31
+======================================================================
+  Strategy return: +7.58%
+  Buy & hold:      +8.83%
+  Excess return:   -1.25%
+  Trades: 5  Win rate: 100%
+  Avg win: +1.53%  Avg loss: +0.00%
+  Max drawdown: 0.54%
+
+  Decision log:
+    2025-06-05  BUY   $593.05  — Score: +0.780 | OBV trending down (<-2%), MACD bearish
+    2025-06-09  SELL  $599.68  P&L: +1.12%  — Score: -1.334 | RSI overbought (>60), Bollinger overbought (%B>0.9)
+    2025-06-13  BUY   $597.00  — Score: +2.824 | VIX elevated (>20), MACD bearish
+    2025-06-16  SELL  $602.68  P&L: +0.95%  — Score: -1.847 | Near 52w high (within 2%), RSI overbought (>60)
+    2025-06-17  BUY   $597.53  — Score: +2.824 | VIX elevated (>20), MACD bearish
+    2025-06-24  SELL  $606.78  P&L: +1.55%  — Score: -2.788 | Near 52w high (within 2%), RSI overbought (>60), Bollinger overbought (%B>0.9)
+    2025-08-01  BUY   $621.72  — Score: +5.663 | VIX elevated (>20), Weak 5d momentum (<-2%), OBV trending down (<-2%)
+    2025-08-08  SELL  $637.18  P&L: +2.49%  — Score: -2.380 | Near 52w high (within 2%), RSI overbought (>60), Near 52w high + Low VIX
+    2025-08-21  BUY   $635.55  — Score: +0.612 | OBV trending down (<-2%), MACD bearish
+    2025-08-22  SELL  $645.31  P&L: +1.54%  — Score: -3.431 | Near 52w high (within 2%), RSI overbought (>60), Low vol + No events
+
+======================================================================
+STRATEGY ENGINE DEFINITION (for JS port)
+======================================================================
+{
+  "buy_signals": [
+    {
+      "signal": "Price stretched below MA20 (<-2%)",
+      "edge": 2.28101686498626,
+      "consistency": 1.0
+    },
+    {
+      "signal": "VIX elevated (>20)",
+      "edge": 1.9298126697203137,
+      "consistency": 1.0
+    },
+    {
+      "signal": "RSI oversold (<40)",
+      "edge": 2.0440745651126355,
+      "consistency": 1.0
+    },
+    {
+      "signal": "Bearish MA (20<50)",
+      "edge": 1.7800353192843352,
+      "consistency": 0.75
+    },
+    {
+      "signal": "Weak 5d momentum (<-2%)",
+      "edge": 1.6667612592018413,
+      "consistency": 1.0
+    },
+    {
+      "signal": "Weak 10d momentum (<-3%)",
+      "edge": 1.5417586205994551,
+      "consistency": 1.0
+    },
+    {
+      "signal": "OBV trending down (<-2%)",
+      "edge": 1.3400128198890016,
+      "consistency": 0.875
+    },
+    {
+      "signal": "MACD bearish",
+      "edge": 0.8937174257025277,
+      "consistency": 1.0
+    }
+  ],
+  "sell_signals": [
+    {
+      "signal": "Near 52w high (within 2%)",
+      "edge": -1.6970296836780654,
+      "consistency": 0.8571428571428571
+    },
+    {
+      "signal": "RSI overbought (>60)",
+      "edge": -1.5009754905452972,
+      "consistency": 0.8571428571428571
+    },
+    {
+      "signal": "Bullish trend + Momentum",
+      "edge": -1.0282411357725063,
+      "consistency": 1.0
+    },
+    {
+      "signal": "MACD bullish",
+      "edge": -0.8937174257025277,
+      "consistency": 1.0
+    },
+    {
+      "signal": "Low vol + No events",
+      "edge": -1.0512451497349813,
+      "consistency": 1.0
+    },
+    {
+      "signal": "Near 52w high + Low VIX",
+      "edge": -0.9616677531692778,
+      "consistency": 0.8571428571428571
+    },
+    {
+      "signal": "Bollinger overbought (%B>0.9)",
+      "edge": -1.1292672697147952,
+      "consistency": 0.8333333333333334
+    },
+    {
+      "signal": "VIX low + RSI high (sell)",
+      "edge": -1.0568072966072946,
+      "consistency": 0.8333333333333334
+    }
+  ],
+  "trailing_stop_pct": 0.03,
+  "min_buy_signals": 2,
+  "min_sell_signals": 2,
+  "min_net_score": 0.05
+}
+
+======================================================================
+FINDINGS SUMMARY
+======================================================================
+
+  WHAT WORKED (consistent edge across walk-forward windows):
+    ✓ Near 52w high (within 2%)                     → SELL  (edge=-1.697%, consistency=86%, hit=58%)
+    ✓ Price stretched below MA20 (<-2%)             → BUY  (edge=+2.281%, consistency=100%, hit=82%)
+    ✓ VIX elevated (>20)                            → BUY  (edge=+1.930%, consistency=100%, hit=87%)
+    ✓ RSI oversold (<40)                            → BUY  (edge=+2.044%, consistency=100%, hit=79%)
+    ✓ Bearish MA (20<50)                            → BUY  (edge=+1.780%, consistency=75%, hit=68%)
+    ✓ RSI overbought (>60)                          → SELL  (edge=-1.501%, consistency=86%, hit=42%)
+    ✓ Weak 5d momentum (<-2%)                       → BUY  (edge=+1.667%, consistency=100%, hit=75%)
+    ✓ Weak 10d momentum (<-3%)                      → BUY  (edge=+1.542%, consistency=100%, hit=71%)
+    ✓ OBV trending down (<-2%)                      → BUY  (edge=+1.340%, consistency=88%, hit=76%)
+    ✓ MACD bearish                                  → BUY  (edge=+0.894%, consistency=100%, hit=71%)
+
+  WHAT DIDN'T WORK (low consistency or wrong direction OOS):
+    ✗ Bullish MA (20>50)                            → train said SELL, but only 25% OOS consistency
+    ✗ VIX above its 20-MA                           → train said BUY, but only 38% OOS consistency
+    ✗ VIX low (<15)                                 → train said SELL, but only 25% OOS consistency
+    ✗ Strong 5d momentum (>2%)                      → train said SELL, but only 38% OOS consistency
+    ✗ 3+ consec up days                             → train said SELL, but only 38% OOS consistency
+    ✗ FOMC day                                      → train said BUY, but only 25% OOS consistency
+    ✗ CPI day                                       → train said BUY, but only 29% OOS consistency
+
+  NO EFFECT (negligible edge):
+
+  BACKTEST RESULTS:
+    Period 1 (2025-08-21 → 2026-02-20): Strategy +11.91% vs B&H +8.48%  (7 trades, 100% win rate)
+    Period 2 (2025-02-21 → 2025-08-21): Strategy +5.77% vs B&H +5.94%  (12 trades, 58% win rate)
+    Period 3 (Jun-Aug 2025):                Strategy +7.58% vs B&H +8.83%  (5 trades, 100% win rate)
