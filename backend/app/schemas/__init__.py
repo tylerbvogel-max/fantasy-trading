@@ -32,11 +32,54 @@ class LoginResponse(BaseModel):
 class UserProfile(BaseModel):
     id: UUID
     alias: str
+    email: str | None = None
+    email_verified: bool = False
     is_admin: bool
+    has_password: bool = False
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class RegisterRequestV2(BaseModel):
+    alias: str = Field(..., min_length=2, max_length=50)
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=8)
+    invite_code: str | None = None
+
+
+class LoginRequestV2(BaseModel):
+    email_or_alias: str
+    password: str
+
+
+class AuthTokenResponse(BaseModel):
+    user_id: UUID
+    alias: str
+    is_admin: bool
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=255)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+
+class UpgradeAccountRequest(BaseModel):
+    legacy_token: str
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=8)
 
 
 # ── Stocks ──

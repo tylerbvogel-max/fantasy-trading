@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date, timezone
 from decimal import Decimal
-from sqlalchemy import String, Boolean, Integer, Float, Date, DateTime, Numeric, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Boolean, Integer, Float, Date, DateTime, Numeric, Text, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -10,6 +10,8 @@ class BountyWindow(Base):
     __tablename__ = "bounty_windows"
     __table_args__ = (
         UniqueConstraint("window_date", "window_index", name="uq_bounty_window_date_index"),
+        Index("ix_bounty_windows_date", "window_date"),
+        Index("ix_bounty_windows_settled", "is_settled", "end_time"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -34,6 +36,7 @@ class BountyWindowStock(Base):
     __tablename__ = "bounty_window_stocks"
     __table_args__ = (
         UniqueConstraint("bounty_window_id", "symbol", name="uq_bounty_window_stock"),
+        Index("ix_bounty_window_stocks_window_id", "bounty_window_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -51,6 +54,9 @@ class BountyPrediction(Base):
     __tablename__ = "bounty_predictions"
     __table_args__ = (
         UniqueConstraint("user_id", "bounty_window_id", "symbol", name="uq_bounty_user_window_symbol"),
+        Index("ix_bounty_predictions_user_id", "user_id"),
+        Index("ix_bounty_predictions_window_id", "bounty_window_id"),
+        Index("ix_bounty_predictions_user_created", "user_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -129,6 +135,10 @@ class BountyPlayerStats(Base):
 class BountyRunHistory(Base):
     """Archived completed runs for Run Score leaderboard."""
     __tablename__ = "bounty_run_history"
+    __table_args__ = (
+        Index("ix_bounty_run_history_user_id", "user_id"),
+        Index("ix_bounty_run_history_run_score", "run_score"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -150,6 +160,7 @@ class BountyBadge(Base):
     __tablename__ = "bounty_badges"
     __table_args__ = (
         UniqueConstraint("user_id", "badge_id", name="uq_bounty_badge_user"),
+        Index("ix_bounty_badges_user_id", "user_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -166,6 +177,7 @@ class BountyTitle(Base):
     __tablename__ = "bounty_titles"
     __table_args__ = (
         UniqueConstraint("user_id", "title_id", name="uq_bounty_title_user"),
+        Index("ix_bounty_titles_user_id", "user_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -179,6 +191,9 @@ class BountyTitle(Base):
 class BountyActivityEvent(Base):
     """Community activity feed events."""
     __tablename__ = "bounty_activity_events"
+    __table_args__ = (
+        Index("ix_bounty_activity_events_created", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -192,6 +207,9 @@ class BountyActivityEvent(Base):
 class BountyPlayerIron(Base):
     """Player's equipped irons."""
     __tablename__ = "bounty_player_irons"
+    __table_args__ = (
+        Index("ix_bounty_player_irons_user_id", "user_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -205,6 +223,9 @@ class BountyPlayerIron(Base):
 class BountyIronOffering(Base):
     """Pending iron choices after a window settles."""
     __tablename__ = "bounty_iron_offerings"
+    __table_args__ = (
+        Index("ix_bounty_iron_offerings_user_id", "user_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)

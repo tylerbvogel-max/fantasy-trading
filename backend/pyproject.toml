@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+markers = [
+    "unit: Pure function tests (no DB)",
+    "integration: Database-dependent tests",
+    "e2e: Full endpoint tests",
+    "safety_critical: NASA NPR-7150 safety-relevant tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:passlib.*:",
+]

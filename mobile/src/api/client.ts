@@ -10,34 +10,63 @@ import Constants from "expo-constants";
 const API_BASE: string =
   Constants.expoConfig?.extra?.apiUrl ?? "https://fantasy-trading-api.onrender.com";
 
-const TOKEN_KEY = "auth_token";
+const ACCESS_TOKEN_KEY = "access_token";
+const REFRESH_TOKEN_KEY = "refresh_token";
+const LEGACY_TOKEN_KEY = "auth_token";
 
-let authToken: string | null = null;
+let accessToken: string | null = null;
+let refreshToken: string | null = null;
+let isRefreshing = false;
 
+// Legacy compat: still expose for code that reads authToken
 export function setAuthToken(token: string | null) {
-  authToken = token;
+  accessToken = token;
 }
 
 export function getAuthToken(): string | null {
-  return authToken;
+  return accessToken;
 }
 
+export async function persistTokens(access: string, refresh: string): Promise<void> {
+  accessToken = access;
+  refreshToken = refresh;
+  await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, access);
+  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refresh);
+  // Clean up legacy key if present
+  await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY).catch(() => {});
+}
+
+/** Legacy compat: persist a single opaque token (old flow). */
 export async function persistToken(token: string): Promise<void> {
-  authToken = token;
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
+  accessToken = token;
+  refreshToken = null;
+  await SecureStore.setItemAsync(LEGACY_TOKEN_KEY, token);
 }
 
 export async function loadStoredToken(): Promise<string | null> {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
-  if (token) {
-    authToken = token;
+  // Try new JWT tokens first
+  const access = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+  const refresh = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+  if (access) {
+    accessToken = access;
+    refreshToken = refresh;
+    return access;
   }
-  return token;
+  // Fall back to legacy single token
+  const legacy = await SecureStore.getItemAsync(LEGACY_TOKEN_KEY);
+  if (legacy) {
+    accessToken = legacy;
+    return legacy;
+  }
+  return null;
 }
 
 export async function clearStoredToken(): Promise<void> {
-  authToken = null;
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  accessToken = null;
+  refreshToken = null;
+  await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY).catch(() => {});
+  await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY).catch(() => {});
+  await SecureStore.deleteItemAsync(LEGACY_TOKEN_KEY).catch(() => {});
 }
 
 // Global sign-out: clears token and notifies the app to reset to auth screen
@@ -52,17 +81,39 @@ export async function signOut(): Promise<void> {
   _onSignOut?.();
 }
 
+/** Try refreshing the access token using the stored refresh token. */
+async function tryRefresh(): Promise<boolean> {
+  if (!refreshToken || isRefreshing) return false;
+  isRefreshing = true;
+  try {
+    const response = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!response.ok) return false;
+    const data: AuthTokenResponse = await response.json();
+    await persistTokens(data.access_token, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    isRefreshing = false;
+  }
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _retried = false
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
 
-  if (authToken) {
-    headers["Authorization"] = `Bearer ${authToken}`;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const response = await fetch(`${API_BASE}${path}`, {
@@ -71,8 +122,12 @@ async function request<T>(
   });
 
   if (!response.ok) {
-    // If the backend rejects our token, sign out automatically
-    if (response.status === 401 && authToken) {
+    // On 401, try refreshing before signing out
+    if (response.status === 401 && accessToken && !_retried) {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        return request<T>(path, options, true);
+      }
       await signOut();
     }
     const error = await response.json().catch(() => ({ detail: "Request failed" }));
@@ -90,6 +145,7 @@ async function request<T>(
 
 // ── Auth ──
 
+// Legacy interfaces (kept for backwards compat)
 export interface RegisterRequest {
   alias: string;
   invite_code: string;
@@ -107,14 +163,40 @@ export interface LoginRequest {
   token: string;
 }
 
+// New v2 interfaces
+export interface RegisterRequestV2 {
+  alias: string;
+  email: string;
+  password: string;
+  invite_code?: string;
+}
+
+export interface LoginRequestV2 {
+  email_or_alias: string;
+  password: string;
+}
+
+export interface AuthTokenResponse {
+  user_id: string;
+  alias: string;
+  is_admin: boolean;
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
 export interface UserProfile {
   id: string;
   alias: string;
+  email: string | null;
+  email_verified: boolean;
   is_admin: boolean;
+  has_password: boolean;
   created_at: string;
 }
 
 export const auth = {
+  // Legacy endpoints
   register: (data: RegisterRequest) =>
     request<RegisterResponse>("/auth/register", {
       method: "POST",
@@ -125,6 +207,37 @@ export const auth = {
     request<RegisterResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+
+  // New v2 endpoints
+  registerV2: (data: RegisterRequestV2) =>
+    request<AuthTokenResponse>("/auth/v2/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  loginV2: (data: LoginRequestV2) =>
+    request<AuthTokenResponse>("/auth/v2/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  forgotPassword: (email: string) =>
+    request<{ message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, new_password: string) =>
+    request<{ message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password }),
+    }),
+
+  upgrade: (legacy_token: string, email: string, password: string) =>
+    request<AuthTokenResponse>("/auth/upgrade", {
+      method: "POST",
+      body: JSON.stringify({ legacy_token, email, password }),
     }),
 
   me: () => request<UserProfile>("/auth/me"),

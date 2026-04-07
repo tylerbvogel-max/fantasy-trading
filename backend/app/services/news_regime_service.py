@@ -123,13 +123,8 @@ async def fetch_quant_inputs() -> dict:
     return result
 
 
-async def assess_regime(headlines: list[dict], quant: dict) -> dict | None:
-    """Use Claude Haiku to assess market regime from headlines + quant data."""
-    if not settings.anthropic_api_key:
-        logger.warning("ANTHROPIC_API_KEY not set, skipping LLM regime assessment")
-        return None
-
-    # Build headline text (limit to ~30 headlines for prompt size)
+def _build_regime_prompt(headlines: list[dict], quant: dict) -> str:
+    """Build the LLM prompt for regime classification."""
     headline_texts = []
     for h in headlines[:30]:
         source = h.get("source", "")
@@ -138,14 +133,13 @@ async def assess_regime(headlines: list[dict], quant: dict) -> dict | None:
         headline_texts.append(f"[{source}] {title}" + (f" — {desc}" if desc else ""))
 
     headlines_block = "\n".join(headline_texts)
-
     quant_block = (
         f"- 13-week T-bill rate (^IRX): {quant.get('rate', 'N/A')}%\n"
         f"- VIX: {quant.get('vix', 'N/A')}\n"
         f"- SPY MA200 slope (annualized): {quant.get('ma200_slope', 'N/A')}%"
     )
 
-    prompt = f"""You are a financial market regime classifier. Analyze the following recent financial headlines and quantitative data to determine the current market regime.
+    return f"""You are a financial market regime classifier. Analyze the following recent financial headlines and quantitative data to determine the current market regime.
 
 HEADLINES:
 {headlines_block}
@@ -162,6 +156,28 @@ Classify the market into:
 Respond with ONLY valid JSON, no other text:
 {{"monetary_regime": "...", "risk_regime": "...", "dominant_narrative": "...", "confidence": 0.0}}"""
 
+
+def _validate_regime_result(result: dict) -> dict:
+    """Validate and normalize regime classification fields."""
+    valid_monetary = {"dovish", "neutral", "hawkish"}
+    valid_risk = {"risk_on", "neutral", "risk_off", "crisis"}
+
+    if result.get("monetary_regime") not in valid_monetary:
+        result["monetary_regime"] = "neutral"
+    if result.get("risk_regime") not in valid_risk:
+        result["risk_regime"] = "neutral"
+    result["confidence"] = max(0.0, min(1.0, float(result.get("confidence", 0.5))))
+    return result
+
+
+async def assess_regime(headlines: list[dict], quant: dict) -> dict | None:
+    """Use Claude Haiku to assess market regime from headlines + quant data."""
+    if not settings.anthropic_api_key:
+        logger.warning("ANTHROPIC_API_KEY not set, skipping LLM regime assessment")
+        return None
+
+    prompt = _build_regime_prompt(headlines, quant)
+
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -172,27 +188,14 @@ Respond with ONLY valid JSON, no other text:
         )
         response_text = message.content[0].text.strip()
 
-        # Strip markdown code fences if present (e.g. ```json ... ```)
+        # Strip markdown code fences if present
         if response_text.startswith("```"):
             lines = response_text.split("\n")
-            # Remove first line (```json) and last line (```)
             lines = [l for l in lines if not l.strip().startswith("```")]
             response_text = "\n".join(lines).strip()
 
-        # Parse JSON response
         result = json.loads(response_text)
-
-        # Validate expected fields
-        valid_monetary = {"dovish", "neutral", "hawkish"}
-        valid_risk = {"risk_on", "neutral", "risk_off", "crisis"}
-
-        if result.get("monetary_regime") not in valid_monetary:
-            result["monetary_regime"] = "neutral"
-        if result.get("risk_regime") not in valid_risk:
-            result["risk_regime"] = "neutral"
-        result["confidence"] = max(0.0, min(1.0, float(result.get("confidence", 0.5))))
-
-        return result
+        return _validate_regime_result(result)
 
     except json.JSONDecodeError as e:
         logger.error(f"LLM returned invalid JSON: {e} | raw: {response_text[:300]}")

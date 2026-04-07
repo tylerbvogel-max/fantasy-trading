@@ -1,27 +1,28 @@
 """Bounty Hunter game constants — mirrors tools/bounty-sim/config.mjs + irons.mjs."""
 
 import math
+from types import MappingProxyType
 
 # ── Scoring tables ──
 # Directional picks (UP/DOWN): { confidence: { "win": pts, "lose": pts } }
-DIR_SCORING = {
-    1: {"win": 13, "lose": 11},
-    2: {"win": 31, "lose": 28},
-    3: {"win": 57, "lose": 70},
-}
+DIR_SCORING = MappingProxyType({
+    1: MappingProxyType({"win": 13, "lose": 11}),
+    2: MappingProxyType({"win": 31, "lose": 28}),
+    3: MappingProxyType({"win": 57, "lose": 70}),
+})
 
 # Holster picks (HOLD): { confidence: { "win": pts, "lose": pts } }
-HOL_SCORING = {
-    1: {"win": 8, "lose": 6},
-    2: {"win": 19, "lose": 15},
-    3: {"win": 35, "lose": 30},
-}
+HOL_SCORING = MappingProxyType({
+    1: MappingProxyType({"win": 8, "lose": 6}),
+    2: MappingProxyType({"win": 19, "lose": 15}),
+    3: MappingProxyType({"win": 35, "lose": 30}),
+})
 
 # ── Wanted level multiplier table ──
-WANTED_MULT = {
+WANTED_MULT = MappingProxyType({
     1: 1, 2: 2, 3: 4, 4: 8, 5: 18,
     6: 42, 7: 100, 8: 230, 9: 530, 10: 1200,
-}
+})
 WANTED_OVERFLOW_BASE = 2.3
 
 WANTED_LEVEL_CAP = 10
@@ -34,7 +35,7 @@ def wanted_multiplier(level: int) -> int:
 
 
 # ── Notoriety ──
-NOTORIETY_WEIGHT = {1: 1.0, 2: 1.5, 3: 2.0}
+NOTORIETY_WEIGHT = MappingProxyType({1: 1.0, 2: 1.5, 3: 2.0})
 NOTORIETY_UP_THRESHOLD = 3.0
 NOTORIETY_DOWN_THRESHOLD = -2.0
 
@@ -47,7 +48,7 @@ STARTING_CHAMBERS = 1
 MAX_CHAMBERS = 6
 
 # Wanted level → max chambers unlocked (high-water mark)
-CHAMBER_MILESTONES = {1: 1, 3: 2, 5: 3, 7: 4, 9: 5, 10: 6}
+CHAMBER_MILESTONES = MappingProxyType({1: 1, 3: 2, 5: 3, 7: 4, 9: 5, 10: 6})
 
 
 def chambers_for_level(level: int) -> int:
@@ -109,7 +110,7 @@ def bet_to_tier(bet_amount: int) -> int:
         return 3
 
 # ── Confidence labels ──
-CONFIDENCE_LABELS = {1: "Draw", 2: "Quick Draw", 3: "Dead Eye"}
+CONFIDENCE_LABELS = MappingProxyType({1: "Draw", 2: "Quick Draw", 3: "Dead Eye"})
 
 
 def skip_cost(n: int, balance: int) -> int:
@@ -118,7 +119,7 @@ def skip_cost(n: int, balance: int) -> int:
 
 
 # ── Iron definitions (75 total — mirrors tools/bounty-sim/irons.mjs) ──
-IRON_DEFS = [
+IRON_DEFS = (
     # ── Common (28) ──
     {
         "id": "steady_hand", "name": "Steady Hand", "rarity": "common",
@@ -651,15 +652,15 @@ IRON_DEFS = [
         "boost_description": "Auto-correct, next 50% acc (not auto-wrong)",
         "boost_effects": {"high_noon": True},
     },
-]
+)
 
-IRON_DEFS_BY_ID = {iron["id"]: iron for iron in IRON_DEFS}
+IRON_DEFS_BY_ID = MappingProxyType({iron["id"]: iron for iron in IRON_DEFS})
 
 # Rarity weights for offering rolls
-RARITY_WEIGHTS = {"common": 45, "uncommon": 30, "rare": 18, "legendary": 7}
+RARITY_WEIGHTS = MappingProxyType({"common": 45, "uncommon": 30, "rare": 18, "legendary": 7})
 
 # Iron tier gating: minimum wanted level to appear in offerings
-RARITY_MIN_LEVEL = {"common": 1, "uncommon": 3, "rare": 6, "legendary": 8}
+RARITY_MIN_LEVEL = MappingProxyType({"common": 1, "uncommon": 3, "rare": 6, "legendary": 8})
 
 # ── Leverage ──
 LEVERAGE_MIN = 1.0
@@ -667,12 +668,12 @@ LEVERAGE_MAX = 5.0
 LEVERAGE_STEP = 0.5  # slider increments
 
 # Wanted level → max leverage allowed
-LEVERAGE_CEILING = {
+LEVERAGE_CEILING = MappingProxyType({
     1: 2.0, 2: 2.0,
     3: 3.0, 4: 3.0,
     5: 4.0, 6: 4.0,
     7: 5.0, 8: 5.0, 9: 5.0, 10: 5.0,
-}
+})
 
 def max_leverage_for_level(level: int) -> float:
     if level in LEVERAGE_CEILING:
@@ -681,11 +682,11 @@ def max_leverage_for_level(level: int) -> float:
 
 # Margin call probability: based on leverage tier
 # Returns (min_chance, max_chance) — linearly interpolated within tier
-MARGIN_CALL_TIERS = [
+MARGIN_CALL_TIERS = (
     (1.0, 2.0, 0.0, 0.0),    # 1x–2x: no margin call
     (2.5, 3.5, 0.05, 0.15),  # 2.5x–3.5x: 5%–15%
     (4.0, 5.0, 0.15, 0.30),  # 4x–5x: 15%–30%
-]
+)
 
 def margin_call_chance(leverage: float) -> float:
     if leverage <= 2.0:
@@ -731,7 +732,7 @@ def compute_run_score(peak_dd: int, peak_level: int, accuracy: float, rounds: in
 # P1-B: Badges (16 total)
 # ══════════════════════════════════════════════════════════════════════════════
 
-BADGE_DEFS = [
+BADGE_DEFS = (
     # ── Wanted Level ──
     {"id": "drifter", "name": "Drifter", "category": "wanted_level",
      "description": "Reach Wanted Level 3", "requirement": {"type": "wanted_level", "value": 3}},
@@ -768,16 +769,16 @@ BADGE_DEFS = [
      "description": "Go from sub-500 DD to 10,000+ DD", "requirement": {"type": "comeback", "low": 500, "high": 10000}},
     {"id": "streak_master", "name": "Streak Master", "category": "special",
      "description": "Maintain a 30-day prediction streak", "requirement": {"type": "daily_streak", "value": 30}},
-]
+)
 
-BADGE_DEFS_BY_ID = {b["id"]: b for b in BADGE_DEFS}
+BADGE_DEFS_BY_ID = MappingProxyType({b["id"]: b for b in BADGE_DEFS})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # P1-C: Titles (7 tiers)
 # ══════════════════════════════════════════════════════════════════════════════
 
-TITLE_DEFS = [
+TITLE_DEFS = (
     {"id": "drifter", "name": "Drifter", "order": 0,
      "description": "Default title", "requirements": {}},
     {"id": "gunslinger", "name": "Gunslinger", "order": 1,
@@ -798,22 +799,22 @@ TITLE_DEFS = [
     {"id": "legend", "name": "Legend", "order": 6,
      "description": "Legendary Outlaw badge + Sheriff title + 1M lifetime DD",
      "requirements": {"badge": "legendary_outlaw", "title": "sheriff", "lifetime_dd": 1000000}},
-]
+)
 
-TITLE_DEFS_BY_ID = {t["id"]: t for t in TITLE_DEFS}
+TITLE_DEFS_BY_ID = MappingProxyType({t["id"]: t for t in TITLE_DEFS})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # P1-D: Daily Streak
 # ══════════════════════════════════════════════════════════════════════════════
 
-STREAK_REWARDS = {
-    3: {"type": "bonus_offering"},               # Bonus iron offering
-    5: {"type": "dd_bonus", "amount": 500},       # +500 DD
-    7: {"type": "guaranteed_uncommon"},            # Guaranteed uncommon+ offering
-    14: {"type": "dd_bonus", "amount": 2000},     # +2000 DD
-    30: {"type": "badge_and_rare", "badge": "streak_master"},  # Badge + guaranteed rare
-}
+STREAK_REWARDS = MappingProxyType({
+    3: MappingProxyType({"type": "bonus_offering"}),
+    5: MappingProxyType({"type": "dd_bonus", "amount": 500}),
+    7: MappingProxyType({"type": "guaranteed_uncommon"}),
+    14: MappingProxyType({"type": "dd_bonus", "amount": 2000}),
+    30: MappingProxyType({"type": "badge_and_rare", "badge": "streak_master"}),
+})
 
 STREAK_SHIELD_THRESHOLD = 7  # Earn shield at streak 7+
 
@@ -822,7 +823,7 @@ STREAK_SHIELD_THRESHOLD = 7  # Earn shield at streak 7+
 # P2-A: Iron Synergy Combos
 # ══════════════════════════════════════════════════════════════════════════════
 
-IRON_COMBOS = [
+IRON_COMBOS = (
     {
         "id": "dead_mans_arsenal",
         "name": "Dead Man's Arsenal",
@@ -907,9 +908,9 @@ IRON_COMBOS = [
         "description": "+30 wins after 2 correct, +1.0 notoriety per correct",
         "bonus_effects": {"war_drum_bonus": 30, "notoriety_bonus": 1.0},
     },
-]
+)
 
-IRON_COMBOS_BY_ID = {c["id"]: c for c in IRON_COMBOS}
+IRON_COMBOS_BY_ID = MappingProxyType({c["id"]: c for c in IRON_COMBOS})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -918,18 +919,18 @@ IRON_COMBOS_BY_ID = {c["id"]: c for c in IRON_COMBOS}
 
 MAG_7_SYMBOLS = {"AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "META", "TSLA"}
 
-SECTOR_SPOTLIGHT_ROTATION = [
-    {"name": "Semiconductors", "symbols": {"NVDA", "AMD", "INTC", "AVGO", "QCOM", "MU", "TSM"}},
-    {"name": "Pharma & Biotech", "symbols": {"JNJ", "PFE", "ABBV", "MRK", "LLY", "AMGN", "BMY"}},
-    {"name": "Energy", "symbols": {"XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC"}},
-    {"name": "Financials", "symbols": {"JPM", "BAC", "GS", "MS", "WFC", "C", "BLK"}},
-    {"name": "Consumer Tech", "symbols": {"AAPL", "MSFT", "GOOG", "AMZN", "META", "NFLX", "CRM"}},
-]
+SECTOR_SPOTLIGHT_ROTATION = (
+    {"name": "Semiconductors", "symbols": frozenset({"NVDA", "AMD", "INTC", "AVGO", "QCOM", "MU", "TSM"})},
+    {"name": "Pharma & Biotech", "symbols": frozenset({"JNJ", "PFE", "ABBV", "MRK", "LLY", "AMGN", "BMY"})},
+    {"name": "Energy", "symbols": frozenset({"XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC"})},
+    {"name": "Financials", "symbols": frozenset({"JPM", "BAC", "GS", "MS", "WFC", "C", "BLK"})},
+    {"name": "Consumer Tech", "symbols": frozenset({"AAPL", "MSFT", "GOOG", "AMZN", "META", "NFLX", "CRM"})},
+)
 
 # Event type → display info
-STOCK_EVENT_TYPES = {
-    "earnings_week": {"name": "Earnings Week", "description": "Companies reporting this week"},
-    "fed_day": {"name": "Fed Day", "description": "Rate-sensitive sector stocks"},
-    "sector_spotlight": {"name": "Sector Spotlight", "description": "Weekly sector rotation"},
-    "mag7_friday": {"name": "Mag 7 Friday", "description": "Only Magnificent 7 stocks"},
-}
+STOCK_EVENT_TYPES = MappingProxyType({
+    "earnings_week": MappingProxyType({"name": "Earnings Week", "description": "Companies reporting this week"}),
+    "fed_day": MappingProxyType({"name": "Fed Day", "description": "Rate-sensitive sector stocks"}),
+    "sector_spotlight": MappingProxyType({"name": "Sector Spotlight", "description": "Weekly sector rotation"}),
+    "mag7_friday": MappingProxyType({"name": "Mag 7 Friday", "description": "Only Magnificent 7 stocks"}),
+})

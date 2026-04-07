@@ -1,6 +1,6 @@
 databases:
   - name: fantasy-trading-db
-    plan: free
+    plan: free  # Upgrade to "starter" or "standard" for production (backups, no sleep)
     databaseName: fantasy_trading
     user: fantasy_trading
 
@@ -8,7 +8,7 @@ services:
   - type: web
     name: fantasy-trading-api
     runtime: docker
-    plan: free
+    plan: free  # Upgrade to "starter" for always-on (no cold starts)
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     envVars:
@@ -20,3 +20,9 @@ services:
         generateValue: true
       - key: FINNHUB_API_KEY
         sync: false
+      - key: ENVIRONMENT
+        value: prod
+      - key: BOUNTY_WINDOW_MINUTES
+        value: "120"
+      - key: CORS_ORIGINS
+        sync: false  # Set manually: e.g. "https://yourdomain.com,exp://192.168.1.x:8081"

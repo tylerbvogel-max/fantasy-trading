@@ -10,7 +10,7 @@ from app.services.auth_service import generate_token, hash_token
 
 
 # Top 50 US stocks for the initial stock universe
-INITIAL_STOCKS = [
+INITIAL_STOCKS = (
     ("AAPL", "Apple Inc", "Technology", "large"),
     ("MSFT", "Microsoft Corporation", "Technology", "large"),
     ("GOOGL", "Alphabet Inc Class A", "Technology", "large"),
@@ -61,7 +61,7 @@ INITIAL_STOCKS = [
     ("SNAP", "Snap Inc", "Communication Services", "mid"),
     ("RIVN", "Rivian Automotive Inc", "Consumer Cyclical", "mid"),
     ("SOFI", "SoFi Technologies Inc", "Financial Services", "mid"),
-]
+)
 
 
 async def seed():

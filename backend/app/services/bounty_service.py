@@ -41,14 +41,15 @@ settings = get_settings()
 
 ET = ZoneInfo("America/New_York")
 
-# Rolling window duration: env BOUNTY_WINDOW_MINUTES (default 120 for production, set to 2 for dev)
-import os
-WINDOW_DURATION_MINUTES = int(os.environ.get("BOUNTY_WINDOW_MINUTES", "120"))
+# Rolling window duration: from config (default 2 for dev, set to 120 in production via env)
+WINDOW_DURATION_MINUTES = settings.bounty_window_minutes
 
 # Stocks to create per bounty window
-WINDOW_STOCKS = ["SPY", "NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "GOOG", "PLTR", "SNDK"]
+WINDOW_STOCKS = ("SPY", "NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "GOOG", "PLTR", "SNDK")
 
-STOCK_NAMES = {
+from types import MappingProxyType as _MappingProxy
+
+STOCK_NAMES = _MappingProxy({
     "SPY": "S&P 500 ETF",
     "NVDA": "NVIDIA",
     "AAPL": "Apple",
@@ -58,7 +59,7 @@ STOCK_NAMES = {
     "GOOG": "Alphabet",
     "PLTR": "Palantir",
     "SNDK": "SanDisk",
-}
+})
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 
@@ -320,6 +321,13 @@ async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
             return [current]
 
     # Create a new window aligned to WINDOW_DURATION_MINUTES boundaries
+    return await _create_new_window(db, now_et, today)
+
+
+async def _create_new_window(
+    db: AsyncSession, now_et: datetime, today,
+) -> list[BountyWindow]:
+    """Create a new bounty window aligned to WINDOW_DURATION_MINUTES boundaries."""
     minutes_since_midnight = now_et.hour * 60 + now_et.minute
     slot_start_minutes = (minutes_since_midnight // WINDOW_DURATION_MINUTES) * WINDOW_DURATION_MINUTES
     slot_hour = slot_start_minutes // 60
@@ -336,10 +344,8 @@ async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
         )
     )
     if existing.scalars().first():
-        # Window for this slot already ran — wait for next slot
         return []
 
-    # Get next window_index for today
     count_result = await db.execute(
         select(func.count(BountyWindow.id)).where(BountyWindow.window_date == today)
     )
@@ -355,13 +361,9 @@ async def get_or_create_today_windows(db: AsyncSession) -> list[BountyWindow]:
     db.add(window)
     await db.flush()
 
-    # Create per-stock rows from hot stocks pool (or fallback)
     stock_pool = await get_hot_stocks_pool(db)
     for symbol in stock_pool:
-        db.add(BountyWindowStock(
-            bounty_window_id=window.id,
-            symbol=symbol,
-        ))
+        db.add(BountyWindowStock(bounty_window_id=window.id, symbol=symbol))
 
     await db.commit()
     await db.refresh(window)
@@ -431,22 +433,15 @@ async def get_or_create_player_stats(db: AsyncSession, user_id: uuid.UUID) -> Bo
 
 # ── Prediction submission ──
 
-async def submit_prediction(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    window_id: uuid.UUID,
-    prediction: str,
-    bet_amount: int,
-    symbol: str = "SPY",
-    leverage: float = 1.0,
-) -> BountyPrediction:
-    """Submit a prediction for a bounty window."""
-    # Validate window exists and is active
+async def _validate_prediction_inputs(
+    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID,
+    prediction: str, bet_amount: int, symbol: str,
+) -> BountyWindow:
+    """Validate window, symbol, prediction direction, and bet amount. Returns window."""
     window = await db.get(BountyWindow, window_id)
     if not window:
         raise BountyError("Bounty window not found")
 
-    # Validate symbol against window's actual stocks
     stock_check = await db.execute(
         select(BountyWindowStock).where(
             BountyWindowStock.bounty_window_id == window_id,
@@ -459,11 +454,9 @@ async def submit_prediction(
     now = datetime.now(timezone.utc)
     if now < window.start_time or now >= window.end_time:
         raise BountyError("This bounty window is not currently active")
-
     if window.is_settled:
         raise BountyError("This bounty window has already been settled")
 
-    # Check for existing prediction for this stock
     result = await db.execute(
         select(BountyPrediction).where(
             BountyPrediction.user_id == user_id,
@@ -478,20 +471,15 @@ async def submit_prediction(
         raise BountyError("Prediction must be UP, DOWN, or HOLD")
     if not (0 <= bet_amount <= 100):
         raise BountyError("Bet amount must be between 0 and 100")
+    return window
 
-    # Derive pseudo-tier from bet amount for iron effects
-    confidence = bet_to_tier(bet_amount)
 
-    stats = await get_or_create_player_stats(db, user_id)
-
-    # Check bust state
-    if stats.is_busted:
-        raise BountyError("You're busted! Reset to start over.")
-
-    # Determine action type
-    action_type = "holster" if prediction == "HOLD" else "directional"
-
-    # Ante: deducted on first prediction in this window
+async def _apply_ante_and_leverage(
+    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID,
+    stats: BountyPlayerStats, leverage: float,
+) -> dict:
+    """Deduct ante (first pick in window), validate & deduct leverage carry cost.
+    Returns iron effects dict."""
     existing_preds = await db.execute(
         select(func.count(BountyPrediction.id)).where(
             BountyPrediction.user_id == user_id,
@@ -501,37 +489,53 @@ async def submit_prediction(
     is_first_in_window = (existing_preds.scalar() or 0) == 0
 
     fx = await get_player_iron_effects(db, user_id)
-    ante_cost = 0
     if is_first_in_window:
         ante_cost = max(0, ANTE_BASE - fx["ante_reduction"])
         if stats.double_dollars < ante_cost:
             raise BountyError(f"Can't afford ante ($${ ante_cost }). You need $${ ante_cost - stats.double_dollars } more.")
         stats.double_dollars -= ante_cost
-        # Reset skip count for this window
         stats.skip_count_this_window = 0
-        # Reset notoriety for this window
         stats.notoriety = 0.0
 
-    # Leverage validation
     max_lev = max_leverage_for_level(max(stats.wanted_level, 1))
     if leverage < 1.0 or leverage > max_lev:
         raise BountyError(f"Leverage must be between 1.0x and {max_lev}x at your wanted level")
     if stats.margin_call_cooldown > 0 and leverage > 1.0:
         raise BountyError("Margin call cooldown active — leverage locked to 1.0x")
 
-    # Carry cost for leverage
     carry_cost = round((leverage - 1.0) * CARRY_COST_PER_X)
     if carry_cost > 0:
         if stats.double_dollars < carry_cost:
             raise BountyError(f"Can't afford leverage carry cost ($${ carry_cost })")
         stats.double_dollars -= carry_cost
 
-    # Decrement margin call cooldown
     if stats.margin_call_cooldown > 0:
         stats.margin_call_cooldown -= 1
 
-    mult = wanted_multiplier(max(stats.wanted_level, 1))
+    return fx
 
+
+async def submit_prediction(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    window_id: uuid.UUID,
+    prediction: str,
+    bet_amount: int,
+    symbol: str = "SPY",
+    leverage: float = 1.0,
+) -> BountyPrediction:
+    """Submit a prediction for a bounty window."""
+    await _validate_prediction_inputs(db, user_id, window_id, prediction, bet_amount, symbol)
+
+    confidence = bet_to_tier(bet_amount)
+    stats = await get_or_create_player_stats(db, user_id)
+    if stats.is_busted:
+        raise BountyError("You're busted! Reset to start over.")
+
+    action_type = "holster" if prediction == "HOLD" else "directional"
+    await _apply_ante_and_leverage(db, user_id, window_id, stats, leverage)
+
+    mult = wanted_multiplier(max(stats.wanted_level, 1))
     pred = BountyPrediction(
         user_id=user_id,
         bounty_window_id=window_id,
@@ -547,9 +551,8 @@ async def submit_prediction(
     db.add(pred)
 
     stats.total_predictions += 1
-    stats.last_prediction_at = now
+    stats.last_prediction_at = datetime.now(timezone.utc)
 
-    # P1-D: Update daily streak
     streak_reward = await update_streak(db, stats)
 
     await db.commit()
@@ -616,21 +619,15 @@ async def record_window_open_price(db: AsyncSession, window_id: uuid.UUID) -> No
     await db.commit()
 
 
-async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
-    """Settle a bounty window: fetch closing prices, determine results, score with sim mechanics."""
-    window = await db.get(BountyWindow, window_id)
-    if not window or window.is_settled:
-        return
-
-    # Settle per-stock rows
+async def _settle_window_stocks(
+    db: AsyncSession, window_id: uuid.UUID,
+) -> dict[str, str]:
+    """Settle per-stock rows: fetch close prices, compute results. Returns symbol→result map."""
     stock_result = await db.execute(
         select(BountyWindowStock).where(BountyWindowStock.bounty_window_id == window_id)
     )
     stock_rows = list(stock_result.scalars().all())
-
-    # Build symbol → result map and price change map
     stock_results: dict[str, str] = {}
-    stock_changes: dict[str, float] = {}  # symbol → abs(pct_change)
 
     for stock_row in stock_rows:
         if stock_row.is_settled:
@@ -643,12 +640,11 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
             continue
 
         stock_row.close_price = price
+        pct_change = 0.0
+        hold_threshold = HOLD_THRESHOLD_FALLBACK
         if stock_row.open_price is not None:
             open_f = float(stock_row.open_price)
             pct_change = (price - open_f) / open_f if open_f != 0 else 0
-            stock_changes[stock_row.symbol] = abs(pct_change)
-
-            # Dynamic hold threshold based on stock volatility
             candles = await fetch_chart_yahoo(stock_row.symbol)
             hold_threshold = compute_hold_threshold(candles) if candles else HOLD_THRESHOLD_FALLBACK
 
@@ -660,7 +656,7 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
                 stock_row.result = "DOWN"
         else:
             stock_row.result = "UP"
-        # P2-C: Store settlement context
+
         stock_row.settlement_context = json.dumps({
             "pct_change": round(pct_change * 100, 4) if stock_row.open_price is not None else None,
             "hold_threshold": round(hold_threshold * 100, 4) if stock_row.open_price is not None else None,
@@ -668,7 +664,175 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
         stock_row.is_settled = True
         stock_results[stock_row.symbol] = stock_row.result
 
-    # Also set legacy SPY fields on the window itself
+    return stock_results
+
+
+def _score_single_prediction(
+    pred: BountyPrediction, stock_result_value: str,
+    stats: BountyPlayerStats, fx: dict,
+) -> tuple[float, bool]:
+    """Score one prediction using sim mechanics. Returns (notoriety_delta, ghost_triggered)."""
+    is_holster = pred.action_type == "holster"
+    is_correct = (stock_result_value == "HOLD") if is_holster else (pred.prediction == stock_result_value)
+
+    ghost_triggered = False
+    if not is_correct and fx["ghost_chance"] > 0 and random.random() < fx["ghost_chance"]:
+        is_correct = True
+        ghost_triggered = True
+
+    insurance_triggered = False
+    if not is_correct:
+        chance = fx["insurance_chance"]
+        if pred.confidence == 3:
+            chance += fx["de_insurance_chance"]
+        if chance > 0 and random.random() < chance:
+            insurance_triggered = True
+
+    pred.is_correct = is_correct
+    pred.insurance_triggered = insurance_triggered
+
+    bet = pred.bet_amount or 0
+    conf = pred.confidence or bet_to_tier(bet)
+    mult = wanted_multiplier(max(stats.wanted_level, 1))
+    eff_lev = 1 + (pred.leverage - 1) * HOLD_LEVERAGE_FACTOR if is_holster else pred.leverage
+
+    base = _compute_base_points(
+        is_correct, insurance_triggered, is_holster, bet, conf, mult, eff_lev, fx, stats,
+    )
+
+    _check_margin_call(pred, is_correct, insurance_triggered, is_holster, fx, stats)
+
+    pred.base_points = base
+    pred.wanted_multiplier_used = mult
+
+    payout = round(base * fx["score_multiplier"])
+    if is_correct and fx["flat_cash_per_correct"] > 0:
+        payout += fx["flat_cash_per_correct"]
+
+    pred.payout = payout
+    stats.double_dollars += payout
+    if is_correct:
+        stats.correct_predictions += 1
+
+    update_badge_progress(stats, is_correct, conf, is_holster, ghost_triggered, False)
+
+    notoriety_delta = _compute_notoriety_delta(bet, is_correct, fx, pred.leverage)
+    return notoriety_delta, ghost_triggered
+
+
+def _check_margin_call(
+    pred: BountyPrediction, is_correct: bool, insurance_triggered: bool,
+    is_holster: bool, fx: dict, stats: BountyPlayerStats,
+) -> None:
+    """Apply margin call penalty if conditions are met."""
+    if is_correct or insurance_triggered or is_holster or pred.leverage <= 2.0:
+        return
+    mc_chance = max(0, margin_call_chance(pred.leverage) - fx["margin_call_reduction"])
+    if random.random() < mc_chance:
+        pred.margin_call_triggered = True
+        stats.double_dollars -= MARGIN_CALL_PENALTY_DD
+        stats.wanted_level = max(1, stats.wanted_level - MARGIN_CALL_WANTED_DROP)
+        stats.margin_call_cooldown = MARGIN_CALL_COOLDOWN
+
+
+def _compute_notoriety_delta(
+    bet: int, is_correct: bool, fx: dict, leverage: float,
+) -> float:
+    """Compute notoriety change for a single prediction."""
+    notoriety_weight = bet / 33.0 if bet > 0 else 1.0
+    delta = notoriety_weight * (1 if is_correct else -1)
+    if is_correct and fx["notoriety_bonus"] > 0:
+        delta += fx["notoriety_bonus"]
+    if is_correct and leverage >= LEVERAGE_NOTORIETY_BONUS_THRESHOLD:
+        delta += LEVERAGE_NOTORIETY_BONUS
+    return delta
+
+
+def _compute_base_points(
+    is_correct: bool, insurance_triggered: bool, is_holster: bool,
+    bet: int, conf: int, mult: int, eff_lev: float, fx: dict, stats: BountyPlayerStats,
+) -> int:
+    """Compute base score points for a single prediction."""
+    if insurance_triggered:
+        return 0
+    if is_correct:
+        win_val = round(bet * eff_lev * mult)
+        if conf == 1:
+            win_val += fx["draw_win_bonus"] * mult
+        if conf == 2:
+            win_val += fx["qd_win_bonus"] * mult
+        if is_holster:
+            win_val += fx["holster_win_bonus"] * mult
+        win_val += fx["per_level_win_bonus"] * stats.wanted_level * mult
+        if conf == 3 and not is_holster and fx["de_win_multiplier"] > 1:
+            win_val = round(win_val * fx["de_win_multiplier"])
+        return win_val
+
+    lose_val = round(bet * eff_lev)
+    lose_val = max(0, lose_val - fx["all_lose_reduction"])
+    if fx["leverage_loss_shield"] > 0:
+        lose_val = round(lose_val * (1 - fx["leverage_loss_shield"]))
+    if fx["snake_oil"] and is_holster and conf == 1:
+        lose_val = 0
+    return -lose_val
+
+
+async def _evaluate_user_window(
+    db: AsyncSession, user_id: uuid.UUID, window_id: uuid.UUID,
+    stats: BountyPlayerStats, fx: dict, window_notoriety: float,
+) -> None:
+    """Post-window evaluation: notoriety→level, peaks, badges, titles, bust check."""
+    old_level = stats.wanted_level
+    if window_notoriety >= NOTORIETY_UP_THRESHOLD:
+        stats.wanted_level = max(1, stats.wanted_level + 1)
+    elif window_notoriety <= NOTORIETY_DOWN_THRESHOLD:
+        stats.wanted_level = max(1, stats.wanted_level - 1)
+
+    stats.best_streak = max(stats.best_streak, stats.wanted_level)
+    stats.chambers = max(stats.chambers, chambers_for_level(stats.wanted_level))
+    stats.notoriety = window_notoriety
+
+    stats.rounds_played += 1
+    stats.peak_dd = max(stats.peak_dd, stats.double_dollars)
+    stats.peak_wanted_level = max(stats.peak_wanted_level, stats.wanted_level)
+
+    await check_badges(db, stats)
+    await check_titles(db, stats)
+
+    if stats.wanted_level > old_level:
+        await _emit_activity(db, user_id, "level_up", {
+            "new_level": stats.wanted_level,
+            "multiplier": wanted_multiplier(stats.wanted_level),
+        })
+
+    if stats.double_dollars <= 0:
+        revived = False
+        if not stats.saloon_used and fx.get("saloon_door"):
+            stats.saloon_used = True
+            stats.double_dollars = 500
+            revived = True
+        elif not stats.phoenix_used and fx.get("phoenix_feather"):
+            stats.phoenix_used = True
+            stats.double_dollars = 1000
+            revived = True
+
+        if not revived:
+            await _bust_player(db, stats)
+        else:
+            await create_iron_offering(db, user_id, window_id, wanted_level=stats.wanted_level)
+    else:
+        await create_iron_offering(db, user_id, window_id, wanted_level=stats.wanted_level)
+
+
+async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
+    """Settle a bounty window: fetch closing prices, determine results, score with sim mechanics."""
+    window = await db.get(BountyWindow, window_id)
+    if not window or window.is_settled:
+        return
+
+    stock_results = await _settle_window_stocks(db, window_id)
+
+    # Set legacy SPY fields on window
     spy_price = await get_stock_price(db, "SPY")
     if spy_price:
         window.spy_close_price = spy_price
@@ -678,178 +842,29 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
         window.result = stock_results["SPY"]
     else:
         window.result = "UP"
-
     window.is_settled = True
 
-    # Score all predictions by matching symbol — using sim mechanics
+    # Score all predictions grouped by user
     pred_result = await db.execute(
         select(BountyPrediction).where(BountyPrediction.bounty_window_id == window_id)
     )
     predictions = list(pred_result.scalars().all())
 
-    # Group predictions by user for notoriety/iron tracking
     user_predictions: dict[uuid.UUID, list[BountyPrediction]] = {}
     for pred in predictions:
         user_predictions.setdefault(pred.user_id, []).append(pred)
 
-    for user_id, user_preds in user_predictions.items():
-        stats = await get_or_create_player_stats(db, user_id)
-        fx = await get_player_iron_effects(db, user_id)
+    for uid, user_preds in user_predictions.items():
+        stats = await get_or_create_player_stats(db, uid)
+        fx = await get_player_iron_effects(db, uid)
 
         window_notoriety = 0.0
-
         for pred in user_preds:
             stock_result_value = stock_results.get(pred.symbol, window.result)
-            is_holster = pred.action_type == "holster"
+            delta, _ = _score_single_prediction(pred, stock_result_value, stats, fx)
+            window_notoriety += delta
 
-            # Determine correctness
-            if is_holster:
-                # HOLD is correct if result is HOLD (price barely moved)
-                is_correct = stock_result_value == "HOLD"
-            else:
-                is_correct = pred.prediction == stock_result_value
-
-            # Ghost Rider: miss → correct flip
-            ghost_triggered = False
-            if not is_correct and fx["ghost_chance"] > 0 and random.random() < fx["ghost_chance"]:
-                is_correct = True
-                ghost_triggered = True
-
-            # Insurance check (Lucky Horseshoe / Deadeye Scope)
-            insurance_triggered = False
-            if not is_correct:
-                chance = fx["insurance_chance"]
-                if pred.confidence == 3:
-                    chance += fx["de_insurance_chance"]
-                if chance > 0 and random.random() < chance:
-                    insurance_triggered = True
-
-            pred.is_correct = is_correct
-            pred.insurance_triggered = insurance_triggered
-
-            # Calculate scoring — bet-based with leverage
-            bet = pred.bet_amount or 0
-            conf = pred.confidence or bet_to_tier(bet)
-            mult = wanted_multiplier(max(stats.wanted_level, 1))
-
-            # Effective leverage (halved for HOLD)
-            eff_lev = 1 + (pred.leverage - 1) * HOLD_LEVERAGE_FACTOR if is_holster else pred.leverage
-
-            if insurance_triggered:
-                base = 0
-            elif is_correct:
-                win_val = round(bet * eff_lev * mult)
-                # Apply iron win bonuses (scaled by mult already in bet, add flat bonuses)
-                if conf == 1:
-                    win_val += fx["draw_win_bonus"] * mult
-                if conf == 2:
-                    win_val += fx["qd_win_bonus"] * mult
-                if is_holster:
-                    win_val += fx["holster_win_bonus"] * mult
-                win_val += fx["per_level_win_bonus"] * stats.wanted_level * mult
-                # DE Double Barrel
-                if conf == 3 and not is_holster and fx["de_win_multiplier"] > 1:
-                    win_val = round(win_val * fx["de_win_multiplier"])
-                base = win_val
-            else:
-                lose_val = round(bet * eff_lev)
-                # Apply iron loss reduction
-                lose_val = max(0, lose_val - fx["all_lose_reduction"])
-                # Leverage loss shield iron effect
-                if fx["leverage_loss_shield"] > 0:
-                    lose_val = round(lose_val * (1 - fx["leverage_loss_shield"]))
-                # Snake Oil: Draw holster losses = 0
-                if fx["snake_oil"] and is_holster and conf == 1:
-                    lose_val = 0
-                base = -lose_val
-
-                # Margin call check (not for HOLD, not for insurance)
-                if not is_holster and not insurance_triggered and pred.leverage > 2.0:
-                    mc_chance = margin_call_chance(pred.leverage)
-                    # Apply iron margin call reduction
-                    mc_chance = max(0, mc_chance - fx["margin_call_reduction"])
-                    if random.random() < mc_chance:
-                        pred.margin_call_triggered = True
-                        stats.double_dollars -= MARGIN_CALL_PENALTY_DD
-                        stats.wanted_level = max(1, stats.wanted_level - MARGIN_CALL_WANTED_DROP)
-                        stats.margin_call_cooldown = MARGIN_CALL_COOLDOWN
-
-            pred.base_points = base
-            pred.wanted_multiplier_used = mult
-
-            payout = round(base * fx["score_multiplier"])
-
-            # Flat cash bonus (unscaled)
-            if is_correct and fx["flat_cash_per_correct"] > 0:
-                payout += fx["flat_cash_per_correct"]
-
-            pred.payout = payout
-            stats.double_dollars += payout
-
-            if is_correct:
-                stats.correct_predictions += 1
-
-            # Badge progress tracking
-            update_badge_progress(stats, is_correct, conf, is_holster, ghost_triggered, False)
-
-            # Notoriety accumulation: bet_amount / 33 to scale into ~0-3 range
-            notoriety_weight = bet / 33.0 if bet > 0 else 1.0
-            notoriety_delta = notoriety_weight * (1 if is_correct else -1)
-            if is_correct and fx["notoriety_bonus"] > 0:
-                notoriety_delta += fx["notoriety_bonus"]
-            # Leverage notoriety bonus for high-leverage correct picks
-            if is_correct and pred.leverage >= LEVERAGE_NOTORIETY_BONUS_THRESHOLD:
-                notoriety_delta += LEVERAGE_NOTORIETY_BONUS
-            window_notoriety += notoriety_delta
-
-        # End of window for this user: evaluate notoriety → wanted level
-        if window_notoriety >= NOTORIETY_UP_THRESHOLD:
-            stats.wanted_level = max(1, stats.wanted_level + 1)
-        elif window_notoriety <= NOTORIETY_DOWN_THRESHOLD:
-            stats.wanted_level = max(1, stats.wanted_level - 1)
-
-        old_level = stats.wanted_level
-        stats.best_streak = max(stats.best_streak, stats.wanted_level)
-        stats.chambers = max(stats.chambers, chambers_for_level(stats.wanted_level))
-        stats.notoriety = window_notoriety
-
-        # P1-A: Update run tracking peaks
-        stats.rounds_played += 1
-        stats.peak_dd = max(stats.peak_dd, stats.double_dollars)
-        stats.peak_wanted_level = max(stats.peak_wanted_level, stats.wanted_level)
-
-        # P1-B/C: Check badges and titles after settlement
-        await check_badges(db, stats)
-        await check_titles(db, stats)
-
-        # Emit level-up activity event
-        if stats.wanted_level > old_level:
-            await _emit_activity(db, user_id, "level_up", {
-                "new_level": stats.wanted_level,
-                "multiplier": wanted_multiplier(stats.wanted_level),
-            })
-
-        # Check bust — but check revival irons first
-        if stats.double_dollars <= 0:
-            revived = False
-            # Saloon Door: first bust per run, survive with $500 (or $1000 boosted)
-            if not stats.saloon_used and fx.get("saloon_door"):
-                stats.saloon_used = True
-                stats.double_dollars = 500
-                revived = True
-            # Phoenix Feather: revive at $1000 (or $2000 boosted)
-            elif not stats.phoenix_used and fx.get("phoenix_feather"):
-                stats.phoenix_used = True
-                stats.double_dollars = 1000
-                revived = True
-
-            if not revived:
-                await _bust_player(db, stats)
-            else:
-                await create_iron_offering(db, user_id, window_id, wanted_level=stats.wanted_level)
-        else:
-            # Alive — create iron offering
-            await create_iron_offering(db, user_id, window_id, wanted_level=stats.wanted_level)
+        await _evaluate_user_window(db, uid, window_id, stats, fx, window_notoriety)
 
     await db.commit()
 
@@ -1014,14 +1029,73 @@ def _stats_to_response(stats: BountyPlayerStats) -> dict:
     }
 
 
+async def _fetch_spy_candles(db: AsyncSession) -> list[dict]:
+    """Fetch SPY candles from Yahoo, falling back to self-logged prices."""
+    candles = await fetch_chart_cached("SPY")
+    if not candles:
+        now_utc = datetime.now(timezone.utc)
+        two_hours_ago = now_utc - timedelta(hours=2)
+        log_result = await db.execute(
+            select(SpyPriceLog)
+            .where(SpyPriceLog.recorded_at >= two_hours_ago)
+            .order_by(SpyPriceLog.recorded_at)
+        )
+        candles = [
+            {"timestamp": int(row.recorded_at.timestamp()), "close": float(row.price)}
+            for row in log_result.scalars().all()
+        ]
+
+    quote = await fetch_quote("SPY")
+    if quote:
+        db.add(SpyPriceLog(price=quote["c"]))
+        await db.commit()
+    return candles
+
+
+async def _build_stocks_status(
+    db: AsyncSession, user_id: uuid.UUID, window: BountyWindow,
+) -> list[dict]:
+    """Build per-stock status list with charts and user picks for the window."""
+    stock_result = await db.execute(
+        select(BountyWindowStock).where(BountyWindowStock.bounty_window_id == window.id)
+    )
+    stock_rows = list(stock_result.scalars().all())
+
+    pred_result = await db.execute(
+        select(BountyPrediction).where(
+            BountyPrediction.user_id == user_id,
+            BountyPrediction.bounty_window_id == window.id,
+        )
+    )
+    user_preds = {p.symbol: p for p in pred_result.scalars().all()}
+
+    chart_tasks = [fetch_chart_cached(sr.symbol) for sr in stock_rows]
+    all_candles = await asyncio.gather(*chart_tasks)
+
+    stocks_status = []
+    for stock_row, stock_candles in zip(stock_rows, all_candles):
+        stock_pick = user_preds.get(stock_row.symbol)
+        stock_active = await db.get(StockActive, stock_row.symbol)
+        name = stock_active.name if stock_active and stock_active.name else STOCK_NAMES.get(stock_row.symbol, stock_row.symbol)
+
+        stocks_status.append({
+            "symbol": stock_row.symbol,
+            "name": name,
+            "open_price": float(stock_row.open_price) if stock_row.open_price else None,
+            "close_price": float(stock_row.close_price) if stock_row.close_price else None,
+            "result": stock_row.result,
+            "is_settled": stock_row.is_settled,
+            "candles": stock_candles,
+            "my_pick": _pick_to_response(stock_pick) if stock_pick else None,
+        })
+    return stocks_status
+
+
 async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
     """Assemble the main polling response."""
-    # Ensure today's windows exist
     await get_or_create_today_windows(db)
-
     current = await get_current_window(db)
 
-    # Record open price if not set yet
     if current and current.spy_open_price is None:
         await record_window_open_price(db, current.id)
         await db.refresh(current)
@@ -1041,81 +1115,13 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         if pred:
             previous_pick = _pick_to_response(pred)
 
-    # Check for pending iron offering
     pending = await get_pending_offering(db, user_id)
+    candles = await _fetch_spy_candles(db) if current else []
+    stocks_status = await _build_stocks_status(db, user_id, current) if current else []
 
-    # Fetch SPY chart: Yahoo Finance (2h of 1-min data), fallback to self-logged prices
-    candles = []
-    if current:
-        candles = await fetch_chart_cached("SPY")
-
-        # Fallback: use self-logged prices if Yahoo fails
-        if not candles:
-            now_utc = datetime.now(timezone.utc)
-            two_hours_ago = now_utc - timedelta(hours=2)
-            log_result = await db.execute(
-                select(SpyPriceLog)
-                .where(SpyPriceLog.recorded_at >= two_hours_ago)
-                .order_by(SpyPriceLog.recorded_at)
-            )
-            candles = [
-                {"timestamp": int(row.recorded_at.timestamp()), "close": float(row.price)}
-                for row in log_result.scalars().all()
-            ]
-
-        # Still log current price for fallback data
-        quote = await fetch_quote("SPY")
-        if quote:
-            db.add(SpyPriceLog(price=quote["c"]))
-            await db.commit()
-
-    # Build per-stock status
-    stocks_status = []
-    if current:
-        stock_result = await db.execute(
-            select(BountyWindowStock).where(
-                BountyWindowStock.bounty_window_id == current.id
-            )
-        )
-        stock_rows = list(stock_result.scalars().all())
-
-        # Get all user predictions for this window
-        pred_result = await db.execute(
-            select(BountyPrediction).where(
-                BountyPrediction.user_id == user_id,
-                BountyPrediction.bounty_window_id == current.id,
-            )
-        )
-        user_preds = {p.symbol: p for p in pred_result.scalars().all()}
-
-        # Fetch all stock charts in parallel
-        chart_tasks = [fetch_chart_cached(sr.symbol) for sr in stock_rows]
-        all_candles = await asyncio.gather(*chart_tasks)
-
-        for stock_row, stock_candles in zip(stock_rows, all_candles):
-            stock_pick = user_preds.get(stock_row.symbol)
-
-            # Dynamic name: try StockActive, fallback to hardcoded
-            stock_active = await db.get(StockActive, stock_row.symbol)
-            name = stock_active.name if stock_active and stock_active.name else STOCK_NAMES.get(stock_row.symbol, stock_row.symbol)
-
-            stocks_status.append({
-                "symbol": stock_row.symbol,
-                "name": name,
-                "open_price": float(stock_row.open_price) if stock_row.open_price else None,
-                "close_price": float(stock_row.close_price) if stock_row.close_price else None,
-                "result": stock_row.result,
-                "is_settled": stock_row.is_settled,
-                "candles": stock_candles,
-                "my_pick": _pick_to_response(stock_pick) if stock_pick else None,
-            })
-
-    # Compute ante cost and skip cost for client display
     ante_cost = max(0, ANTE_BASE - fx["ante_reduction"])
     raw_skip = calc_skip_cost(stats.skip_count_this_window + 1, stats.double_dollars)
     next_skip_cost = max(1, round(raw_skip * (1 - fx["skip_discount"])))
-
-    # Get equipped irons
     equipped_irons = await get_equipped_irons(db, user_id)
 
     stats_response = _stats_to_response(stats)
@@ -1140,67 +1146,67 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
 async def get_bounty_board(db: AsyncSession, period: str = "alltime") -> list[dict]:
     """Return ranked bounty leaderboard."""
     if period == "weekly":
-        # Sum payouts from this week's predictions
-        now_et = datetime.now(ET)
-        week_start = now_et.date() - timedelta(days=now_et.weekday())
-        week_start_dt = datetime.combine(week_start, time(0, 0), tzinfo=ET)
+        return await _weekly_board(db)
+    return await _alltime_board(db)
 
-        result = await db.execute(
-            select(
-                User.alias,
-                func.coalesce(func.sum(BountyPrediction.payout), 0).label("weekly_dollars"),
-                func.count(BountyPrediction.id).label("total"),
-                func.count(BountyPrediction.id).filter(
-                    BountyPrediction.is_correct == True
-                ).label("correct"),
-            )
-            .join(BountyPrediction, User.id == BountyPrediction.user_id)
-            .where(BountyPrediction.created_at >= week_start_dt)
-            .group_by(User.id, User.alias)
-            .order_by(func.coalesce(func.sum(BountyPrediction.payout), 0).desc())
+
+async def _weekly_board(db: AsyncSession) -> list[dict]:
+    """Build weekly leaderboard from this week's prediction payouts."""
+    now_et = datetime.now(ET)
+    week_start = now_et.date() - timedelta(days=now_et.weekday())
+    week_start_dt = datetime.combine(week_start, time(0, 0), tzinfo=ET)
+
+    result = await db.execute(
+        select(
+            User.alias,
+            func.coalesce(func.sum(BountyPrediction.payout), 0).label("weekly_dollars"),
+            func.count(BountyPrediction.id).label("total"),
+            func.count(BountyPrediction.id).filter(
+                BountyPrediction.is_correct == True
+            ).label("correct"),
         )
-        rows = result.all()
+        .join(BountyPrediction, User.id == BountyPrediction.user_id)
+        .where(BountyPrediction.created_at >= week_start_dt)
+        .group_by(User.id, User.alias)
+        .order_by(func.coalesce(func.sum(BountyPrediction.payout), 0).desc())
+    )
+    board = []
+    for i, row in enumerate(result.all(), start=1):
+        total = row.total or 0
+        correct = row.correct or 0
+        board.append({
+            "rank": i, "alias": row.alias,
+            "double_dollars": int(row.weekly_dollars),
+            "accuracy_pct": round(correct / total * 100, 1) if total > 0 else 0.0,
+            "wanted_level": 0, "total_predictions": total,
+        })
+    return board
 
-        board = []
-        for i, row in enumerate(rows, start=1):
-            total = row.total or 0
-            correct = row.correct or 0
-            board.append({
-                "rank": i,
-                "alias": row.alias,
-                "double_dollars": int(row.weekly_dollars),
-                "accuracy_pct": round(correct / total * 100, 1) if total > 0 else 0.0,
-                "wanted_level": 0,
-                "total_predictions": total,
-            })
-        return board
-    else:
-        # All-time: use bounty_player_stats, sorted by best_run_score
-        result = await db.execute(
-            select(User.alias, BountyPlayerStats)
-            .join(BountyPlayerStats, User.id == BountyPlayerStats.user_id)
-            .where(BountyPlayerStats.total_predictions > 0)
-            .order_by(BountyPlayerStats.best_run_score.desc())
-        )
-        rows = result.all()
 
-        board = []
-        for i, row in enumerate(rows, start=1):
-            stats = row[1]
-            title_name = TITLE_DEFS_BY_ID.get(stats.active_title or "drifter", {}).get("name", "Drifter")
-            board.append({
-                "rank": i,
-                "alias": row.alias,
-                "double_dollars": stats.double_dollars,
-                "accuracy_pct": round(
-                    stats.correct_predictions / stats.total_predictions * 100, 1
-                ) if stats.total_predictions > 0 else 0.0,
-                "wanted_level": stats.wanted_level,
-                "total_predictions": stats.total_predictions,
-                "best_run_score": stats.best_run_score,
-                "title": title_name,
-            })
-        return board
+async def _alltime_board(db: AsyncSession) -> list[dict]:
+    """Build all-time leaderboard from bounty_player_stats."""
+    result = await db.execute(
+        select(User.alias, BountyPlayerStats)
+        .join(BountyPlayerStats, User.id == BountyPlayerStats.user_id)
+        .where(BountyPlayerStats.total_predictions > 0)
+        .order_by(BountyPlayerStats.best_run_score.desc())
+    )
+    board = []
+    for i, row in enumerate(result.all(), start=1):
+        stats = row[1]
+        title_name = TITLE_DEFS_BY_ID.get(stats.active_title or "drifter", {}).get("name", "Drifter")
+        board.append({
+            "rank": i, "alias": row.alias,
+            "double_dollars": stats.double_dollars,
+            "accuracy_pct": round(
+                stats.correct_predictions / stats.total_predictions * 100, 1
+            ) if stats.total_predictions > 0 else 0.0,
+            "wanted_level": stats.wanted_level,
+            "total_predictions": stats.total_predictions,
+            "best_run_score": stats.best_run_score,
+            "title": title_name,
+        })
+    return board
 
 
 async def fetch_chart_yahoo(symbol: str = "SPY") -> list[dict]:
@@ -1269,11 +1275,8 @@ async def get_prediction_history(
 # Time slot stats are grouped by hour for display
 
 
-async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
-    """Build detailed analytics for a player."""
-    stats = await get_or_create_player_stats(db, user_id)
-
-    # --- Confidence stats ---
+async def _get_confidence_stats(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+    """Accuracy breakdown by confidence tier (Draw/QD/DE)."""
     conf_result = await db.execute(
         select(
             BountyPrediction.confidence,
@@ -1285,32 +1288,31 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         .where(BountyPrediction.user_id == user_id, BountyPrediction.is_correct.isnot(None))
         .group_by(BountyPrediction.confidence)
     )
-    confidence_stats = []
+    stats_list = []
     for row in conf_result.all():
         total = row.total or 0
         correct = row.correct or 0
-        confidence_stats.append({
+        stats_list.append({
             "confidence": row.confidence,
             "label": CONFIDENCE_LABELS[row.confidence],
-            "total": total,
-            "correct": correct,
+            "total": total, "correct": correct,
             "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
         })
-    # Fill in missing confidence levels
-    existing = {c["confidence"] for c in confidence_stats}
+    existing = {c["confidence"] for c in stats_list}
     for conf in (1, 2, 3):
         if conf not in existing:
-            confidence_stats.append({
+            stats_list.append({
                 "confidence": conf, "label": CONFIDENCE_LABELS[conf],
                 "total": 0, "correct": 0, "win_rate": 0.0,
             })
-    confidence_stats.sort(key=lambda c: c["confidence"])
+    stats_list.sort(key=lambda c: c["confidence"])
+    return stats_list
 
-    # --- Time slot stats (grouped into 2-hour ET buckets) ---
-    # Extract ET hour from UTC start_time
+
+async def _get_time_slot_stats(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+    """Accuracy breakdown by 2-hour ET time slot."""
     et_hour_col = func.extract(
-        "hour",
-        func.timezone("America/New_York", BountyWindow.start_time)
+        "hour", func.timezone("America/New_York", BountyWindow.start_time)
     ).cast(Integer)
 
     slot_result = await db.execute(
@@ -1325,26 +1327,24 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         .where(BountyPrediction.user_id == user_id, BountyPrediction.is_correct.isnot(None))
         .group_by(et_hour_col)
     )
-    # Collect per-hour data
     hour_data = {int(row.et_hour): (row.total or 0, row.correct or 0) for row in slot_result.all()}
 
-    # Always show all 6 standard 2-hour slots, summing both hours in each slot
-    TIME_SLOTS = [(9, "9 AM"), (11, "11 AM"), (13, "1 PM"), (15, "3 PM"), (17, "5 PM"), (19, "7 PM")]
-    time_slot_stats = []
-    for i, (slot_hour, label) in enumerate(TIME_SLOTS, start=1):
+    slots = ((9, "9 AM"), (11, "11 AM"), (13, "1 PM"), (15, "3 PM"), (17, "5 PM"), (19, "7 PM"))
+    result = []
+    for i, (slot_hour, label) in enumerate(slots, start=1):
         t1, c1 = hour_data.get(slot_hour, (0, 0))
         t2, c2 = hour_data.get(slot_hour + 1, (0, 0))
-        total = t1 + t2
-        correct = c1 + c2
-        time_slot_stats.append({
-            "window_index": i,
-            "time_label": label,
-            "total": total,
-            "correct": correct,
+        total, correct = t1 + t2, c1 + c2
+        result.append({
+            "window_index": i, "time_label": label,
+            "total": total, "correct": correct,
             "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
         })
+    return result
 
-    # --- Ticker stats ---
+
+async def _get_ticker_stats(db: AsyncSession, user_id: uuid.UUID) -> list[dict]:
+    """Accuracy breakdown by stock ticker."""
     ticker_result = await db.execute(
         select(
             BountyPrediction.symbol,
@@ -1356,19 +1356,20 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         .where(BountyPrediction.user_id == user_id, BountyPrediction.is_correct.isnot(None))
         .group_by(BountyPrediction.symbol)
     )
-    ticker_stats = []
+    result = []
     for row in ticker_result.all():
         total = row.total or 0
         correct = row.correct or 0
-        ticker_stats.append({
-            "symbol": row.symbol,
-            "total": total,
-            "correct": correct,
+        result.append({
+            "symbol": row.symbol, "total": total, "correct": correct,
             "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
         })
-    ticker_stats.sort(key=lambda t: t["symbol"])
+    result.sort(key=lambda t: t["symbol"])
+    return result
 
-    # --- Weekly trend ---
+
+async def _get_weekly_trend(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """This week vs last week payout comparison."""
     now_et = datetime.now(ET)
     this_week_start = now_et.date() - timedelta(days=now_et.weekday())
     last_week_start = this_week_start - timedelta(days=7)
@@ -1379,7 +1380,7 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         select(func.coalesce(func.sum(BountyPrediction.payout), 0))
         .where(BountyPrediction.user_id == user_id, BountyPrediction.created_at >= this_week_dt)
     )
-    this_week_total = int(tw_result.scalar() or 0)
+    this_week = int(tw_result.scalar() or 0)
 
     lw_result = await db.execute(
         select(func.coalesce(func.sum(BountyPrediction.payout), 0))
@@ -1389,18 +1390,24 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
             BountyPrediction.created_at < this_week_dt,
         )
     )
-    last_week_total = int(lw_result.scalar() or 0)
+    last_week = int(lw_result.scalar() or 0)
+    return {"this_week": this_week, "last_week": last_week, "change": this_week - last_week}
 
-    # --- Board rank ---
+
+async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """Build detailed analytics for a player."""
+    stats = await get_or_create_player_stats(db, user_id)
+
+    confidence_stats = await _get_confidence_stats(db, user_id)
+    time_slot_stats = await _get_time_slot_stats(db, user_id)
+    ticker_stats = await _get_ticker_stats(db, user_id)
+    weekly_trend = await _get_weekly_trend(db, user_id)
+
     rank_result = await db.execute(
         select(func.count(BountyPlayerStats.id))
         .where(BountyPlayerStats.double_dollars > stats.double_dollars)
     )
     rank = (rank_result.scalar() or 0) + 1 if stats.total_predictions > 0 else None
-
-    # --- Wanted level progress ---
-    progress_pct = round(stats.wanted_level / WANTED_LEVEL_CAP * 100, 1)
-
     accuracy = (
         round(stats.correct_predictions / stats.total_predictions * 100, 1)
         if stats.total_predictions > 0 else 0.0
@@ -1416,16 +1423,12 @@ async def get_detailed_stats(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "confidence_stats": confidence_stats,
         "time_slot_stats": time_slot_stats,
         "ticker_stats": ticker_stats,
-        "weekly_trend": {
-            "this_week": this_week_total,
-            "last_week": last_week_total,
-            "change": this_week_total - last_week_total,
-        },
+        "weekly_trend": weekly_trend,
         "board_rank": rank,
         "wanted_level_progress": {
             "current_level": stats.wanted_level,
             "max_level": WANTED_LEVEL_CAP,
-            "progress_pct": progress_pct,
+            "progress_pct": round(stats.wanted_level / WANTED_LEVEL_CAP * 100, 1),
         },
     }
 
@@ -1516,69 +1519,68 @@ async def get_run_history(
 # P1-B: Badges
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _badge_requirement_met(
+    req: dict, stats: BountyPlayerStats, progress: dict,
+) -> bool:
+    """Check if a single badge requirement is met."""
+    rtype = req["type"]
+    if rtype == "wanted_level":
+        return stats.wanted_level >= req["value"]
+    if rtype == "peak_dd":
+        return stats.peak_dd >= req["value"]
+    if rtype == "chambers_full":
+        return stats.chambers >= req["value"]
+    if rtype == "daily_streak":
+        return stats.current_streak >= req["value"]
+    if rtype == "comeback":
+        return progress.get("hit_low", False) and stats.double_dollars >= req["high"]
+    # Progress-counter types
+    progress_keys = {
+        "correct_streak": "current_correct_streak",
+        "qd_streak": "current_qd_streak",
+        "de_streak": "current_de_streak",
+        "no_skip_rounds": "no_skip_rounds",
+        "hold_wins_run": "hold_wins_run",
+        "ghost_triggers_run": "ghost_triggers_run",
+    }
+    key = progress_keys.get(rtype)
+    if key is not None:
+        return progress.get(key, 0) >= req["value"]
+    return False
+
+
 async def check_badges(
     db: AsyncSession, stats: BountyPlayerStats, settlement_context: dict | None = None
 ) -> list[str]:
-    """Check all badge conditions and award any newly earned badges. Returns list of newly earned badge IDs."""
-    # Load already-earned badges
+    """Check all badge conditions and award any newly earned badges."""
     result = await db.execute(
         select(BountyBadge.badge_id).where(BountyBadge.user_id == stats.user_id)
     )
     earned_ids = set(result.scalars().all())
     newly_earned = []
-
-    # Load badge progress
     progress = json.loads(stats.badge_progress) if stats.badge_progress else {}
 
     for badge_def in BADGE_DEFS:
         bid = badge_def["id"]
         if bid in earned_ids:
             continue
+        if not _badge_requirement_met(badge_def["requirement"], stats, progress):
+            continue
 
-        req = badge_def["requirement"]
-        earned = False
+        badge = BountyBadge(
+            user_id=stats.user_id, badge_id=bid,
+            run_context=json.dumps({
+                "dd": stats.double_dollars, "level": stats.wanted_level,
+                "peak_dd": stats.peak_dd,
+            }),
+        )
+        db.add(badge)
+        newly_earned.append(bid)
+        await _emit_activity(db, stats.user_id, "badge_earned", {
+            "badge_id": bid, "badge_name": badge_def["name"],
+        })
 
-        if req["type"] == "wanted_level":
-            earned = stats.wanted_level >= req["value"]
-        elif req["type"] == "peak_dd":
-            earned = stats.peak_dd >= req["value"]
-        elif req["type"] == "chambers_full":
-            earned = stats.chambers >= req["value"]
-        elif req["type"] == "correct_streak":
-            earned = progress.get("current_correct_streak", 0) >= req["value"]
-        elif req["type"] == "qd_streak":
-            earned = progress.get("current_qd_streak", 0) >= req["value"]
-        elif req["type"] == "de_streak":
-            earned = progress.get("current_de_streak", 0) >= req["value"]
-        elif req["type"] == "no_skip_rounds":
-            earned = progress.get("no_skip_rounds", 0) >= req["value"]
-        elif req["type"] == "hold_wins_run":
-            earned = progress.get("hold_wins_run", 0) >= req["value"]
-        elif req["type"] == "ghost_triggers_run":
-            earned = progress.get("ghost_triggers_run", 0) >= req["value"]
-        elif req["type"] == "comeback":
-            earned = (progress.get("hit_low", False) and stats.double_dollars >= req["high"])
-        elif req["type"] == "daily_streak":
-            earned = stats.current_streak >= req["value"]
-
-        if earned:
-            badge = BountyBadge(
-                user_id=stats.user_id,
-                badge_id=bid,
-                run_context=json.dumps({
-                    "dd": stats.double_dollars, "level": stats.wanted_level,
-                    "peak_dd": stats.peak_dd,
-                }),
-            )
-            db.add(badge)
-            newly_earned.append(bid)
-            await _emit_activity(db, stats.user_id, "badge_earned", {
-                "badge_id": bid, "badge_name": badge_def["name"],
-            })
-
-    # Save updated progress
     stats.badge_progress = json.dumps(progress)
-
     return newly_earned
 
 
@@ -1676,77 +1678,61 @@ async def get_badge_progress(db: AsyncSession, user_id: uuid.UUID) -> dict:
 # P1-C: Titles
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _check_title_requirements(
+    reqs: dict, stats: BountyPlayerStats,
+    runs: list, earned_badges: set, unlocked_ids: set,
+) -> bool:
+    """Evaluate whether all title requirements are met."""
+    if "runs_at_level_5" in reqs:
+        if sum(1 for r in runs if r.peak_wanted_level >= 5) < reqs["runs_at_level_5"]:
+            return False
+    if "runs_at_level_8" in reqs:
+        if sum(1 for r in runs if r.peak_wanted_level >= 8) < reqs["runs_at_level_8"]:
+            return False
+    if "accuracy_over_runs" in reqs:
+        aor = reqs["accuracy_over_runs"]
+        if len(runs) < aor["min_runs"]:
+            return False
+        avg_acc = sum(r.accuracy for r in runs[-aor["min_runs"]:]) / aor["min_runs"]
+        if avg_acc < aor["min_accuracy"]:
+            return False
+    if "badge" in reqs and reqs["badge"] not in earned_badges:
+        return False
+    if "lifetime_dd" in reqs and stats.lifetime_dd_earned < reqs["lifetime_dd"]:
+        return False
+    if "badge_count" in reqs and len(earned_badges) < reqs["badge_count"]:
+        return False
+    if "best_run_score" in reqs and stats.best_run_score < reqs["best_run_score"]:
+        return False
+    if "title" in reqs and reqs["title"] not in unlocked_ids:
+        return False
+    return True
+
+
 async def check_titles(db: AsyncSession, stats: BountyPlayerStats) -> list[str]:
     """Check and unlock any newly qualified titles. Returns list of newly unlocked title IDs."""
-    # Load already-unlocked titles
     result = await db.execute(
         select(BountyTitle.title_id).where(BountyTitle.user_id == stats.user_id)
     )
     unlocked_ids = set(result.scalars().all())
 
-    # Load earned badges
     badge_result = await db.execute(
         select(BountyBadge.badge_id).where(BountyBadge.user_id == stats.user_id)
     )
     earned_badges = set(badge_result.scalars().all())
 
-    # Load run history for cross-run requirements
     run_result = await db.execute(
         select(BountyRunHistory).where(BountyRunHistory.user_id == stats.user_id)
     )
     runs = list(run_result.scalars().all())
 
     newly_unlocked = []
-
     for title_def in TITLE_DEFS:
         tid = title_def["id"]
         if tid == "drifter" or tid in unlocked_ids:
             continue
 
-        reqs = title_def["requirements"]
-        qualified = True
-
-        # Check each requirement
-        if "runs_at_level_5" in reqs:
-            count = sum(1 for r in runs if r.peak_wanted_level >= 5)
-            if count < reqs["runs_at_level_5"]:
-                qualified = False
-
-        if "runs_at_level_8" in reqs:
-            count = sum(1 for r in runs if r.peak_wanted_level >= 8)
-            if count < reqs["runs_at_level_8"]:
-                qualified = False
-
-        if "accuracy_over_runs" in reqs:
-            aor = reqs["accuracy_over_runs"]
-            if len(runs) < aor["min_runs"]:
-                qualified = False
-            else:
-                avg_acc = sum(r.accuracy for r in runs[-aor["min_runs"]:]) / aor["min_runs"]
-                if avg_acc < aor["min_accuracy"]:
-                    qualified = False
-
-        if "badge" in reqs:
-            if reqs["badge"] not in earned_badges:
-                qualified = False
-
-        if "lifetime_dd" in reqs:
-            if stats.lifetime_dd_earned < reqs["lifetime_dd"]:
-                qualified = False
-
-        if "badge_count" in reqs:
-            if len(earned_badges) < reqs["badge_count"]:
-                qualified = False
-
-        if "best_run_score" in reqs:
-            if stats.best_run_score < reqs["best_run_score"]:
-                qualified = False
-
-        if "title" in reqs:
-            if reqs["title"] not in unlocked_ids:
-                qualified = False
-
-        if qualified:
+        if _check_title_requirements(title_def["requirements"], stats, runs, earned_badges, unlocked_ids):
             title = BountyTitle(user_id=stats.user_id, title_id=tid)
             db.add(title)
             unlocked_ids.add(tid)
@@ -2016,15 +2002,8 @@ def detect_stock_event() -> tuple[str | None, str | None]:
 # P2-C: Post-Settlement Analysis
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def get_settlement_analysis(
-    db: AsyncSession, window_id: uuid.UUID, user_id: uuid.UUID
-) -> dict:
-    """Get post-settlement analysis for a window."""
-    window = await db.get(BountyWindow, window_id)
-    if not window or not window.is_settled:
-        return {"settled": False}
-
-    # Get per-stock results
+async def _get_window_stock_analysis(db: AsyncSession, window_id: uuid.UUID) -> list[dict]:
+    """Build per-stock result dicts for settlement analysis."""
     stock_result = await db.execute(
         select(BountyWindowStock).where(BountyWindowStock.bounty_window_id == window_id)
     )
@@ -2035,57 +2014,58 @@ async def get_settlement_analysis(
             pct_change = round(
                 (float(sr.close_price) - float(sr.open_price)) / float(sr.open_price) * 100, 3
             )
-
         context = json.loads(sr.settlement_context) if sr.settlement_context else {}
         stocks.append({
             "symbol": sr.symbol,
             "open_price": float(sr.open_price) if sr.open_price else None,
             "close_price": float(sr.close_price) if sr.close_price else None,
-            "pct_change": pct_change,
-            "result": sr.result,
-            "context": context,
+            "pct_change": pct_change, "result": sr.result, "context": context,
         })
+    return stocks
 
-    # Get aggregate prediction stats for this window
+
+async def _get_prediction_aggregates(db: AsyncSession, window_id: uuid.UUID) -> dict:
+    """Aggregate prediction counts per symbol per direction for a window."""
     agg_result = await db.execute(
-        select(
-            BountyPrediction.symbol,
-            BountyPrediction.prediction,
-            func.count().label("cnt"),
-        )
+        select(BountyPrediction.symbol, BountyPrediction.prediction, func.count().label("cnt"))
         .where(BountyPrediction.bounty_window_id == window_id)
         .group_by(BountyPrediction.symbol, BountyPrediction.prediction)
     )
-    prediction_aggs = {}
+    aggs: dict[str, dict] = {}
     for row in agg_result.all():
-        sym = row.symbol
-        if sym not in prediction_aggs:
-            prediction_aggs[sym] = {}
-        prediction_aggs[sym][row.prediction] = row.cnt
+        aggs.setdefault(row.symbol, {})[row.prediction] = row.cnt
+    return aggs
 
-    # Get user's predictions for this window
+
+async def get_settlement_analysis(
+    db: AsyncSession, window_id: uuid.UUID, user_id: uuid.UUID
+) -> dict:
+    """Get post-settlement analysis for a window."""
+    window = await db.get(BountyWindow, window_id)
+    if not window or not window.is_settled:
+        return {"settled": False}
+
+    stocks = await _get_window_stock_analysis(db, window_id)
+    prediction_aggs = await _get_prediction_aggregates(db, window_id)
+
     user_pred_result = await db.execute(
         select(BountyPrediction).where(
             BountyPrediction.bounty_window_id == window_id,
             BountyPrediction.user_id == user_id,
         )
     )
-    user_predictions = []
-    for p in user_pred_result.scalars().all():
-        user_predictions.append({
-            "symbol": p.symbol,
-            "prediction": p.prediction,
-            "confidence": p.confidence,
-            "is_correct": p.is_correct,
-            "payout": p.payout,
-            "leverage": p.leverage,
-        })
+    user_predictions = [
+        {
+            "symbol": p.symbol, "prediction": p.prediction,
+            "confidence": p.confidence, "is_correct": p.is_correct,
+            "payout": p.payout, "leverage": p.leverage,
+        }
+        for p in user_pred_result.scalars().all()
+    ]
 
     return {
-        "settled": True,
-        "window_id": str(window_id),
-        "stocks": stocks,
-        "prediction_aggregates": prediction_aggs,
+        "settled": True, "window_id": str(window_id),
+        "stocks": stocks, "prediction_aggregates": prediction_aggs,
         "my_predictions": user_predictions,
     }
 
@@ -2094,13 +2074,68 @@ async def get_settlement_analysis(
 # P2-D: Performance Analytics Dashboard
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def get_performance_analytics(db: AsyncSession, user_id: uuid.UUID) -> dict:
-    """Extended analytics: accuracy by sector, confidence, leverage, rolling trends."""
-    stats = await get_or_create_player_stats(db, user_id)
-    now_utc = datetime.now(timezone.utc)
-    seven_days_ago = now_utc - timedelta(days=7)
+def _win_rate_stat(preds: list) -> dict:
+    """Compute total/correct/win_rate for a list of predictions."""
+    total = len(preds)
+    correct = sum(1 for p in preds if p.is_correct)
+    return {
+        "total": total, "correct": correct,
+        "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
+    }
 
-    # All user predictions
+
+def _analytics_leverage_stats(all_preds: list) -> dict:
+    """Accuracy with leverage vs without."""
+    return {
+        "with_leverage": _win_rate_stat([p for p in all_preds if p.leverage > 1.0]),
+        "without_leverage": _win_rate_stat([p for p in all_preds if p.leverage <= 1.0]),
+    }
+
+
+def _analytics_time_stats(all_preds: list) -> list[dict]:
+    """Accuracy by 2-hour ET time bucket."""
+    buckets: dict[str, dict] = {}
+    for p in all_preds:
+        et_time = p.created_at.astimezone(ET) if p.created_at else None
+        if not et_time:
+            continue
+        hour = (et_time.hour // 2) * 2
+        label = f"{hour}:00-{hour + 2}:00 ET"
+        if label not in buckets:
+            buckets[label] = {"total": 0, "correct": 0}
+        buckets[label]["total"] += 1
+        if p.is_correct:
+            buckets[label]["correct"] += 1
+
+    return [
+        {"time_slot": label, **data,
+         "win_rate": round(data["correct"] / data["total"] * 100, 1) if data["total"] > 0 else 0.0}
+        for label, data in sorted(buckets.items())
+    ]
+
+
+def _analytics_rolling_trend(all_preds: list, cutoff: datetime) -> list[dict]:
+    """Rolling 7-day daily accuracy trend."""
+    daily: dict[str, dict] = {}
+    for p in all_preds:
+        if not p.created_at or p.created_at < cutoff:
+            continue
+        day = p.created_at.astimezone(ET).date().isoformat()
+        if day not in daily:
+            daily[day] = {"total": 0, "correct": 0}
+        daily[day]["total"] += 1
+        if p.is_correct:
+            daily[day]["correct"] += 1
+
+    return [
+        {"date": day, **data,
+         "win_rate": round(data["correct"] / data["total"] * 100, 1) if data["total"] > 0 else 0.0}
+        for day, data in sorted(daily.items())
+    ]
+
+
+async def get_performance_analytics(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """Extended analytics: accuracy by confidence, leverage, time, action type, rolling trends."""
     all_preds_result = await db.execute(
         select(BountyPrediction)
         .where(BountyPrediction.user_id == user_id)
@@ -2108,115 +2143,23 @@ async def get_performance_analytics(db: AsyncSession, user_id: uuid.UUID) -> dic
     )
     all_preds = list(all_preds_result.scalars().all())
 
-    # Accuracy by confidence tier
-    conf_stats = {}
-    for conf in [1, 2, 3]:
-        tier_preds = [p for p in all_preds if p.confidence == conf]
-        total = len(tier_preds)
-        correct = sum(1 for p in tier_preds if p.is_correct)
-        conf_stats[conf] = {
-            "total": total,
-            "correct": correct,
-            "win_rate": round(correct / total * 100, 1) if total > 0 else 0.0,
-        }
-
-    # Accuracy with leverage vs without
-    lev_preds = [p for p in all_preds if p.leverage > 1.0]
-    no_lev_preds = [p for p in all_preds if p.leverage <= 1.0]
-    leverage_stats = {
-        "with_leverage": {
-            "total": len(lev_preds),
-            "correct": sum(1 for p in lev_preds if p.is_correct),
-            "win_rate": round(
-                sum(1 for p in lev_preds if p.is_correct) / len(lev_preds) * 100, 1
-            ) if lev_preds else 0.0,
-        },
-        "without_leverage": {
-            "total": len(no_lev_preds),
-            "correct": sum(1 for p in no_lev_preds if p.is_correct),
-            "win_rate": round(
-                sum(1 for p in no_lev_preds if p.is_correct) / len(no_lev_preds) * 100, 1
-            ) if no_lev_preds else 0.0,
-        },
-    }
-
-    # Accuracy by time of day (2-hour ET buckets)
-    time_buckets = {}
-    for p in all_preds:
-        et_time = p.created_at.astimezone(ET) if p.created_at else None
-        if not et_time:
-            continue
-        bucket = (et_time.hour // 2) * 2  # 8, 10, 12, 14
-        label = f"{bucket}:00-{bucket + 2}:00 ET"
-        if label not in time_buckets:
-            time_buckets[label] = {"total": 0, "correct": 0}
-        time_buckets[label]["total"] += 1
-        if p.is_correct:
-            time_buckets[label]["correct"] += 1
-
-    time_stats = []
-    for label, data in sorted(time_buckets.items()):
-        time_stats.append({
-            "time_slot": label,
-            "total": data["total"],
-            "correct": data["correct"],
-            "win_rate": round(data["correct"] / data["total"] * 100, 1) if data["total"] > 0 else 0.0,
-        })
-
-    # Accuracy by action type (directional vs holster)
-    dir_preds = [p for p in all_preds if p.action_type == "directional"]
-    hol_preds = [p for p in all_preds if p.action_type == "holster"]
+    conf_stats = {conf: _win_rate_stat([p for p in all_preds if p.confidence == conf]) for conf in (1, 2, 3)}
     action_stats = {
-        "directional": {
-            "total": len(dir_preds),
-            "correct": sum(1 for p in dir_preds if p.is_correct),
-            "win_rate": round(
-                sum(1 for p in dir_preds if p.is_correct) / len(dir_preds) * 100, 1
-            ) if dir_preds else 0.0,
-        },
-        "holster": {
-            "total": len(hol_preds),
-            "correct": sum(1 for p in hol_preds if p.is_correct),
-            "win_rate": round(
-                sum(1 for p in hol_preds if p.is_correct) / len(hol_preds) * 100, 1
-            ) if hol_preds else 0.0,
-        },
+        "directional": _win_rate_stat([p for p in all_preds if p.action_type == "directional"]),
+        "holster": _win_rate_stat([p for p in all_preds if p.action_type == "holster"]),
     }
 
-    # Rolling 7-day accuracy trend
-    recent_preds = [p for p in all_preds if p.created_at and p.created_at >= seven_days_ago]
-    daily_trend = {}
-    for p in recent_preds:
-        day = p.created_at.astimezone(ET).date().isoformat()
-        if day not in daily_trend:
-            daily_trend[day] = {"total": 0, "correct": 0}
-        daily_trend[day]["total"] += 1
-        if p.is_correct:
-            daily_trend[day]["correct"] += 1
-
-    rolling_trend = [
-        {
-            "date": day,
-            "total": data["total"],
-            "correct": data["correct"],
-            "win_rate": round(data["correct"] / data["total"] * 100, 1) if data["total"] > 0 else 0.0,
-        }
-        for day, data in sorted(daily_trend.items())
-    ]
-
-    # Personal alpha vs 50% random baseline
     overall_total = len(all_preds)
     overall_correct = sum(1 for p in all_preds if p.is_correct)
     overall_accuracy = overall_correct / overall_total if overall_total > 0 else 0.5
-    alpha = round((overall_accuracy - 0.5) * 100, 2)  # percentage points above/below 50%
 
     return {
         "confidence_stats": conf_stats,
-        "leverage_stats": leverage_stats,
-        "time_stats": time_stats,
+        "leverage_stats": _analytics_leverage_stats(all_preds),
+        "time_stats": _analytics_time_stats(all_preds),
         "action_stats": action_stats,
-        "rolling_trend": rolling_trend,
-        "alpha_vs_random": alpha,
+        "rolling_trend": _analytics_rolling_trend(all_preds, datetime.now(timezone.utc) - timedelta(days=7)),
+        "alpha_vs_random": round((overall_accuracy - 0.5) * 100, 2),
         "total_predictions": overall_total,
         "overall_accuracy": round(overall_accuracy * 100, 1),
     }

@@ -1,11 +1,14 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, DateTime, Numeric, BigInteger, Integer
+from sqlalchemy import String, Boolean, DateTime, Numeric, BigInteger, Integer, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 
 class StockActive(Base):
     __tablename__ = "stocks_active"
+    __table_args__ = (
+        Index("ix_stocks_active_trending_rank", "trending_rank"),
+    )
 
     symbol: Mapped[str] = mapped_column(String(10), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
