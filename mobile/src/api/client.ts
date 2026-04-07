@@ -241,6 +241,11 @@ export const auth = {
     }),
 
   me: () => request<UserProfile>("/auth/me"),
+
+  deleteAccount: () =>
+    request<{ message: string }>("/auth/account", {
+      method: "DELETE",
+    }),
 };
 
 // ── Stocks ──

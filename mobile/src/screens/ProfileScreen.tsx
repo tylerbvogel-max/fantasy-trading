@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useProfile } from "../hooks/useApi";
 import { Colors, Spacing, FontSize, Radius, FontFamily } from "../utils/theme";
-import { signOut } from "../api/client";
+import { signOut, auth } from "../api/client";
 import { useWalkthrough } from "../contexts/WalkthroughContext";
 import { useAudio } from "../contexts/AudioContext";
 import { useCardTheme } from "../contexts/CardThemeContext";
@@ -33,6 +33,41 @@ export default function ProfileScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Log Out", style: "destructive", onPress: () => signOut() },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account and all game progress. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Forever",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Are you absolutely sure?",
+              "All your Double Dollars, Irons, badges, titles, and stats will be lost forever.",
+              [
+                { text: "Keep Account", style: "cancel" },
+                {
+                  text: "Yes, Delete Everything",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await auth.deleteAccount();
+                      await signOut();
+                    } catch (e: any) {
+                      Alert.alert("Error", e.message || "Failed to delete account.");
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   if (profileLoading) {
@@ -126,6 +161,11 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color={Colors.red} />
           <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.deleteAccountButton} onPress={handleDeleteAccount}>
+          <Ionicons name="trash-outline" size={20} color={Colors.textMuted} />
+          <Text style={styles.deleteAccountText}>Delete Account</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -279,5 +319,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontFamily: FontFamily.bold,
     color: Colors.green,
+  },
+  deleteAccountButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    marginTop: Spacing.xxxl,
+    padding: Spacing.md,
+  },
+  deleteAccountText: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.regular,
+    color: Colors.textMuted,
   },
 });

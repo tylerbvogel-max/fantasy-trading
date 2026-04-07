@@ -1,14 +1,29 @@
 {
   "cli": {
-    "version": ">= 3.0.0"
+    "version": ">= 13.0.0"
   },
   "build": {
-    "preview": {
+    "development": {
+      "developmentClient": true,
       "distribution": "internal"
     },
-    "production": {}
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "APPLE_ID_HERE",
+        "ascAppId": "APP_STORE_CONNECT_APP_ID_HERE",
+        "appleTeamId": "TEAM_ID_HERE"
+      }
+    }
   }
 }

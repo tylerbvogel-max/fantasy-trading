@@ -326,3 +326,40 @@ class TestMeProfile:
         data = resp.json()
         assert data["has_password"] is False
         assert data["email"] is None
+
+
+class TestAccountDeletion:
+    async def test_delete_account_removes_all_data(self, client, invite_code):
+        """Register, verify account exists, delete, verify gone."""
+        reg = await client.post("/auth/v2/register", json={
+            "alias": "doomed_user",
+            "email": "doomed@example.com",
+            "password": "mypassword1",
+            "invite_code": invite_code.code,
+        })
+        access = reg.json()["access_token"]
+
+        # Account exists
+        resp = await client.get("/auth/me", headers={
+            "Authorization": f"Bearer {access}",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["alias"] == "doomed_user"
+
+        # Delete it
+        resp = await client.delete("/auth/account", headers={
+            "Authorization": f"Bearer {access}",
+        })
+        assert resp.status_code == 200
+        assert "deleted" in resp.json()["message"].lower()
+
+        # Token no longer works (user gone)
+        resp = await client.get("/auth/me", headers={
+            "Authorization": f"Bearer {access}",
+        })
+        assert resp.status_code in (401, 404)
+
+    async def test_delete_account_no_auth(self, client):
+        """Cannot delete without authentication."""
+        resp = await client.delete("/auth/account")
+        assert resp.status_code in (401, 403)

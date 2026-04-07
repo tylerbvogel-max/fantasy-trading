@@ -7,6 +7,13 @@ from app.services import auth_service
 from app.services.auth_service import get_current_user
 from app.services import email_service
 from app.models.user import User
+from sqlalchemy import delete
+from app.models.bounty import (
+    BountyPrediction, BountyPlayerStats, BountyPlayerIron, BountyIronOffering,
+    BountyRunHistory, BountyBadge, BountyTitle, BountyActivityEvent,
+)
+from app.models.refresh_token import RefreshToken
+from app.models.email_token import EmailVerificationToken, PasswordResetToken
 from app.schemas import (
     RegisterRequest, RegisterResponse, LoginRequest, LoginResponse,
     UserProfile, RegisterRequestV2, LoginRequestV2, AuthTokenResponse,
@@ -206,6 +213,32 @@ async def upgrade_account(
         access_token=access_token,
         refresh_token=refresh_token,
     )
+
+
+@router.delete("/account")
+async def delete_account(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete user account and all associated data. Required by Apple App Store."""
+    uid = user.id
+    # Delete child tables first (foreign key order)
+    await db.execute(delete(BountyPrediction).where(BountyPrediction.user_id == uid))
+    await db.execute(delete(BountyPlayerIron).where(BountyPlayerIron.user_id == uid))
+    await db.execute(delete(BountyIronOffering).where(BountyIronOffering.user_id == uid))
+    await db.execute(delete(BountyRunHistory).where(BountyRunHistory.user_id == uid))
+    await db.execute(delete(BountyBadge).where(BountyBadge.user_id == uid))
+    await db.execute(delete(BountyTitle).where(BountyTitle.user_id == uid))
+    await db.execute(delete(BountyActivityEvent).where(BountyActivityEvent.user_id == uid))
+    await db.execute(delete(BountyPlayerStats).where(BountyPlayerStats.user_id == uid))
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == uid))
+    await db.execute(delete(EmailVerificationToken).where(EmailVerificationToken.user_id == uid))
+    await db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == uid))
+    # Finally delete the user
+    await db.delete(user)
+    await db.commit()
+    logger.info("Account deleted: user_id=%s alias=%s", uid, user.alias)
+    return {"message": "Account permanently deleted."}
 
 
 # ── Shared endpoints ──
