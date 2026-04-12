@@ -303,6 +303,16 @@ export interface BountyPickResponse {
   wanted_multiplier_used: number;
   leverage: number;
   margin_call_triggered: boolean;
+  ghost_triggered: boolean;
+  bet_amount: number;
+}
+
+export interface BountyAdjustResponse {
+  symbol: string;
+  old_prediction: string;
+  new_prediction: string;
+  adjustment_cost: number;
+  new_balance: number;
 }
 
 export interface BountyEquippedIron {
@@ -355,8 +365,17 @@ export interface BountyStockStatus {
   close_price: number | null;
   result: string | null;
   is_settled: boolean;
+  is_high_noon: boolean;
   candles: SpyCandlePoint[];
   my_pick: BountyPickResponse | null;
+}
+
+export interface BountyCondition {
+  type: string;
+  name: string;
+  description: string;
+  category: string;
+  data: Record<string, unknown>;
 }
 
 export interface BountyStatus {
@@ -368,9 +387,12 @@ export interface BountyStatus {
   next_window_time: string | null;
   spy_candles: SpyCandlePoint[];
   stocks: BountyStockStatus[];
+  previous_stocks: BountyStockStatus[];
   ante_cost: number;
   skip_cost: number;
   max_leverage: number;
+  next_window_preview: string[];
+  conditions: BountyCondition[];
 }
 
 export interface BountyIronFullDef {
@@ -570,6 +592,12 @@ export const bounty = {
 
   skip: (data: { bounty_window_id: string; symbol: string }) =>
     request<BountySkipResponse>("/bounty/skip", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  adjust: (data: { bounty_window_id: string; symbol: string; new_prediction: string; new_bet_amount?: number }) =>
+    request<BountyAdjustResponse>("/bounty/adjust", {
       method: "POST",
       body: JSON.stringify(data),
     }),

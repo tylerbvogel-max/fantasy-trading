@@ -8,6 +8,7 @@ from app.services.bounty_service import (
     get_bounty_status,
     submit_prediction,
     submit_skip,
+    adjust_prediction,
     get_bounty_board,
     get_prediction_history,
     get_detailed_stats,
@@ -82,6 +83,29 @@ async def bounty_predict(
             symbol=pred.symbol,
             leverage=pred.leverage,
         )
+    except BountyError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+
+
+class BountyAdjustRequest(BaseModel):
+    bounty_window_id: str
+    symbol: str
+    new_prediction: str
+    new_bet_amount: int | None = None
+
+
+@router.post("/adjust")
+async def bounty_adjust(
+    req: BountyAdjustRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await adjust_prediction(
+            db, user.id, req.bounty_window_id, req.symbol,
+            req.new_prediction, req.new_bet_amount,
+        )
+        return result
     except BountyError as e:
         raise HTTPException(status_code=400, detail=e.message)
 

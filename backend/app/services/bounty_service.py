@@ -12,10 +12,11 @@ from app.models.bounty import (
     BountyWindow, BountyWindowStock, BountyPrediction, BountyPlayerStats,
     SpyPriceLog, BountyPlayerIron, BountyIronOffering,
     BountyRunHistory, BountyBadge, BountyTitle, BountyActivityEvent,
+    BountyWindowCondition,
 )
 from app.models.user import User
 from app.models.stock import StockActive, StockMaster
-from app.services.finnhub_service import get_stock_price, fetch_quote
+from app.services.finnhub_service import get_stock_price, fetch_quote, fetch_earnings_calendar
 from app.services.bounty_config import (
     DIR_SCORING, HOL_SCORING, WANTED_MULT, WANTED_LEVEL_CAP,
     NOTORIETY_WEIGHT, NOTORIETY_UP_THRESHOLD, NOTORIETY_DOWN_THRESHOLD,
@@ -34,6 +35,10 @@ from app.services.bounty_config import (
     STREAK_REWARDS, STREAK_SHIELD_THRESHOLD,
     IRON_COMBOS,
     MAG_7_SYMBOLS, SECTOR_SPOTLIGHT_ROTATION, STOCK_EVENT_TYPES,
+    ADJUSTMENT_BASE_COST, ADJUSTMENT_LEVEL_SCALING, MAX_ADJUSTMENTS_PER_WINDOW,
+    CONDITION_DEFS, RANDOM_MARKET_CONDITIONS, CONDITION_PROBABILITY,
+    HIGH_NOON_SCORING_MULT, HIGH_NOON_CONFIDENCE,
+    HIGH_NOON_NOTORIETY_WIN, HIGH_NOON_NOTORIETY_LOSE,
 )
 from app.config import get_settings
 
@@ -41,8 +46,11 @@ settings = get_settings()
 
 ET = ZoneInfo("America/New_York")
 
-# Rolling window duration: from config (default 2 for dev, set to 120 in production via env)
+# Rolling window duration: 15-minute micro-windows
 WINDOW_DURATION_MINUTES = settings.bounty_window_minutes
+
+# Stocks per window: rotate through the 25-stock trending pool in groups
+STOCKS_PER_WINDOW = 5
 
 # Stocks to create per bounty window
 WINDOW_STOCKS = ("SPY", "NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "GOOG", "PLTR", "SNDK")
@@ -362,12 +370,84 @@ async def _create_new_window(
     await db.flush()
 
     stock_pool = await get_hot_stocks_pool(db)
-    for symbol in stock_pool:
+    # Rotate through the pool in groups of STOCKS_PER_WINDOW
+    start_idx = ((next_index - 1) * STOCKS_PER_WINDOW) % len(stock_pool)
+    window_symbols = [stock_pool[(start_idx + i) % len(stock_pool)] for i in range(STOCKS_PER_WINDOW)]
+    for symbol in window_symbols:
         db.add(BountyWindowStock(bounty_window_id=window.id, symbol=symbol))
+
+    # Attach conditions (earnings, regime, random market weather)
+    await _attach_conditions_to_window(db, window, window_symbols)
 
     await db.commit()
     await db.refresh(window)
     return [window]
+
+
+async def _attach_conditions_to_window(
+    db: AsyncSession, window: BountyWindow, window_symbols: list[str],
+) -> None:
+    """Determine and attach conditions to a newly created window."""
+    import logging
+    _log = logging.getLogger(__name__)
+    today_str = window.window_date.isoformat()
+
+    # 1. Earnings check: any window stock reporting today?
+    try:
+        earnings = await fetch_earnings_calendar(today_str, today_str)
+        earnings_symbols = {e.get("symbol", "") for e in earnings}
+        for sym in window_symbols:
+            if sym in earnings_symbols:
+                db.add(BountyWindowCondition(
+                    bounty_window_id=window.id,
+                    condition_type="earnings_live",
+                    condition_data=json.dumps({"symbol": sym}),
+                    source="earnings",
+                ))
+                _log.info(f"Condition: earnings_live for {sym} in window {window.window_index}")
+    except Exception as e:
+        _log.warning(f"Earnings check failed: {e}")
+
+    # 2. Regime-based conditions (if news_regime_service available)
+    try:
+        from app.services.news_regime_service import get_current_regime
+        regime = await get_current_regime(db)
+        if regime:
+            final = regime.get("final_regime")
+            confidence = regime.get("confidence", 0)
+            if final == "risk_off":
+                db.add(BountyWindowCondition(
+                    bounty_window_id=window.id,
+                    condition_type="bear_raid",
+                    condition_data=json.dumps({"regime": final}),
+                    source="regime",
+                ))
+            elif final == "risk_on" and confidence and confidence > 0.7:
+                db.add(BountyWindowCondition(
+                    bounty_window_id=window.id,
+                    condition_type="momentum_day",
+                    condition_data=json.dumps({"regime": final}),
+                    source="regime",
+                ))
+    except Exception:
+        pass  # Regime service may not exist or may fail — non-critical
+
+    # 3. Probability gate: random market weather condition (~35% of windows)
+    existing = await db.execute(
+        select(func.count(BountyWindowCondition.id)).where(
+            BountyWindowCondition.bounty_window_id == window.id
+        )
+    )
+    has_condition = (existing.scalar() or 0) > 0
+    if not has_condition and random.random() < CONDITION_PROBABILITY:
+        cond_type = random.choice(RANDOM_MARKET_CONDITIONS)
+        db.add(BountyWindowCondition(
+            bounty_window_id=window.id,
+            condition_type=cond_type,
+            condition_data=None,
+            source="random",
+        ))
+        _log.info(f"Condition: random {cond_type} for window {window.window_index}")
 
 
 async def get_current_window(db: AsyncSession) -> BountyWindow | None:
@@ -619,8 +699,99 @@ async def record_window_open_price(db: AsyncSession, window_id: uuid.UUID) -> No
     await db.commit()
 
 
+async def adjust_prediction(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    window_id: uuid.UUID,
+    symbol: str,
+    new_prediction: str,
+    new_bet_amount: int | None = None,
+) -> dict:
+    """Adjust an existing prediction within an active window. Costs DD."""
+    # Validate window is active
+    window = await db.get(BountyWindow, window_id)
+    if not window:
+        raise BountyError("Window not found")
+    now = datetime.now(timezone.utc)
+    if now < window.start_time or now >= window.end_time:
+        raise BountyError("Window is not currently active")
+    if window.is_settled:
+        raise BountyError("Window already settled")
+
+    # Find existing prediction
+    result = await db.execute(
+        select(BountyPrediction).where(
+            BountyPrediction.user_id == user_id,
+            BountyPrediction.bounty_window_id == window_id,
+            BountyPrediction.symbol == symbol,
+        )
+    )
+    pred = result.scalars().first()
+    if not pred:
+        raise BountyError("No prediction found for this stock")
+
+    # Count adjustments this window
+    adj_result = await db.execute(
+        select(func.count(BountyActivityEvent.id)).where(
+            BountyActivityEvent.user_id == user_id,
+            BountyActivityEvent.event_type == "adjustment",
+            BountyActivityEvent.event_data.like(f'%"window_id": "{window_id}"%'),
+        )
+    )
+    adj_count = adj_result.scalar() or 0
+    if adj_count >= MAX_ADJUSTMENTS_PER_WINDOW:
+        raise BountyError(f"Maximum {MAX_ADJUSTMENTS_PER_WINDOW} adjustment(s) per window")
+
+    # Compute cost
+    stats = await get_or_create_player_stats(db, user_id)
+    conf = pred.confidence or bet_to_tier(pred.bet_amount or 0)
+    cost = round(ADJUSTMENT_BASE_COST * conf * (1 + ADJUSTMENT_LEVEL_SCALING * stats.wanted_level))
+    if stats.double_dollars < cost:
+        raise BountyError(f"Not enough DD (need $${cost})")
+
+    # Apply adjustment
+    old_prediction = pred.prediction
+    old_bet = pred.bet_amount
+    pred.prediction = new_prediction
+    if new_prediction == "HOLD":
+        pred.action_type = "holster"
+    else:
+        pred.action_type = "directional"
+    if new_bet_amount is not None:
+        pred.bet_amount = new_bet_amount
+        pred.confidence = bet_to_tier(new_bet_amount)
+
+    stats.double_dollars -= cost
+
+    # Log activity event
+    event = BountyActivityEvent(
+        user_id=user_id,
+        event_type="adjustment",
+        event_data=json.dumps({
+            "window_id": str(window_id),
+            "symbol": symbol,
+            "old_prediction": old_prediction,
+            "new_prediction": new_prediction,
+            "old_bet": old_bet,
+            "new_bet": pred.bet_amount,
+            "cost": cost,
+        }),
+    )
+    db.add(event)
+    await db.commit()
+
+    return {
+        "symbol": symbol,
+        "old_prediction": old_prediction,
+        "new_prediction": new_prediction,
+        "adjustment_cost": cost,
+        "new_balance": stats.double_dollars,
+    }
+
+
 async def _settle_window_stocks(
     db: AsyncSession, window_id: uuid.UUID,
+    conditions: list[BountyWindowCondition] | None = None,
 ) -> dict[str, str]:
     """Settle per-stock rows: fetch close prices, compute results. Returns symbol→result map."""
     stock_result = await db.execute(
@@ -628,6 +799,13 @@ async def _settle_window_stocks(
     )
     stock_rows = list(stock_result.scalars().all())
     stock_results: dict[str, str] = {}
+
+    # Pre-compute hold threshold multiplier from conditions
+    ht_mult = 1.0
+    if conditions:
+        for cond in conditions:
+            cdef = CONDITION_DEFS.get(cond.condition_type, {})
+            ht_mult *= cdef.get("effects", {}).get("hold_threshold_multiplier", 1.0)
 
     for stock_row in stock_rows:
         if stock_row.is_settled:
@@ -646,7 +824,8 @@ async def _settle_window_stocks(
             open_f = float(stock_row.open_price)
             pct_change = (price - open_f) / open_f if open_f != 0 else 0
             candles = await fetch_chart_yahoo(stock_row.symbol)
-            hold_threshold = compute_hold_threshold(candles) if candles else HOLD_THRESHOLD_FALLBACK
+            hold_threshold = compute_hold_threshold(candles, window_minutes=WINDOW_DURATION_MINUTES) if candles else HOLD_THRESHOLD_FALLBACK
+            hold_threshold *= ht_mult  # Apply condition modifier (e.g., dead_calm narrows HOLD zone)
 
             if abs(pct_change) < hold_threshold:
                 stock_row.result = "HOLD"
@@ -670,10 +849,17 @@ async def _settle_window_stocks(
 def _score_single_prediction(
     pred: BountyPrediction, stock_result_value: str,
     stats: BountyPlayerStats, fx: dict,
+    conditions: list | None = None,
+    high_noon_symbols: set[str] | None = None,
 ) -> tuple[float, bool]:
     """Score one prediction using sim mechanics. Returns (notoriety_delta, ghost_triggered)."""
+    is_high_noon = high_noon_symbols and pred.symbol in high_noon_symbols
     is_holster = pred.action_type == "holster"
     is_correct = (stock_result_value == "HOLD") if is_holster else (pred.prediction == stock_result_value)
+
+    # High Noon forces Dead Eye confidence
+    if is_high_noon:
+        pred.confidence = HIGH_NOON_CONFIDENCE
 
     ghost_triggered = False
     if not is_correct and fx["ghost_chance"] > 0 and random.random() < fx["ghost_chance"]:
@@ -690,6 +876,7 @@ def _score_single_prediction(
 
     pred.is_correct = is_correct
     pred.insurance_triggered = insurance_triggered
+    pred.ghost_triggered = ghost_triggered
 
     bet = pred.bet_amount or 0
     conf = pred.confidence or bet_to_tier(bet)
@@ -709,6 +896,44 @@ def _score_single_prediction(
     if is_correct and fx["flat_cash_per_correct"] > 0:
         payout += fx["flat_cash_per_correct"]
 
+    # Apply condition scoring effects
+    cond_score_mult = 1.0
+    cond_dir_bonus = 0
+    cond_fall_bonus = 0
+    cond_notoriety_mult = 1.0
+    if conditions:
+        for cond in conditions:
+            cdef = CONDITION_DEFS.get(cond.condition_type, {})
+            effects = cdef.get("effects", {})
+            cond_score_mult *= effects.get("score_multiplier", 1.0)
+            cond_dir_bonus += effects.get("dir_win_bonus", 0)
+            cond_fall_bonus += effects.get("fall_win_bonus", 0)
+            cond_notoriety_mult *= effects.get("notoriety_multiplier", 1.0)
+            # Ticker-specific multiplier (earnings_live targets a specific symbol)
+            if "ticker_score_multiplier" in effects:
+                cond_data = json.loads(cond.condition_data) if cond.condition_data else {}
+                if cond_data.get("symbol") == pred.symbol:
+                    cond_score_mult *= effects["ticker_score_multiplier"]
+            # Loss amplification (fed_tension)
+            if not is_correct and not insurance_triggered and payout < 0:
+                loss_mult = effects.get("all_lose_multiplier", 1.0)
+                if loss_mult > 1.0:
+                    payout = round(payout * loss_mult)
+
+    # Apply condition win bonuses
+    if is_correct and not insurance_triggered:
+        if pred.prediction in ("UP", "DOWN"):
+            payout += cond_dir_bonus * mult
+        if pred.prediction == "DOWN":
+            payout += cond_fall_bonus * mult
+
+    # Apply condition score multiplier
+    payout = round(payout * cond_score_mult)
+
+    # Apply High Noon 3x multiplier
+    if is_high_noon:
+        payout = round(payout * HIGH_NOON_SCORING_MULT)
+
     pred.payout = payout
     stats.double_dollars += payout
     if is_correct:
@@ -717,6 +942,12 @@ def _score_single_prediction(
     update_badge_progress(stats, is_correct, conf, is_holster, ghost_triggered, False)
 
     notoriety_delta = _compute_notoriety_delta(bet, is_correct, fx, pred.leverage)
+    # High Noon notoriety bonus/penalty
+    if is_high_noon:
+        notoriety_delta += HIGH_NOON_NOTORIETY_WIN if is_correct else HIGH_NOON_NOTORIETY_LOSE
+    # Condition notoriety multiplier (e.g., earnings_live 1.5x)
+    if cond_notoriety_mult != 1.0:
+        notoriety_delta *= cond_notoriety_mult
     return notoriety_delta, ghost_triggered
 
 
@@ -830,7 +1061,21 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
     if not window or window.is_settled:
         return
 
-    stock_results = await _settle_window_stocks(db, window_id)
+    # Query window conditions and High Noon stocks
+    cond_result = await db.execute(
+        select(BountyWindowCondition).where(BountyWindowCondition.bounty_window_id == window_id)
+    )
+    conditions = list(cond_result.scalars().all())
+
+    hn_result = await db.execute(
+        select(BountyWindowStock.symbol).where(
+            BountyWindowStock.bounty_window_id == window_id,
+            BountyWindowStock.is_high_noon == True,
+        )
+    )
+    high_noon_symbols = {row[0] for row in hn_result.all()}
+
+    stock_results = await _settle_window_stocks(db, window_id, conditions=conditions)
 
     # Set legacy SPY fields on window
     spy_price = await get_stock_price(db, "SPY")
@@ -861,7 +1106,10 @@ async def settle_window(db: AsyncSession, window_id: uuid.UUID) -> None:
         window_notoriety = 0.0
         for pred in user_preds:
             stock_result_value = stock_results.get(pred.symbol, window.result)
-            delta, _ = _score_single_prediction(pred, stock_result_value, stats, fx)
+            delta, _ = _score_single_prediction(
+                pred, stock_result_value, stats, fx,
+                conditions=conditions, high_noon_symbols=high_noon_symbols,
+            )
             window_notoriety += delta
 
         await _evaluate_user_window(db, uid, window_id, stats, fx, window_notoriety)
@@ -977,6 +1225,7 @@ def _pick_to_response(pred: BountyPrediction) -> dict:
         "wanted_multiplier_used": pred.wanted_multiplier_used,
         "leverage": pred.leverage,
         "margin_call_triggered": pred.margin_call_triggered,
+        "ghost_triggered": pred.ghost_triggered,
     }
 
 
@@ -1085,6 +1334,7 @@ async def _build_stocks_status(
             "close_price": float(stock_row.close_price) if stock_row.close_price else None,
             "result": stock_row.result,
             "is_settled": stock_row.is_settled,
+            "is_high_noon": stock_row.is_high_noon,
             "candles": stock_candles,
             "my_pick": _pick_to_response(stock_pick) if stock_pick else None,
         })
@@ -1118,6 +1368,7 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
     pending = await get_pending_offering(db, user_id)
     candles = await _fetch_spy_candles(db) if current else []
     stocks_status = await _build_stocks_status(db, user_id, current) if current else []
+    previous_stocks = await _build_stocks_status(db, user_id, previous) if previous and previous.is_settled else []
 
     ante_cost = max(0, ANTE_BASE - fx["ante_reduction"])
     raw_skip = calc_skip_cost(stats.skip_count_this_window + 1, stats.double_dollars)
@@ -1128,6 +1379,36 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
     stats_response["pending_offering"] = pending is not None
     stats_response["equipped_irons"] = equipped_irons
 
+    # Compute next window's stock preview via rotation
+    next_preview: list[str] = []
+    stock_pool = await get_hot_stocks_pool(db)
+    if stock_pool:
+        now_et = datetime.now(ET)
+        count_result = await db.execute(
+            select(func.count(BountyWindow.id)).where(BountyWindow.window_date == now_et.date())
+        )
+        next_index = (count_result.scalar() or 0) + 1
+        start_idx = ((next_index - 1) * STOCKS_PER_WINDOW) % len(stock_pool)
+        next_preview = [stock_pool[(start_idx + i) % len(stock_pool)] for i in range(STOCKS_PER_WINDOW)]
+
+    # Conditions for the current window
+    conditions_response: list[dict] = []
+    if current:
+        cond_result = await db.execute(
+            select(BountyWindowCondition).where(
+                BountyWindowCondition.bounty_window_id == current.id
+            )
+        )
+        for c in cond_result.scalars().all():
+            cdef = CONDITION_DEFS.get(c.condition_type, {})
+            conditions_response.append({
+                "type": c.condition_type,
+                "name": cdef.get("name", c.condition_type),
+                "description": cdef.get("description", ""),
+                "category": cdef.get("category", ""),
+                "data": json.loads(c.condition_data) if c.condition_data else {},
+            })
+
     return {
         "current_window": _window_to_response(current) if current else None,
         "previous_window": _window_to_response(previous) if previous else None,
@@ -1137,9 +1418,12 @@ async def get_bounty_status(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "next_window_time": get_next_window_time(),
         "spy_candles": candles,
         "stocks": stocks_status,
+        "previous_stocks": previous_stocks,
         "ante_cost": ante_cost,
         "skip_cost": next_skip_cost,
         "max_leverage": max_leverage_for_level(max(stats.wanted_level, 1)),
+        "next_window_preview": next_preview,
+        "conditions": conditions_response,
     }
 
 

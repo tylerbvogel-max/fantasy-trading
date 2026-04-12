@@ -254,3 +254,34 @@ async def search_stocks(db: AsyncSession, query: str, season_allowed: list[str] 
     ).limit(20)
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+# ── Earnings Calendar ──
+import time as _time
+
+_earnings_cache: dict[str, tuple[float, list[dict]]] = {}
+EARNINGS_CACHE_TTL = 86400  # 24 hours
+
+
+async def fetch_earnings_calendar(from_date: str, to_date: str) -> list[dict]:
+    """Fetch earnings calendar from Finnhub. Single API call, cached daily."""
+    cache_key = f"{from_date}_{to_date}"
+    now = _time.time()
+    if cache_key in _earnings_cache and (now - _earnings_cache[cache_key][0]) < EARNINGS_CACHE_TTL:
+        return _earnings_cache[cache_key][1]
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"{FINNHUB_BASE}/calendar/earnings",
+                params={"from": from_date, "to": to_date, "token": settings.finnhub_api_key},
+                timeout=15.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                entries = data.get("earningsCalendar", [])
+                _earnings_cache[cache_key] = (now, entries)
+                return entries
+        except httpx.RequestError as e:
+            logger.warning(f"Earnings calendar fetch failed: {e}")
+    return []

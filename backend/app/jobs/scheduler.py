@@ -43,32 +43,19 @@ async def job_refresh_trending():
             logger.error(f"Trending refresh failed: {e}")
 
 
-async def job_create_bounty_windows():
-    """Create today's bounty windows (Mon-Fri, runs at 9:50 AM ET)."""
-    async with async_session() as db:
-        try:
-            windows = await get_or_create_today_windows(db)
-            logger.info(f"Bounty windows created: {len(windows)} windows")
-            # Record open price for the first window if it starts soon
-            if windows:
-                await record_window_open_price(db, windows[0].id)
-        except Exception as e:
-            logger.error(f"Bounty window creation failed: {e}")
-
-
-async def job_settle_bounty_window():
-    """Settle the window that just ended and record open price for the new active window."""
+async def job_bounty_cycle():
+    """Settle expired windows and create new ones. Runs every 15 minutes."""
     async with async_session() as db:
         try:
             now = datetime.now(timezone.utc)
-            # Find the window that just ended (end_time within last 5 minutes)
+            # Settle any recently expired unsettled windows
             from sqlalchemy import and_
             from datetime import timedelta
             result = await db.execute(
                 select(BountyWindow).where(
                     and_(
                         BountyWindow.end_time <= now,
-                        BountyWindow.end_time > now - timedelta(minutes=5),
+                        BountyWindow.end_time > now - timedelta(minutes=15),
                         BountyWindow.is_settled == False,
                     )
                 )
@@ -76,15 +63,15 @@ async def job_settle_bounty_window():
             window = result.scalars().first()
             if window:
                 await settle_window(db, window.id)
-                logger.info(f"Settled bounty window {window.window_index} ({window.result})")
+                logger.info(f"Settled bounty window {window.window_index}")
 
-            # Record open price for the newly active window
-            current = await get_current_window(db)
-            if current:
-                await record_window_open_price(db, current.id)
-                logger.info(f"Recorded open price for window {current.window_index}")
+            # Create/ensure current window exists
+            windows = await get_or_create_today_windows(db)
+            if windows:
+                await record_window_open_price(db, windows[0].id)
+                logger.info(f"Bounty cycle: window {windows[0].window_index} active")
         except Exception as e:
-            logger.error(f"Bounty settlement failed: {e}")
+            logger.error(f"Bounty cycle failed: {e}")
 
 
 async def job_regime_assessment():
@@ -124,19 +111,11 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # Bounty: create today's windows at 8:50 AM ET (13:50 UTC)
+    # Bounty cycle: settle + create every 15 minutes (1-min offset for settlement)
     scheduler.add_job(
-        job_create_bounty_windows,
-        CronTrigger(hour=13, minute=50, day_of_week="mon-fri"),
-        id="bounty_create_windows",
-        replace_existing=True,
-    )
-
-    # Bounty: settle windows at :01 past each odd hour (ET: 11,13,15,17,19,21 → UTC: 16,18,20,22,0,2)
-    scheduler.add_job(
-        job_settle_bounty_window,
-        CronTrigger(hour="0,2,16,18,20,22", minute=1, day_of_week="mon-fri"),
-        id="bounty_settle_window",
+        job_bounty_cycle,
+        CronTrigger(minute="1,16,31,46", day_of_week="mon-fri"),
+        id="bounty_cycle",
         replace_existing=True,
     )
 

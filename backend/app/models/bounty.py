@@ -46,6 +46,7 @@ class BountyWindowStock(Base):
     close_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     result: Mapped[str | None] = mapped_column(String(4), nullable=True)
     is_settled: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_high_noon: Mapped[bool] = mapped_column(Boolean, default=False)
     # P2-C: Post-settlement analysis context (JSON)
     settlement_context: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -79,6 +80,7 @@ class BountyPrediction(Base):
     wanted_multiplier_used: Mapped[int] = mapped_column(Integer, default=1)
     leverage: Mapped[float] = mapped_column(Float, default=1.0)
     margin_call_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
+    ghost_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class SpyPriceLog(Base):
@@ -199,6 +201,23 @@ class BountyActivityEvent(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     event_type: Mapped[str] = mapped_column(String(30), nullable=False)  # level_up, badge_earned, high_score, bust
     event_data: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class BountyWindowCondition(Base):
+    """Per-window gameplay conditions driven by real market events."""
+    __tablename__ = "bounty_window_conditions"
+    __table_args__ = (
+        Index("ix_bwc_window_id", "bounty_window_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    bounty_window_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bounty_windows.id"), nullable=False)
+    condition_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    condition_data: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: affected tickers, sector, source
+    source: Mapped[str] = mapped_column(String(30), nullable=False)  # "earnings", "regime", "news", "random"
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

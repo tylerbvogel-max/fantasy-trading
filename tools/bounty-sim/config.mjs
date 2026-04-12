@@ -1,22 +1,22 @@
 // ── Bounty Hunter Simulation — Configuration ──
-// 30-Minute Rolling Window Edition (Continuous Gameplay)
+// 15-Minute Micro-Window Edition (5 stocks per window)
 
 // ── Run parameters ──
 export const NUM_RUNS = 500;
 
-// Legacy: kept for backward compatibility with existing archetypes
-export const NUM_ROUNDS = 336; // 14 days × 8 hours × 2 windows per hour
+// 14 days × 6.5 market hours × 4 windows/hour = ~364 windows
+export const NUM_ROUNDS = 364;
 
-// ── Window parameters (replaces round-based batching) ──
-export const WINDOW_DURATION_MINUTES = 30;
+// ── Window parameters ──
+export const WINDOW_DURATION_MINUTES = 15;
 export const TOTAL_SIMULATION_DAYS = 14;
 export const STOCK_POOL_SIZE = 25;
 
-// Player engagement: 3-5 app checks per day
-// With 14 days of 30-min windows, we expect ~3-5 picks per window for realistic engagement
+// Each window has exactly 5 stocks — player picks all 5
 export const MIN_PICKS_PER_WINDOW = 1;
-export const MAX_PICKS_PER_WINDOW = 10; // Player can pick 1-10 stocks per window at own pace
-export const EXPECTED_PICKS_PER_WINDOW = 3; // Design target
+export const MAX_PICKS_PER_WINDOW = 5;
+export const EXPECTED_PICKS_PER_WINDOW = 5;
+export const PICKS_PER_ROUND = EXPECTED_PICKS_PER_WINDOW; // Legacy alias for sim files
 
 // ── Chambers (Iron slots) ──
 export const STARTING_CHAMBERS = 1;
@@ -65,11 +65,38 @@ export function skipCost(n, balance) {
   return Math.ceil(25 * Math.pow(2.5, n - 1) * Math.max(1, balance / 5000));
 }
 
-// ── Window ante (per 30-min window, not per round) ──
-export const ANTE_BASE = 15; // Scaled down for 30-min windows (was 60 for 2h rounds)
+// ── Window ante (per 15-min window) ──
+export const ANTE_BASE = 15;
+
+// ── Adjustment mechanic ──
+export const ADJUSTMENT_BASE_COST = 25;
+export const ADJUSTMENT_LEVEL_SCALING = 0.1;
+export const MAX_ADJUSTMENTS_PER_WINDOW = 1;
 export function windowAnte(windowNum, wantedLevel) {
   return ANTE_BASE;
 }
+
+// ── Conditions System ──
+// ~35% of windows have at least one market condition
+export const CONDITION_PROBABILITY = 0.35;
+export const RANDOM_MARKET_CONDITIONS = [
+  "volatility_surge", "dead_calm", "bear_raid", "momentum_day",
+];
+export const CONDITION_DEFS = {
+  volatility_surge: { score_multiplier: 1.3 },
+  dead_calm: { hold_threshold_multiplier: 0.7 },
+  bear_raid: { fall_win_bonus: 10 },
+  momentum_day: { dir_win_bonus: 8 },
+  fed_tension: { score_multiplier: 1.5, all_lose_multiplier: 1.5 },
+  earnings_live: { ticker_score_multiplier: 2.0, notoriety_multiplier: 1.5 },
+  sector_heat: { sector_score_multiplier: 1.5 },
+};
+
+// ── High Noon bounties ──
+export const HIGH_NOON_SCORING_MULT = 3;
+export const HIGH_NOON_CONFIDENCE = 3;
+export const HIGH_NOON_NOTORIETY_WIN = 1.0;
+export const HIGH_NOON_NOTORIETY_LOSE = -1.5;
 
 // ── Starting balance ──
 export const STARTING_BALANCE = 5000;

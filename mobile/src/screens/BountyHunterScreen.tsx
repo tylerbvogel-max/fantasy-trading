@@ -22,11 +22,10 @@ import {
   useBountyIronOffering,
   usePickIron,
   useBountyReset,
+  useAdjustPrediction,
 } from "../hooks/useApi";
 import ProbabilityConeChart from "../components/ProbabilityConeChart";
 import IronOfferingModal from "../components/IronOfferingModal";
-
-import QuoteTransition from "../components/QuoteTransition";
 
 // ── Card & gesture constants ──
 
@@ -45,9 +44,6 @@ const WANTED_MULT: Record<number, number> = {
   6: 42, 7: 100, 8: 230, 9: 530, 10: 1200,
 };
 
-const TEST_CHOICES: ("RISE" | "FALL" | "HOLD")[] = ["RISE", "FALL", "HOLD"];
-const NOTORIETY_UP_THRESHOLD = 3;
-const NOTORIETY_DOWN_THRESHOLD = -2;
 
 const WantedBar = ({ level, mult }: { level: number; mult: number }) => (
   <View
@@ -231,6 +227,7 @@ export default function BountyHunterScreen() {
   const { data: ironOffering, refetch: refetchOffering } = useBountyIronOffering();
   const pickIronMutation = usePickIron();
   const resetMutation = useBountyReset();
+  const adjustMutation = useAdjustPrediction();
 
   // ── UI state ──
   const [betAmount, setBetAmount] = useState(50);
@@ -242,17 +239,16 @@ export default function BountyHunterScreen() {
   >([]);
   const [skippedSymbols, setSkippedSymbols] = useState<string[]>([]);
   const [showIronModal, setShowIronModal] = useState(false);
-  const [ignoreServerPicks, setIgnoreServerPicks] = useState(false);
   const [boostedIronId, setBoostedIronId] = useState<string | null>(null);
-  const [roundNumber, setRoundNumber] = useState(1);
-  const [showQuote, setShowQuote] = useState(false);
+  const [adjustingSymbol, setAdjustingSymbol] = useState<string | null>(null);
+  const [adjustmentUsed, setAdjustmentUsed] = useState(false);
 
-  // ── Test mode: random outcomes for each stock (1/3 each) ──
-  const [testOutcomes, setTestOutcomes] = useState<Record<string, "RISE" | "FALL" | "HOLD">>({});
-  const [testBalanceOffset, setTestBalanceOffset] = useState(0);
-  const [testLevelOffset, setTestLevelOffset] = useState(0);
-  const lastRoundTotal = useRef(0);
-  const lastLevelChange = useRef(0);
+  // ── Showdown state ──
+  const [showdownActive, setShowdownActive] = useState(false);
+  const [showdownStep, setShowdownStep] = useState(0); // 0=not started, 1-N=revealing stock N
+  const [showdownWindowId, setShowdownWindowId] = useState<string | null>(null);
+  const showdownSlideAnim = useRef(new Animated.Value(0)).current;
+  const showdownDDCounter = useRef(new Animated.Value(0)).current;
 
   // ── Swipe animation values ──
   const translateX = useRef(new Animated.Value(0)).current;
@@ -266,21 +262,16 @@ export default function BountyHunterScreen() {
   const anteCost = status?.ante_cost ?? 75;
   const skipCost = status?.skip_cost ?? 25;
 
-  const BATCH_SIZE = 5;
-  const TOTAL_ROUNDS = 30;
-  const totalStocks = status?.stocks ?? [];
-  const totalBatches = Math.max(1, Math.ceil(totalStocks.length / BATCH_SIZE));
-  const batchIndex = (roundNumber - 1) % totalBatches;
-  const allStocks = totalStocks.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
+  const allStocks = status?.stocks ?? [];
   const swipedSymbolSet = new Set(swipedPicks.map((p) => p.symbol));
   const unpickedStocks = allStocks.filter(
     (s) =>
-      (ignoreServerPicks || !s.my_pick) &&
+      !s.my_pick &&
       !swipedSymbolSet.has(s.symbol) &&
       !skippedSymbols.includes(s.symbol)
   );
   const pickedStocks = allStocks.filter(
-    (s) => (!ignoreServerPicks && !!s.my_pick) || swipedSymbolSet.has(s.symbol)
+    (s) => !!s.my_pick || swipedSymbolSet.has(s.symbol)
   );
   const skippedStocks = allStocks.filter(
     (s) => skippedSymbols.includes(s.symbol) && !s.my_pick
@@ -290,13 +281,13 @@ export default function BountyHunterScreen() {
   const allExhausted = allStocks.length > 0 && unpickedStocks.length === 0;
   const cardInBatch = pickedStocks.length + skippedStocks.length + 1;
   const stockProgress = allStocks.length > 0
-    ? `Round ${roundNumber}/${TOTAL_ROUNDS} · Card ${Math.min(cardInBatch, allStocks.length)}/${allStocks.length}`
+    ? `Card ${Math.min(cardInBatch, allStocks.length)}/${allStocks.length}`
     : "";
 
   const hasActiveWindow = !!currentWindow;
-  const wantedLevel = Math.max(1, (stats?.wanted_level ?? 1) + testLevelOffset);
+  const wantedLevel = Math.max(1, stats?.wanted_level ?? 1);
   const mult = getWantedMult(Math.max(wantedLevel, 1));
-  const displayBalance = (stats?.double_dollars ?? 0) + testBalanceOffset;
+  const displayBalance = stats?.double_dollars ?? 0;
   const maxLeverage = status?.max_leverage ?? 2.0;
   const marginCallCooldown = stats?.margin_call_cooldown ?? 0;
 
@@ -476,6 +467,8 @@ export default function BountyHunterScreen() {
     setSkippedSymbols([]);
     setBoostedIronId(null);
     setLeverage(1.0);
+    setAdjustingSymbol(null);
+    setAdjustmentUsed(false);
   }, [windowId]);
 
   // Auto-set leverage to 1.0 when cooldown is active
@@ -485,29 +478,59 @@ export default function BountyHunterScreen() {
 
   // Show iron offering modal
   useEffect(() => {
+    if (stats?.pending_offering && ironOffering?.offering_id && !showdownActive) {
+      setShowIronModal(true);
+    }
+  }, [stats?.pending_offering, ironOffering?.offering_id, showdownActive]);
+
+  // Trigger showdown when previous window has settled results we haven't shown
+  const previousStocks = status?.previous_stocks ?? [];
+  const prevWindowId = previousWindow?.id;
+  useEffect(() => {
+    if (
+      previousWindow?.is_settled &&
+      previousStocks.length > 0 &&
+      previousStocks.some(s => s.my_pick) &&
+      prevWindowId !== showdownWindowId
+    ) {
+      setShowdownWindowId(prevWindowId ?? null);
+      setShowdownStep(0);
+      setShowdownActive(true);
+    }
+  }, [prevWindowId, previousWindow?.is_settled]);
+
+  const showdownResults = previousStocks.filter(s => s.my_pick);
+
+  const advanceShowdown = () => {
+    const nextStep = showdownStep + 1;
+    if (nextStep > showdownResults.length) {
+      // Showdown complete
+      setShowdownActive(false);
+      setShowdownStep(0);
+      // Trigger iron offering if pending
+      if (stats?.pending_offering && ironOffering?.offering_id) {
+        setShowIronModal(true);
+      }
+      return;
+    }
+    setShowdownStep(nextStep);
+    // Slide-in animation for each card
+    showdownSlideAnim.setValue(SCREEN_WIDTH);
+    Animated.spring(showdownSlideAnim, {
+      toValue: 0,
+      friction: 8,
+      tension: 60,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const skipShowdown = () => {
+    setShowdownActive(false);
+    setShowdownStep(0);
     if (stats?.pending_offering && ironOffering?.offering_id) {
       setShowIronModal(true);
     }
-  }, [stats?.pending_offering, ironOffering?.offering_id]);
-
-  // Generate random test outcomes for stocks
-  const generateTestOutcomes = (stocks: typeof allStocks) => {
-    const choices = ["RISE", "FALL", "HOLD"] as const;
-    const outcomes: Record<string, "RISE" | "FALL" | "HOLD"> = {};
-    for (const s of stocks) {
-      outcomes[s.symbol] = choices[Math.floor(Math.random() * 3)];
-    }
-    setTestOutcomes(outcomes);
   };
-
-  // Generate on initial stock load (only if empty)
-  const hasGeneratedInitial = useRef(false);
-  useEffect(() => {
-    if (allStocks.length > 0 && !hasGeneratedInitial.current) {
-      hasGeneratedInitial.current = true;
-      generateTestOutcomes(allStocks);
-    }
-  }, [allStocks.length]);
 
   // ── Handlers ──
 
@@ -515,12 +538,6 @@ export default function BountyHunterScreen() {
     if (!currentWindow || !currentStock) return;
     const symbol = currentStock.symbol;
     setSwipedPicks((prev) => [...prev, { symbol, prediction, betAmount, leverage }]);
-
-    // In test rounds (ignoreServerPicks), skip backend — just track locally
-    if (ignoreServerPicks) {
-      showToast(`${symbol} Locked In!`);
-      return;
-    }
 
     submitPrediction.mutate(
       {
@@ -554,12 +571,6 @@ export default function BountyHunterScreen() {
     if (!currentWindow || !currentStock) return;
     const symbol = currentStock.symbol;
     setSwipedPicks((prev) => [...prev, { symbol, prediction: "HOLD", betAmount, leverage }]);
-
-    // In test rounds (ignoreServerPicks), skip backend — just track locally
-    if (ignoreServerPicks) {
-      showToast(`${symbol} HOLD Locked In!`);
-      return;
-    }
 
     submitPrediction.mutate(
       {
@@ -641,39 +652,11 @@ export default function BountyHunterScreen() {
   const handleReset = () => {
     resetMutation.mutate(undefined, {
       onSuccess: (data) => {
-        setTestBalanceOffset(0);
-        setTestLevelOffset(0);
-        setIgnoreServerPicks(false);
         showToast(data.message);
         refetch();
       },
       onError: (error) => Alert.alert("Error", error.message),
     });
-  };
-
-  const advanceRound = () => {
-    setShowQuote(false);
-    const nextRound = roundNumber + 1;
-    setRoundNumber(nextRound);
-    setSwipedPicks([]);
-    setSkippedSymbols([]);
-    setBoostedIronId(null);
-    setIgnoreServerPicks(true);
-    // Generate outcomes for the next batch's stocks
-    const nextBatchIndex = (nextRound - 1) % totalBatches;
-    const nextBatchStocks = totalStocks.slice(nextBatchIndex * BATCH_SIZE, (nextBatchIndex + 1) * BATCH_SIZE);
-    generateTestOutcomes(nextBatchStocks);
-    refetch();
-  };
-
-  const handleNextRound = () => {
-    setTestBalanceOffset((prev) => prev + lastRoundTotal.current);
-    setTestLevelOffset((prev) => prev + lastLevelChange.current);
-    if (Math.random() < 0.5) {
-      setShowQuote(true);
-    } else {
-      advanceRound();
-    }
   };
 
   // ── Scoring display values (bet-based with leverage) ──
@@ -775,6 +758,146 @@ export default function BountyHunterScreen() {
   const chambers = stats?.chambers ?? 2;
   const equipped = stats?.equipped_irons ?? [];
 
+  // ── Showdown: card-by-card settlement reveal ──
+  if (showdownActive && showdownResults.length > 0) {
+    const revealedResults = showdownResults.slice(0, showdownStep);
+    const currentReveal = showdownStep > 0 && showdownStep <= showdownResults.length
+      ? showdownResults[showdownStep - 1]
+      : null;
+    const runningDD = revealedResults.reduce((sum, s) => sum + (s.my_pick?.payout ?? 0), 0);
+    const allRevealed = showdownStep > showdownResults.length;
+
+    return (
+      <View style={styles.container}>
+        {toastElement}
+        {ironModal}
+
+        <View style={styles.titleRow}>
+          <Text
+            style={[
+              styles.balanceText,
+              displayBalance <= 0 && { color: Colors.accent },
+            ]}
+          >
+            $${displayBalance.toLocaleString()}
+          </Text>
+          <WantedBar level={wantedLevel} mult={mult} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.lockedPicksArea}>
+          <Ionicons name="flash" size={48} color={Colors.yellow} />
+          <Text style={[styles.lockedTitle, { color: Colors.yellow }]}>Showdown</Text>
+
+          {showdownStep === 0 ? (
+            <TouchableOpacity
+              style={[styles.showdownRevealButton, { marginTop: Spacing.lg }]}
+              onPress={advanceShowdown}
+            >
+              <Text style={styles.showdownRevealText}>Reveal Results</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              {/* Revealed cards */}
+              <View style={styles.lockedPicksGrid}>
+                {revealedResults.map((stock) => {
+                  const pick = stock.my_pick!;
+                  const isWin = pick.is_correct;
+                  const predLabel = pick.prediction === "UP" ? "RISE" : pick.prediction === "DOWN" ? "FALL" : "HOLD";
+                  const color = isWin ? Colors.green : Colors.accent;
+                  const icon = isWin ? "checkmark-circle" : "close-circle";
+
+                  return (
+                    <Animated.View
+                      key={stock.symbol}
+                      style={[
+                        styles.lockedPickCard,
+                        { borderColor: color + "60" },
+                        currentReveal?.symbol === stock.symbol && {
+                          transform: [{ translateX: showdownSlideAnim }],
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.lockedPickSymbol, { color }]}>
+                        {stock.symbol}
+                      </Text>
+                      <Ionicons name={icon as any} size={24} color={color} />
+                      <Text style={[styles.lockedPickLabel, { color }]}>
+                        {predLabel} {"\u2192"} {stock.result ?? "?"}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.lockedPickBounty,
+                          { color: (pick.payout ?? 0) >= 0 ? Colors.green : Colors.accent },
+                        ]}
+                      >
+                        {(pick.payout ?? 0) >= 0 ? "+" : ""}$${pick.payout ?? 0}
+                      </Text>
+                      {pick.ghost_triggered && (
+                        <Text style={{ color: Colors.primaryLight, fontFamily: FontFamily.bold, fontSize: FontSize.xs, marginTop: 2 }}>
+                          Ghost Rider!
+                        </Text>
+                      )}
+                      {pick.insurance_triggered && (
+                        <Text style={{ color: Colors.primary, fontFamily: FontFamily.bold, fontSize: FontSize.xs, marginTop: 2 }}>
+                          Insurance!
+                        </Text>
+                      )}
+                      {pick.margin_call_triggered && (
+                        <Text style={{ color: Colors.accent, fontFamily: FontFamily.bold, fontSize: FontSize.xs, marginTop: 2 }}>
+                          Margin Call!
+                        </Text>
+                      )}
+                    </Animated.View>
+                  );
+                })}
+              </View>
+
+              {/* Running total */}
+              <View style={{ marginTop: Spacing.md, alignItems: "center" }}>
+                <Text style={{ fontFamily: FontFamily.regular, fontSize: FontSize.sm, color: Colors.textSecondary }}>
+                  Window P/L
+                </Text>
+                <Text style={{
+                  fontFamily: FontFamily.bold,
+                  fontSize: FontSize.xl,
+                  color: runningDD >= 0 ? Colors.green : Colors.accent,
+                }}>
+                  {runningDD >= 0 ? "+" : ""}$${Math.abs(runningDD).toLocaleString()}
+                </Text>
+              </View>
+
+              {/* Advance or finish */}
+              {!allRevealed ? (
+                <TouchableOpacity
+                  style={[styles.showdownRevealButton, { marginTop: Spacing.lg }]}
+                  onPress={advanceShowdown}
+                >
+                  <Ionicons name="arrow-forward" size={18} color={Colors.text} />
+                  <Text style={styles.showdownRevealText}>
+                    Next ({showdownStep}/{showdownResults.length})
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.showdownRevealButton, { marginTop: Spacing.lg, backgroundColor: Colors.green + "30" }]}
+                  onPress={advanceShowdown}
+                >
+                  <Text style={[styles.showdownRevealText, { color: Colors.green }]}>Continue</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity onPress={skipShowdown} style={{ marginTop: Spacing.sm }}>
+                <Text style={{ color: Colors.textMuted, fontFamily: FontFamily.regular, fontSize: FontSize.sm }}>
+                  Skip
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
   // ── Active window + current stock — 4-direction swipe card ──
   if (hasActiveWindow && currentStock) {
     return (
@@ -798,6 +921,22 @@ export default function BountyHunterScreen() {
         <View style={styles.statusRow}>
           <Text style={styles.pickCounter}>Card {stockProgress}</Text>
         </View>
+
+        {/* Conditions banner */}
+        {(status?.conditions?.length ?? 0) > 0 && (
+          <View style={styles.conditionsBanner}>
+            {status!.conditions.map((c, i) => (
+              <View key={i} style={styles.conditionChip}>
+                <Ionicons
+                  name={c.category === "ticker_event" ? "flash" : "thunderstorm"}
+                  size={12}
+                  color={Colors.yellow}
+                />
+                <Text style={styles.conditionChipText}>{c.name}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* 4-direction swipe area */}
         <View style={styles.swipeArea}>
@@ -909,7 +1048,18 @@ export default function BountyHunterScreen() {
             ]}
             {...panResponder.panHandlers}
           >
-          <View style={[styles.card, lightCards && { backgroundColor: LightCardColors.cardBg, borderColor: LightCardColors.border }]}>
+          <View style={[
+            styles.card,
+            lightCards && { backgroundColor: LightCardColors.cardBg, borderColor: LightCardColors.border },
+            currentStock.is_high_noon && styles.highNoonCard,
+          ]}>
+            {/* High Noon badge */}
+            {currentStock.is_high_noon && (
+              <View style={styles.highNoonBadge}>
+                <Ionicons name="skull" size={14} color="#000" />
+                <Text style={styles.highNoonBadgeText}>HIGH NOON</Text>
+              </View>
+            )}
             {/* Color overlays */}
             <Animated.View
               style={[styles.cardOverlay, { backgroundColor: Colors.green, opacity: riseBgOpacity }]}
@@ -935,20 +1085,6 @@ export default function BountyHunterScreen() {
                 lightTheme={lightCards}
                 candleChart={candleChart}
               />
-
-              {/* Test outcome indicator */}
-              {testOutcomes[currentStock.symbol] && (() => {
-                const outcome = testOutcomes[currentStock.symbol];
-                const oColor =
-                  outcome === "RISE" ? Colors.green : outcome === "FALL" ? Colors.accent : HOLSTER_COLOR;
-                return (
-                  <View style={styles.testOutcomeTag}>
-                    <Text style={[styles.testOutcomeText, { color: oColor }]}>
-                      Answer: {outcome}
-                    </Text>
-                  </View>
-                );
-              })()}
 
               {/* Cardinal direction labels */}
               <View style={[styles.cardLabelWrap, { top: 4, left: 0, right: 0 }]}>
@@ -985,11 +1121,10 @@ export default function BountyHunterScreen() {
     );
   }
 
-  // ── Active window, all stocks picked — locked-in state ──
+  // ── Active window, all stocks picked — waiting for settlement ──
   if (hasActiveWindow && allExhausted) {
     return (
       <View style={styles.container}>
-        <QuoteTransition visible={showQuote} onComplete={advanceRound} />
         {toastElement}
         {ironModal}
 
@@ -1007,226 +1142,127 @@ export default function BountyHunterScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.lockedPicksArea}>
-          <Ionicons name="checkmark-circle" size={48} color={Colors.green} />
-          <Text style={styles.lockedTitle}>Locked In</Text>
+          <Ionicons name="lock-closed" size={48} color={Colors.orange} />
+          <Text style={styles.lockedTitle}>Picks Locked</Text>
+          <Text style={styles.waitingSubtext}>
+            Settling in {windowEndCountdown || "..."}
+          </Text>
 
-          {/* Scored picks grid */}
-          {(() => {
-            const fx = getIronEffects(stats?.equipped_irons ?? [], boostedIronId);
-            const effectiveAnte = Math.max(0, ANTE_BASE - fx.anteReduction);
-            let roundTotal = -effectiveAnte; // ante deducted at round start
-            let roundNotoriety = 0;
-
-            // Helper: map bet amount to pseudo-tier for iron effects
-            const betToTier = (b: number) => b <= 33 ? 1 : b <= 66 ? 2 : 3;
-
-            const scoredPicks = pickedStocks.map((stock) => {
+          {/* Show submitted picks with adjust option */}
+          <View style={styles.lockedPicksGrid}>
+            {pickedStocks.map((stock) => {
               const swipedPick = swipedPicks.find((p) => p.symbol === stock.symbol);
-              const pred = ignoreServerPicks
-                ? (swipedPick?.prediction ?? stock.my_pick?.prediction)
-                : (stock.my_pick?.prediction ?? swipedPick?.prediction);
-              const bet = ignoreServerPicks
-                ? (swipedPick?.betAmount ?? 50)
-                : ((stock.my_pick as any)?.bet_amount ?? swipedPick?.betAmount ?? 50);
-              const pickLev = ignoreServerPicks
-                ? (swipedPick?.leverage ?? 1.0)
-                : ((stock.my_pick as any)?.leverage ?? swipedPick?.leverage ?? 1.0);
-              const conf = betToTier(bet);
-              const testAnswer = testOutcomes[stock.symbol];
+              const pred = stock.my_pick?.prediction ?? swipedPick?.prediction;
+              const bet = (stock.my_pick as any)?.bet_amount ?? swipedPick?.betAmount ?? 50;
+              const pickLev = (stock.my_pick as any)?.leverage ?? swipedPick?.leverage ?? 1.0;
               const predLabel = pred === "UP" ? "RISE" : pred === "DOWN" ? "FALL" : pred;
-              const isHold = pred === "HOLD";
-              const isDE = conf === 3;
-
-              // Effective leverage (halved for HOLD)
-              const pickEffLev = isHold ? 1 + (pickLev - 1) * 0.5 : pickLev;
-
-              // Ghost Rider: random miss→correct flip
-              let isWin = testAnswer === predLabel;
-              if (!isWin && fx.ghostChance > 0 && Math.random() < fx.ghostChance) isWin = true;
-
-              // Bet-based scoring with leverage: win = bet × leverage × mult, lose = bet × leverage
-              let winVal = Math.round(bet * pickEffLev * mult);
-              let loseVal = Math.round(bet * pickEffLev);
-
-              // Iron win bonuses
-              if (conf === 1) winVal += fx.drawWinBonus * mult;
-              if (conf === 2) winVal += fx.qdWinBonus * mult;
-              if (isHold) winVal += fx.holsterWinBonus * mult;
-              winVal += fx.perLevelWinBonus * wantedLevel * mult;
-              if (isDE && !isHold && fx.deWinMultiplier > 1) winVal = Math.round(winVal * fx.deWinMultiplier);
-
-              // Iron loss reduction
-              loseVal = Math.max(0, loseVal - fx.allLoseReduction);
-              if (fx.snakeOil && isHold && conf === 1) loseVal = 0;
-
-              const basePoints = isWin ? winVal : -loseVal;
-              let scaledPoints = Math.round(basePoints * fx.scoreMultiplier);
-              if (isWin && fx.flatCashPerCorrect > 0) scaledPoints += fx.flatCashPerCorrect;
-
-              // Notoriety: bet / 33 to scale into ~0-3 range
-              const notorietyWeight = bet > 0 ? bet / 33 : 1;
-              let notorietyDelta = notorietyWeight * (isWin ? 1 : -1);
-              if (isWin && fx.notorietyBonus > 0) notorietyDelta += fx.notorietyBonus;
-
-              // Carry cost for leverage
-              const carryCost = Math.round((pickLev - 1.0) * 10);
-              roundTotal += scaledPoints - carryCost;
-              roundNotoriety += notorietyDelta;
-
-              // Leverage notoriety bonus
-              if (isWin && pickLev >= 3.0) roundNotoriety += 0.5;
-
               const color = pred === "UP" ? Colors.green : pred === "DOWN" ? Colors.accent : pred === "HOLD" ? Colors.primary : Colors.textMuted;
               const icon = pred === "UP" ? "arrow-up-circle" : pred === "DOWN" ? "arrow-down-circle" : pred === "HOLD" ? "pause-circle" : "checkmark-circle";
+              const isAdjusting = adjustingSymbol === stock.symbol;
+              const conf = bet <= 33 ? 1 : bet <= 66 ? 2 : 3;
+              const adjCost = Math.round(25 * conf * (1 + 0.1 * wantedLevel));
 
-              return { stock, pred, predLabel, conf, bet, testAnswer, isWin, isHold, basePoints, scaledPoints, notorietyDelta, color, icon, pickLev, carryCost };
-            });
-
-            // Store for handleNextRound to accumulate
-            lastRoundTotal.current = roundTotal;
-            const levelChange = roundNotoriety >= NOTORIETY_UP_THRESHOLD ? 1 : roundNotoriety <= NOTORIETY_DOWN_THRESHOLD ? -1 : 0;
-            lastLevelChange.current = levelChange;
-            const levelLabel = levelChange > 0 ? "LEVEL UP!" : levelChange < 0 ? "Level down" : "Level holds";
-            const levelColor = levelChange > 0 ? Colors.green : levelChange < 0 ? Colors.accent : Colors.textMuted;
-            const newLevel = Math.max(1, wantedLevel + levelChange);
-            const newMult = getWantedMult(newLevel);
-            const currentBalance = displayBalance;
-            const projectedBalance = currentBalance + roundTotal;
-            const isBusted = projectedBalance <= 0;
-
-            return (
-              <>
-                <View style={styles.lockedPicksGrid}>
-                  {scoredPicks.map(({ stock, pred, predLabel, bet, testAnswer, isWin, basePoints, scaledPoints, color, icon, pickLev, carryCost }) => (
-                    <View
-                      key={stock.symbol}
-                      style={[styles.lockedPickCard, { borderColor: color + "40" }]}
+              return (
+                <View
+                  key={stock.symbol}
+                  style={[styles.lockedPickCard, { borderColor: color + "40" }]}
+                >
+                  <Text style={[styles.lockedPickSymbol, { color }]}>
+                    {stock.symbol}
+                  </Text>
+                  <Ionicons name={icon as any} size={22} color={color} />
+                  {pred && (
+                    <Text style={[styles.lockedPickLabel, { color }]}>
+                      {predLabel}
+                    </Text>
+                  )}
+                  <Text style={[styles.lockedPickBounty, { color: Colors.orange }]}>
+                    $${bet}{pickLev > 1 ? ` @${pickLev.toFixed(1)}x` : ""}
+                  </Text>
+                  {/* Adjust controls */}
+                  {!adjustmentUsed && !isAdjusting && (
+                    <TouchableOpacity
+                      style={styles.adjustButton}
+                      onPress={() => setAdjustingSymbol(stock.symbol)}
                     >
-                      <Text style={[styles.lockedPickSymbol, { color }]}>
-                        {stock.symbol}
-                      </Text>
-                      <Ionicons name={icon as any} size={22} color={color} />
-                      {pred && (
-                        <Text style={[styles.lockedPickLabel, { color }]}>
-                          {predLabel}
-                        </Text>
-                      )}
-                      <Text style={[styles.lockedPickBounty, { color: Colors.orange }]}>
-                        $${bet}{pickLev > 1 ? ` @${pickLev.toFixed(1)}x` : ""}
-                      </Text>
-                      {testAnswer && (
-                        <>
-                          <Text
-                            style={[
-                              styles.testResultTag,
-                              { color: isWin ? Colors.green : Colors.accent },
-                            ]}
+                      <Text style={styles.adjustButtonText}>Adjust -$${adjCost}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {isAdjusting && (
+                    <View style={styles.adjustControls}>
+                      {(["UP", "DOWN", "HOLD"] as const).filter(d => d !== pred).map((dir) => {
+                        const dColor = dir === "UP" ? Colors.green : dir === "DOWN" ? Colors.accent : Colors.primary;
+                        const dLabel = dir === "UP" ? "RISE" : dir === "DOWN" ? "FALL" : "HOLD";
+                        return (
+                          <TouchableOpacity
+                            key={dir}
+                            style={[styles.adjustOption, { borderColor: dColor + "60" }]}
+                            disabled={adjustMutation.isPending}
+                            onPress={() => {
+                              if (!currentWindow) return;
+                              adjustMutation.mutate(
+                                {
+                                  bounty_window_id: currentWindow.id,
+                                  symbol: stock.symbol,
+                                  new_prediction: dir,
+                                },
+                                {
+                                  onSuccess: (res) => {
+                                    setAdjustmentUsed(true);
+                                    setAdjustingSymbol(null);
+                                    showToast(`Adjusted to ${dLabel} (-$$${res.adjustment_cost})`);
+                                  },
+                                  onError: (err) => {
+                                    setAdjustingSymbol(null);
+                                    showToast(err.message ?? "Adjust failed");
+                                  },
+                                }
+                              );
+                            }}
                           >
-                            {isWin ? "WIN" : "LOSE"} ({testAnswer})
-                          </Text>
-                          <Text
-                            style={[
-                              styles.testScoreTag,
-                              { color: scaledPoints >= 0 ? Colors.green : Colors.accent },
-                            ]}
-                          >
-                            {scaledPoints >= 0 ? "+" : ""}{scaledPoints}
-                            <Text style={styles.testScoreBreakdown}>
-                              {" "}($${bet} bet)
-                            </Text>
-                          </Text>
-                        </>
-                      )}
+                            <Text style={[styles.adjustOptionText, { color: dColor }]}>{dLabel}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                      <TouchableOpacity onPress={() => setAdjustingSymbol(null)}>
+                        <Text style={{ color: Colors.textMuted, fontSize: FontSize.xs }}>Cancel</Text>
+                      </TouchableOpacity>
                     </View>
-                  ))}
-                  {skippedStocks.map((stock) => (
-                    <View
-                      key={stock.symbol}
-                      style={[
-                        styles.lockedPickCard,
-                        { borderColor: Colors.orange + "40", opacity: 0.5 },
-                      ]}
-                    >
-                      <Text style={[styles.lockedPickSymbol, { color: Colors.orange }]}>
-                        {stock.symbol}
-                      </Text>
-                      <Ionicons name="play-skip-forward" size={22} color={Colors.orange} />
-                      <Text style={[styles.lockedPickLabel, { color: Colors.orange }]}>
-                        SKIP
-                      </Text>
-                    </View>
-                  ))}
+                  )}
                 </View>
+              );
+            })}
+            {skippedStocks.map((stock) => (
+              <View
+                key={stock.symbol}
+                style={[
+                  styles.lockedPickCard,
+                  { borderColor: Colors.orange + "40", opacity: 0.5 },
+                ]}
+              >
+                <Text style={[styles.lockedPickSymbol, { color: Colors.orange }]}>
+                  {stock.symbol}
+                </Text>
+                <Ionicons name="play-skip-forward" size={22} color={Colors.orange} />
+                <Text style={[styles.lockedPickLabel, { color: Colors.orange }]}>
+                  SKIP
+                </Text>
+              </View>
+            ))}
+          </View>
 
-                {/* Round summary */}
-                <View style={styles.roundSummary}>
-                  <View style={styles.roundSummaryRow}>
-                    <Text style={styles.roundSummaryLabel}>Ante{fx.anteReduction > 0 ? ` (-${fx.anteReduction} Iron)` : ""}</Text>
-                    <Text style={[styles.roundSummaryValue, { color: Colors.accent }]}>
-                      -$${effectiveAnte}
-                    </Text>
-                  </View>
-                  <View style={styles.roundSummaryRow}>
-                    <Text style={styles.roundSummaryLabel}>Picks P/L</Text>
-                    <Text
-                      style={[
-                        styles.roundSummaryValue,
-                        { color: (roundTotal + effectiveAnte) >= 0 ? Colors.green : Colors.accent },
-                      ]}
-                    >
-                      {(roundTotal + effectiveAnte) >= 0 ? "+" : ""}$${Math.abs(roundTotal + effectiveAnte).toLocaleString()}
-                    </Text>
-                  </View>
-                  <View style={[styles.roundSummaryRow, { borderTopWidth: 1, borderTopColor: Colors.surface, paddingTop: Spacing.sm, marginTop: Spacing.xs }]}>
-                    <Text style={styles.roundSummaryLabel}>Round Net</Text>
-                    <Text
-                      style={[
-                        styles.roundSummaryValue,
-                        { color: roundTotal >= 0 ? Colors.green : Colors.accent },
-                      ]}
-                    >
-                      {roundTotal >= 0 ? "+" : ""}$${Math.abs(roundTotal).toLocaleString()}
-                    </Text>
-                  </View>
-                  <View style={styles.roundSummaryRow}>
-                    <Text style={styles.roundSummaryLabel}>Projected Balance</Text>
-                    <Text
-                      style={[
-                        styles.roundSummaryValue,
-                        { color: isBusted ? Colors.accent : Colors.yellow },
-                      ]}
-                    >
-                      $${projectedBalance.toLocaleString()}{isBusted ? " — BUSTED" : ""}
-                    </Text>
-                  </View>
-                  <View style={[styles.roundSummaryRow, { borderTopWidth: 1, borderTopColor: Colors.surface, paddingTop: Spacing.sm, marginTop: Spacing.xs }]}>
-                    <Text style={styles.roundSummaryLabel}>
-                      Notoriety ({"\u2265"}{NOTORIETY_UP_THRESHOLD} up / {"\u2264"}{NOTORIETY_DOWN_THRESHOLD} down)
-                    </Text>
-                    <Text
-                      style={[
-                        styles.roundSummaryValue,
-                        { color: roundNotoriety >= 0 ? Colors.green : Colors.accent },
-                      ]}
-                    >
-                      {roundNotoriety >= 0 ? "+" : ""}{roundNotoriety.toFixed(1)}
-                    </Text>
-                  </View>
-                  <View style={styles.roundSummaryRow}>
-                    <Text style={styles.roundSummaryLabel}>Wanted Level</Text>
-                    <Text style={[styles.roundSummaryValue, { color: levelColor }]}>
-                      {levelLabel} {"\u2192"} Lv.{newLevel} ({newMult}x)
-                    </Text>
-                  </View>
-                </View>
-              </>
-            );
-          })()}
+          {/* Next window preview */}
+          {status?.next_window_preview && status.next_window_preview.length > 0 && (
+            <View style={styles.nextPreview}>
+              <Text style={styles.nextPreviewLabel}>Coming Next</Text>
+              <View style={styles.nextPreviewTickers}>
+                {status.next_window_preview.map((sym) => (
+                  <Text key={sym} style={styles.nextPreviewTicker}>{sym}</Text>
+                ))}
+              </View>
+            </View>
+          )}
 
-          <TouchableOpacity style={styles.nextRoundButton} onPress={handleNextRound}>
-            <Ionicons name="refresh" size={18} color={Colors.text} />
-            <Text style={styles.nextRoundButtonText}>Next Round</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.resetScoreButton}
             onPress={() =>
@@ -1318,8 +1354,18 @@ export default function BountyHunterScreen() {
           {nextWindowCountdown || "Calculating..."}
         </Text>
         <Text style={styles.waitingSubtext}>
-          New bounty every 2 minutes.{"\n"}Ante: $${anteCost} per window.
+          New bounty every 15 minutes.{"\n"}Ante: $${anteCost} per window.
         </Text>
+        {status?.next_window_preview && status.next_window_preview.length > 0 && (
+          <View style={[styles.nextPreview, { marginTop: Spacing.lg }]}>
+            <Text style={styles.nextPreviewLabel}>Coming Next</Text>
+            <View style={styles.nextPreviewTickers}>
+              {status.next_window_preview.map((sym) => (
+                <Text key={sym} style={styles.nextPreviewTicker}>{sym}</Text>
+              ))}
+            </View>
+          </View>
+        )}
         <TouchableOpacity
           style={[styles.resetScoreButton, { marginTop: Spacing.xl }]}
           onPress={() =>
@@ -1422,61 +1468,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: FontSize.md,
     color: Colors.text,
-  },
-
-  // ── Test mode ──
-  testOutcomeTag: {
-    position: "absolute",
-    bottom: Spacing.lg + 36,
-    alignSelf: "center",
-    backgroundColor: Colors.background + "CC",
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-    zIndex: 6,
-  },
-  testOutcomeText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.xs,
-  },
-  testResultTag: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.xs,
-    marginTop: 4,
-  },
-  testScoreTag: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.sm,
-    marginTop: 2,
-  },
-  testScoreBreakdown: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-  },
-  roundSummary: {
-    width: "100%",
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
-  },
-  roundSummaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  roundSummaryLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.md,
-    color: Colors.textSecondary,
-  },
-  roundSummaryValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.md,
   },
 
   // ── 4-direction swipe area ──
@@ -1640,23 +1631,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: FontSize.sm,
   },
-  nextRoundButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    marginTop: Spacing.md,
-  },
-  nextRoundButtonText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.md,
-    color: Colors.text,
-  },
   resetScoreButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1668,6 +1642,81 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: FontSize.sm,
     color: Colors.accent,
+  },
+
+  // ── Adjustment controls ──
+  adjustButton: {
+    marginTop: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.orange + "40",
+  },
+  adjustButtonText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10,
+    color: Colors.orange,
+  },
+  adjustControls: {
+    marginTop: 4,
+    alignItems: "center",
+    gap: 3,
+  },
+  adjustOption: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+  },
+  adjustOptionText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+  },
+
+  // ── Next window preview ──
+  nextPreview: {
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+  },
+  nextPreviewLabel: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  nextPreviewTickers: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  nextPreviewTicker: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.sm,
+    color: Colors.orange,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+    overflow: "hidden",
+  },
+
+  // ── Showdown ──
+  showdownRevealButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.yellow + "40",
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+  },
+  showdownRevealText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.md,
+    color: Colors.text,
   },
 
   // ── Waiting / no active window ──
@@ -1779,5 +1828,55 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontFamily: FontFamily.bold,
     color: Colors.text,
+  },
+
+  // ── Conditions banner ──
+  conditionsBanner: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.xs,
+  },
+  conditionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.yellow + "18",
+    borderWidth: 1,
+    borderColor: Colors.yellow + "40",
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
+  conditionChipText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.xs,
+    color: Colors.yellow,
+  },
+
+  // ── High Noon card ──
+  highNoonCard: {
+    borderColor: Colors.yellow,
+    borderWidth: 2,
+  },
+  highNoonBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.yellow,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  highNoonBadgeText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.xs,
+    color: "#000",
   },
 });

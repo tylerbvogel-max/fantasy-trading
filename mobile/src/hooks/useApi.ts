@@ -21,6 +21,7 @@ import type {
   BountySettlementAnalysis,
   BountyPerformanceAnalytics,
   BountyActivityEvent,
+  BountyAdjustResponse,
 } from "../api/client";
 
 // ── User ──
@@ -38,7 +39,7 @@ export function useBountyStatus() {
   return useQuery<BountyStatus>({
     queryKey: ["bountyStatus"],
     queryFn: () => bounty.status(),
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 }
 
@@ -88,6 +89,21 @@ export function useBountySkip() {
     { bounty_window_id: string; symbol: string }
   >({
     mutationFn: (data) => bounty.skip(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
+    },
+  });
+}
+
+export function useAdjustPrediction() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    BountyAdjustResponse,
+    Error,
+    { bounty_window_id: string; symbol: string; new_prediction: string; new_bet_amount?: number }
+  >({
+    mutationFn: (data) => bounty.adjust(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bountyStatus"] });
     },

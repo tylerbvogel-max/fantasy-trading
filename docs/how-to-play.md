@@ -2,7 +2,7 @@
 
 ## The Basics
 
-Bounty Hunter is a stock prediction game. Every hour during market hours, a new **prediction window** opens with a set of stocks. You swipe to predict whether each stock will go **UP** or **DOWN** by the end of the hour, or **HOLD** if you think it'll stay flat.
+Bounty Hunter is a stock prediction game. Every **15 minutes** during market hours, a new **prediction window** opens with 5 stocks. You swipe to predict whether each stock will go **UP** or **DOWN** by the end of the window, or **HOLD** if you think it'll stay flat.
 
 Get it right and you earn **Double Dollars ($$)**. Get it wrong and you lose them. The higher your **wanted level**, the bigger the stakes.
 
@@ -10,11 +10,11 @@ Get it right and you earn **Double Dollars ($$)**. Get it wrong and you lose the
 
 ## Prediction Windows
 
-- Each window lasts **1 hour** during US market hours
-- Stocks are the **top 25 by weekly volume**, pulled from Yahoo Finance trending data
-- Stocks are batched into **groups of 5** per round (5 rounds per cycle through the pool)
+- Each window lasts **15 minutes** during US market hours
+- Each window contains **5 stocks** from the top 25 by weekly volume (Yahoo Finance trending data)
+- Stocks rotate each window — the 25-stock pool cycles in groups of 5
 - All players see the same stocks in the same order
-- You have until the **prediction cutoff** to submit your picks
+- You have until the window closes to submit your picks
 - After the window closes, results are settled automatically
 
 ---
@@ -157,15 +157,64 @@ Correct picks at 3.0x+ leverage earn **+0.5 bonus notoriety**.
 
 ---
 
-## Between Rounds
+## Adjustments
 
-After completing all picks in a round, you'll sometimes see a **transition screen** — either a famous finance quote or a **chart pattern tip** teaching you candlestick and line chart patterns (e.g. "Three White Soldiers", "Cup and Handle"). Tap anywhere to skip it and move to the next round.
+After locking in all your picks, you can **adjust** one prediction per window. This costs Double Dollars:
+
+```
+adjustment_cost = 25 × confidence × (1 + 0.1 × wanted_level)
+```
+
+You can change the direction (RISE/FALL/HOLD) of any locked pick. Use this when news breaks mid-window or you spot a better play. Only **1 adjustment per window** — choose wisely.
+
+---
+
+## Showdown
+
+When a window settles, results are revealed one stock at a time in a **showdown sequence**. Each card flips to show WIN or LOSE with your payout, plus any iron triggers (Ghost Rider, Insurance, Margin Call). Tap to advance through each reveal, or skip to see all results at once.
+
+---
+
+## Market Conditions
+
+Some windows have **conditions** — real market events that modify gameplay for that window:
+
+### Market Weather (broad effects)
+
+| Condition | Effect |
+|-----------|--------|
+| **Volatility Surge** | All scoring x1.3 |
+| **Dead Calm** | HOLD zone narrows 30% |
+| **Bear Raid** | FALL picks get +10 win bonus |
+| **Momentum Day** | Directional picks get +8 win bonus |
+| **Fed Tension** | All scoring x1.5 AND all losses x1.5 |
+
+### Ticker Events (per-stock)
+
+| Condition | Effect |
+|-----------|--------|
+| **Earnings Live** | 2x scoring + 1.5x notoriety on that stock |
+| **Sector Heat** | Sector stocks get 1.5x scoring |
+
+Conditions are driven by real market data: earnings calendars, market regime, and economic events. About **35%** of windows have at least one condition. Conditions appear as banners above your cards.
+
+---
+
+## High Noon Bounties
+
+When a critical market event aligns with a stock in your window (like an earnings report), a **High Noon** bounty may appear as a 6th card:
+
+- Forced **Dead Eye** confidence — no sandbagging
+- **3x scoring** multiplier on the result
+- **+1.0 notoriety** bonus on correct, **-1.5 notoriety** penalty on wrong
+
+High Noon cards are marked with a gold border and skull badge. They're high-risk, high-reward swings that can catapult your wanted level — or crater it.
 
 ---
 
 ## Ante
 
-Each prediction window costs an **ante** to enter: **$$75** base.
+Each prediction window costs an **ante** to enter: **$$15** base.
 
 Some irons can reduce the ante cost.
 
@@ -344,3 +393,5 @@ At streak 7+, you earn a **streak shield** that forgives one missed day. The shi
 8. **Chase badges for titles** — badges unlock titles which unlock bragging rights on the leaderboard
 9. **Maintain your streak** — daily consistency earns escalating rewards and the Streak Master badge
 10. **Watch the post-settlement analysis** — learn why stocks moved and where your edge is
+11. **Read the conditions** — a Volatility Surge window rewards aggressive bets; a Dead Calm window narrows HOLD zones so directional picks hit more often
+12. **High Noon is a gamble** — the 3x multiplier is tempting but -1.5 notoriety on a miss can drop your wanted level

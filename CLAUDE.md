@@ -39,13 +39,13 @@ A mobile stock prediction game where players make directional picks (RISE/FALL/H
 
 **5 tabs** (order: Stats, Irons, **Bounty** (center, prominent), Board, Profile):
 
-- **BountyHunterScreen** (~1780 lines) — Main game screen. Tinder-style swipe cards for stock predictions. Each card shows a stock with its probability cone chart. Swipe right = RISE, left = FALL, down = HOLD, up = SKIP. Features:
-  - Round-based batching: 25 trending stocks served in groups of 5 per round
-  - Confidence selection (Draw/Quick Draw/Dead Eye) via revolver cylinder UI
+- **BountyHunterScreen** — Main game screen. Tinder-style swipe cards for stock predictions. Each card shows a stock with its probability cone chart. Swipe right = RISE, left = FALL, down = HOLD, up = SKIP. Features:
+  - 5 stocks per window, no batching — single pass through all cards
+  - Confidence selection (Draw/Quick Draw/Dead Eye) via bet slider
   - Leverage slider (1x-5x, unlocked by wanted level)
-  - Quote/tip transition screens between rounds (~50% chance)
   - Animated card overlays showing pick direction
-  - Progress indicator: "Round X/30 - Card Y/5"
+  - "Picks Locked" waiting view with adjustment button (1 per window) and next window preview
+  - Showdown: sequential card-by-card settlement reveal with iron trigger callouts (Ghost Rider, Insurance, Margin Call)
 
 - **BountyStatsScreen** — Detailed stats: accuracy by confidence, time slot, ticker. Weekly trends, wanted level progress bar.
 
@@ -106,9 +106,9 @@ If a mechanic exists in the backend but not the simulation, balance is untested.
 ## Core Game Mechanics
 
 ### Prediction Flow
-1. Backend creates bounty windows on a rolling basis (currently 2-min for testing, 120-min for production)
-2. Each window contains 25 stocks ordered by trending rank (from Yahoo most-actives)
-3. Frontend batches these into groups of 5 for swipe rounds
+1. Backend creates bounty windows on a rolling 15-minute basis
+2. Each window contains 5 stocks rotated from the 25-stock trending pool
+3. No frontend batching — each window's 5 stocks are swiped in a single pass
 4. Player swipes cards: RISE (right), FALL (left), HOLD (down), SKIP (up)
 5. Each pick requires: direction, confidence (1-3), leverage (1x-5x)
 6. Ante cost deducted on each pick. Skip costs escalate exponentially.
@@ -222,4 +222,4 @@ cd mobile && npx tsc --noEmit
 - **Expo Go only**: No native modules (e.g., react-native-skia). All animations use React Native's `Animated` API.
 - **Animated.View limits**: ~500-600 compositor layers before frame drops on mobile. Particle effects (PixelFire) were removed from cards for this reason.
 - **Yahoo Finance rate limits**: Chart cache (90s TTL) + parallel fetches mitigate this. Cold cache for 25 stocks takes ~2-3s.
-- **Window duration**: Currently set to 2 minutes for rapid testing (`WINDOW_DURATION_MINUTES = 2`). Production value is 120 minutes.
+- **Window duration**: 15-minute micro-windows (`WINDOW_DURATION_MINUTES = 15`). ~4 windows per market hour.

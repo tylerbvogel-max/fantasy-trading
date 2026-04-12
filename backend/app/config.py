@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     # App
     default_starting_cash: float = 100000.00
 
-    # Bounty window duration (minutes): 2 for dev, 120 for production
-    bounty_window_minutes: int = 2
+    # Bounty window duration (minutes): 15 for production micro-windows
+    bounty_window_minutes: int = 15
 
     # CORS: comma-separated allowed origins (empty = allow all in dev)
     cors_origins: str = ""

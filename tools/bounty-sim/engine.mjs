@@ -4,7 +4,9 @@ import {
   PICKS_PER_ROUND, STARTING_BALANCE, NUM_ROUNDS, STARTING_CHAMBERS, MAX_CHAMBERS,
   DIR_SCORING, HOL_SCORING, NOTORIETY_WEIGHT,
   NOTORIETY_UP_THRESHOLD, NOTORIETY_DOWN_THRESHOLD,
-  wantedMultiplier, skipCost, roundAnte,
+  wantedMultiplier, skipCost, windowAnte,
+  CONDITION_PROBABILITY, RANDOM_MARKET_CONDITIONS, CONDITION_DEFS,
+  HIGH_NOON_SCORING_MULT, HIGH_NOON_NOTORIETY_WIN, HIGH_NOON_NOTORIETY_LOSE,
 } from './config.mjs';
 import { rollIronOffering, getIronEffects, equipIron } from './irons.mjs';
 import { getPlayerAction, getAccuracy, pickIron } from './archetypes.mjs';
@@ -171,7 +173,11 @@ function doSimulatePick(player, state, fx, pickState, cfg) {
   // ── Compute scaled points ──
   const effectiveCorrect = isCorrect || tombstoneFlip;
   const basePoints = effectiveCorrect ? winVal : -loseVal;
-  let scaledPoints = Math.round(basePoints * mult * fx.scoreMultiplier);
+  // Loss multiplier cap: if configured, losses use a dampened multiplier
+  const effectiveMult = (basePoints < 0 && cfg.LOSS_MULT_CAP)
+    ? Math.min(mult, cfg.LOSS_MULT_CAP)
+    : mult;
+  let scaledPoints = Math.round(basePoints * effectiveMult * fx.scoreMultiplier);
 
   // Holster score multiplier (Diamond Spurs)
   if (isHolster && fx.holsterScoreMult > 1) {
@@ -201,6 +207,21 @@ function doSimulatePick(player, state, fx, pickState, cfg) {
     scaledPoints += fx.holsterCorrectBonus;
   }
 
+  // ── Condition effects ──
+  const cond = pickState.conditionEffects;
+  if (cond) {
+    // Score multiplier (volatility_surge, fed_tension)
+    if (cond.score_multiplier) scaledPoints = Math.round(scaledPoints * cond.score_multiplier);
+    // Directional win bonus (momentum_day)
+    if (effectiveCorrect && isDir && cond.dir_win_bonus) scaledPoints += cond.dir_win_bonus * effectiveMult;
+    // Fall win bonus (bear_raid)
+    if (effectiveCorrect && direction === 'fall' && cond.fall_win_bonus) scaledPoints += cond.fall_win_bonus * effectiveMult;
+    // Loss amplification (fed_tension)
+    if (!effectiveCorrect && scaledPoints < 0 && cond.all_lose_multiplier) {
+      scaledPoints = Math.round(scaledPoints * cond.all_lose_multiplier);
+    }
+  }
+
   balance += scaledPoints;
 
   // ── Six-Shooter: every Nth correct pick gives bonus ──
@@ -213,7 +234,8 @@ function doSimulatePick(player, state, fx, pickState, cfg) {
   }
 
   // ── Notoriety ──
-  let notorietyDelta = cfg.NOTORIETY_WEIGHT[action.confidence] * (isCorrect ? 1 : -1);
+  const notorietySign = isCorrect ? 1 : -(cfg.NOTORIETY_LOSS_WEIGHT || 1);
+  let notorietyDelta = cfg.NOTORIETY_WEIGHT[action.confidence] * notorietySign;
   if (isCorrect && fx.notorietyBonus > 0) notorietyDelta += fx.notorietyBonus;
   if (isCorrect && isDir && fx.dirNotorietyBonus > 0) notorietyDelta += fx.dirNotorietyBonus;
   roundNotoriety += notorietyDelta;
@@ -312,7 +334,9 @@ function _runCore(playerType, cfg, ironsMod, archetypesMod, opts, tracked) {
     balance += income;
 
     // ── Pay the ante ──
-    let ante = cfg.roundAnte(round, wantedLevel);
+    let ante = cfg.ANTE_MODE === 'percent'
+      ? Math.ceil(balance * (cfg.ANTE_PCT || 0.001))
+      : cfg.windowAnte(round, wantedLevel);
     ante -= fx.anteReduction;
     ante += fx.antePenalty;
     ante = Math.round(Math.max(0, ante) * fx.anteMultiplier);
@@ -356,6 +380,15 @@ function _runCore(playerType, cfg, ironsMod, archetypesMod, opts, tracked) {
     let roundNotoriety = fx.flatNotorietyPerRound;
     let skipCount = 0;
     let picksThisRound = 0;
+
+    // Roll window condition (~35% chance)
+    let conditionEffects = null;
+    if (Math.random() < (cfg.CONDITION_PROBABILITY ?? CONDITION_PROBABILITY)) {
+      const pool = cfg.RANDOM_MARKET_CONDITIONS ?? RANDOM_MARKET_CONDITIONS;
+      const condType = pool[Math.floor(Math.random() * pool.length)];
+      conditionEffects = (cfg.CONDITION_DEFS ?? CONDITION_DEFS)[condType] ?? null;
+    }
+    pickState.conditionEffects = conditionEffects;
 
     while (picksThisRound < picksPerRound) {
       if (balance <= 0) {
@@ -428,7 +461,7 @@ export function simulateRun(playerType, opts = {}) {
     MAX_CHAMBERS: MAX_CHAMBERS || 6,
     DIR_SCORING, HOL_SCORING, NOTORIETY_WEIGHT,
     NOTORIETY_UP_THRESHOLD, NOTORIETY_DOWN_THRESHOLD,
-    wantedMultiplier, skipCost, roundAnte,
+    wantedMultiplier, skipCost, windowAnte,
   };
   const ironsMod = { getIronEffects, rollIronOffering, equipIron };
   const archetypesMod = { getPlayerAction, getAccuracy, pickIron };
@@ -441,7 +474,7 @@ export function simulateRunTracked(playerType, opts = {}) {
     MAX_CHAMBERS: MAX_CHAMBERS || 6,
     DIR_SCORING, HOL_SCORING, NOTORIETY_WEIGHT,
     NOTORIETY_UP_THRESHOLD, NOTORIETY_DOWN_THRESHOLD,
-    wantedMultiplier, skipCost, roundAnte,
+    wantedMultiplier, skipCost, windowAnte,
   };
   const ironsMod = { getIronEffects, rollIronOffering, equipIron };
   const archetypesMod = { getPlayerAction, getAccuracy, pickIron };

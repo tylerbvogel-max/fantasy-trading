@@ -68,10 +68,11 @@ HOLD_THRESHOLD_MAX = 0.02
 PHI_INV_TWO_THIRDS = 0.4307
 
 
-def compute_hold_threshold(candles: list[dict]) -> float:
+def compute_hold_threshold(candles: list[dict], window_minutes: int = 15) -> float:
     """Derive a per-stock hold threshold from candle volatility.
 
     candles: list of {"timestamp": int, "close": float}
+    window_minutes: duration of prediction window (default 15)
     Returns fractional threshold (e.g. 0.005 = 0.5%).
     """
     if len(candles) < 3:
@@ -90,10 +91,10 @@ def compute_hold_threshold(candles: list[dict]) -> float:
     variance = sum((r - mean) ** 2 for r in log_returns) / len(log_returns)
     sigma_candle = math.sqrt(variance)
 
-    # Scale to 1-hour window: estimate candle interval, project forward
+    # Scale to window duration: estimate candle interval, project forward
     total_seconds = candles[-1]["timestamp"] - candles[0]["timestamp"]
     avg_interval = total_seconds / (len(candles) - 1) if len(candles) > 1 else 300
-    window_seconds = 3600  # 1-hour prediction window
+    window_seconds = window_minutes * 60
     window_candles = max(1, window_seconds / avg_interval)
     sigma_window = sigma_candle * math.sqrt(window_candles)
 
@@ -720,6 +721,12 @@ LEVERAGE_NOTORIETY_BONUS_THRESHOLD = 3.0  # leverage >= this
 LEVERAGE_NOTORIETY_BONUS = 0.5
 
 
+# ── Adjustment mechanic ──
+ADJUSTMENT_BASE_COST = 25
+ADJUSTMENT_LEVEL_SCALING = 0.1  # cost += base * level * scaling
+MAX_ADJUSTMENTS_PER_WINDOW = 1
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # P1-A: Run Score
 # ══════════════════════════════════════════════════════════════════════════════
@@ -938,3 +945,60 @@ STOCK_EVENT_TYPES = MappingProxyType({
     "sector_spotlight": MappingProxyType({"name": "Sector Spotlight", "description": "Weekly sector rotation"}),
     "mag7_friday": MappingProxyType({"name": "Mag 7 Friday", "description": "Only Magnificent 7 stocks"}),
 })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Game Loop: Conditions System
+# ══════════════════════════════════════════════════════════════════════════════
+
+CONDITION_DEFS = MappingProxyType({
+    # Market Weather (broad — affects all stocks in window)
+    "volatility_surge": MappingProxyType({
+        "name": "Volatility Surge", "category": "market_weather",
+        "effects": MappingProxyType({"score_multiplier": 1.3}),
+        "description": "VIX spiking — all scoring x1.3",
+    }),
+    "dead_calm": MappingProxyType({
+        "name": "Dead Calm", "category": "market_weather",
+        "effects": MappingProxyType({"hold_threshold_multiplier": 0.7}),
+        "description": "Low volatility — HOLD zone narrows 30%",
+    }),
+    "bear_raid": MappingProxyType({
+        "name": "Bear Raid", "category": "market_weather",
+        "effects": MappingProxyType({"fall_win_bonus": 10}),
+        "description": "Bearish pressure — FALL picks +10 win value",
+    }),
+    "momentum_day": MappingProxyType({
+        "name": "Momentum Day", "category": "market_weather",
+        "effects": MappingProxyType({"dir_win_bonus": 8}),
+        "description": "Strong trend — directional picks +8 win value",
+    }),
+    "fed_tension": MappingProxyType({
+        "name": "Fed Tension", "category": "market_weather",
+        "effects": MappingProxyType({"score_multiplier": 1.5, "all_lose_multiplier": 1.5}),
+        "description": "Fed in session — all scoring x1.5, all losses x1.5",
+    }),
+    # Ticker Events (affect specific stocks)
+    "earnings_live": MappingProxyType({
+        "name": "Earnings Live", "category": "ticker_event",
+        "effects": MappingProxyType({"ticker_score_multiplier": 2.0, "notoriety_multiplier": 1.5}),
+        "description": "Earnings reported — 2x scoring, 1.5x notoriety on this stock",
+    }),
+    "sector_heat": MappingProxyType({
+        "name": "Sector Heat", "category": "sector_spotlight",
+        "effects": MappingProxyType({"sector_score_multiplier": 1.5}),
+        "description": "Sector in focus — sector stocks x1.5 scoring",
+    }),
+})
+
+# Random market weather conditions (for probability gate roll)
+RANDOM_MARKET_CONDITIONS = ("volatility_surge", "dead_calm", "bear_raid", "momentum_day")
+
+# High Noon Bounty config
+HIGH_NOON_SCORING_MULT = 3
+HIGH_NOON_CONFIDENCE = 3       # Dead Eye only
+HIGH_NOON_NOTORIETY_WIN = 1.0  # bonus notoriety on correct
+HIGH_NOON_NOTORIETY_LOSE = -1.5  # penalty on wrong
+
+# ~35% of windows have at least one condition (variable ratio reinforcement)
+CONDITION_PROBABILITY = 0.35
